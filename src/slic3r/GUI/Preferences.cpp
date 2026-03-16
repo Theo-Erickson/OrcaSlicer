@@ -1088,6 +1088,49 @@ wxBoxSizer* PreferencesDialog::create_item_button(wxString title, wxString title
     return m_sizer_checkbox;
 }
 
+ColourPickerInfo PreferencesDialog::create_item_clrPicker(
+    wxString title, wxString title2, wxString tooltip, wxString tooltip2, 
+    std::function<void(wxColourData&)> onColorSet)  // callback gets color
+{
+    wxBoxSizer* m_sizer_checkbox = new wxBoxSizer(wxHORIZONTAL);
+
+    m_sizer_checkbox->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+    auto m_staticTextPath = new wxStaticText(m_parent, wxID_ANY, title, wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
+    m_staticTextPath->SetForegroundColour(DESIGN_GRAY900_COLOR);
+    m_staticTextPath->SetFont(::Label::Body_14);
+    m_staticTextPath->Wrap(DESIGN_TITLE_SIZE.x);
+    
+    m_staticTextPath->SetToolTip(tooltip.IsEmpty() ? tooltip2 : tooltip); // use button tooltip if label tooltip empty
+
+    auto m_button_download = new Button(m_parent, title2);
+    m_button_download->SetStyle(title2 == _L("Clear") ? ButtonStyle::Alert : ButtonStyle::Regular, ButtonType::Parameter);
+    m_button_download->SetToolTip(tooltip2.IsEmpty() ? tooltip : tooltip2); // use label tooltip if button tooltip empty
+
+    // local colour data to pass in and store
+    wxColourData colourData;
+
+    auto clrPickerButtonLambda = [this, m_button_download, m_staticTextPath, colourData, onColorSet](wxCommandEvent& evt) mutable {
+        colourData = show_sys_picker_dialog(this, colourData);
+        const wxColour colour = colourData.GetColour();
+        if (colour.IsOk()) {
+            m_button_download->SetBackgroundColour(colour);
+            m_button_download->SetForegroundColour(colour.GetLuminance() > 0.5 ? *wxBLACK : *wxWHITE);
+            m_button_download->Refresh();
+
+            m_staticTextPath->SetForegroundColour(colour);
+
+            onColorSet(colourData);
+        }
+    };
+
+    m_button_download->Bind(wxEVT_BUTTON, clrPickerButtonLambda);
+
+    m_sizer_checkbox->Add(m_staticTextPath , 0, wxALIGN_CENTER_VERTICAL);
+    m_sizer_checkbox->Add(m_button_download, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
+
+    return ColourPickerInfo(m_sizer_checkbox, colourData, m_button_download, clrPickerButtonLambda);
+}
+
 wxBoxSizer* PreferencesDialog::create_item_downloads(wxString title, wxString tooltip)
 {
     wxString download_path = wxString::FromUTF8(app_config->get("download_path"));
@@ -1742,6 +1785,19 @@ void PreferencesDialog::create_items()
         }
     });
     g_sizer->Add(item_reload_plugin);
+
+    g_sizer->Add(create_item_title(_L("Customization")), 1, wxEXPAND);
+    
+    wxStaticText* colourPreview = new wxStaticText(this, wxID_ANY, "DEBUG: COLOR VIEW"); // preview text
+
+    auto testColor_clrPickerObj = create_item_clrPicker(_L("TestColor"), _L("Click 2 Pick"), "", "", [this, colourPreview](wxColourData& newColour) {
+        // Button already changes color in the lambda, this is just for logging/debug
+        //wxLogMessage("Color set to RGB(%d,%d,%d)", newColor.GetColour().Red(), newColor.GetColour().Green(), newColor.GetColour().Blue());
+        colourPreview->SetBackgroundColour(newColour.GetColour());
+    });
+
+    g_sizer->Add(testColor_clrPickerObj.sizer, 0, wxEXPAND);
+    g_sizer->Add(colourPreview, 0, wxEXPAND | wxTOP, 50);
 
     //// DEVELOPER > Debug
 #if !BBL_RELEASE_TO_PUBLIC
