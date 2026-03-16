@@ -1130,6 +1130,7 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
     // Main horizontal sizer for icon + reset
     wxBoxSizer* icon_sizer = new wxBoxSizer(wxHORIZONTAL);
     icon_sizer->Add(colourIcon, 0, wxALIGN_CENTER_VERTICAL);
+    icon_sizer->AddSpacer(FromDIP(40)); // Gap between color picker icon and the reset button presses to avoid accidents
     icon_sizer->Add(resetBtn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
 
     // Color picker lambda - takes wxMouseEvent (for wxEVT_LEFT_DOWN)
@@ -1176,7 +1177,7 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
 
     // Assemble layout: label | [icon + reset]
     main_sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
-    main_sizer->AddSpacer(FromDIP(30));
+    main_sizer->AddSpacer(FromDIP(5));
     main_sizer->Add(icon_sizer, 0, wxALIGN_CENTER_VERTICAL);
 
 return ColourPickerInfo(main_sizer, sharedColourData, colourIcon, resetBtn, onColorSet);
