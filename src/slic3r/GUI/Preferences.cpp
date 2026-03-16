@@ -1088,10 +1088,76 @@ wxBoxSizer* PreferencesDialog::create_item_button(wxString title, wxString title
     return m_sizer_checkbox;
 }
 
-ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString                           title,
-                                                          wxString                           title2,
-                                                          wxString                           tooltip,
-                                                          wxString                           tooltip2,
+std::vector<ThemeColor> parseOrcaColors()
+{
+    std::vector<ThemeColor> colors;
+
+    // Label → {light hex, dark hex}
+    static std::map<wxString, std::pair<wxString, wxString>> colorMap = {
+        // Primary colors
+        {"ORCA color", {"#f2a450", "#009688"}},
+        {"Primary blue", {"#2778D2", "#1F8EEA"}},
+        {"Secondary color", {"#D15B00", "#FF6F00"}},
+        {"Error/Alert color", {"#BB2A3A", "#D01B1B"}},
+        
+        // Button colors
+        {"Button text | Input text", {"#EFEFF0", "#262E30"}},
+        {"Button background", {"#3E3E45", "#DFDFDF"}},
+        {"Button hover background", {"#4D4D54", "#D4D4D4"}},
+        {"Button dimmed text", {"#909090", "#6B6A6A"}},
+        {"Confirm hover | ORCA hover", {"#008172", "#26A69A"}},
+        
+        // Text/UI elements
+        {"Input box side text", {"#B3B3B5", "#6B6B6A"}},
+        {"Panel text", {"#B3B3B4", "#2C2C2E"}},
+        {"Disabled text", {"#818183", "#6B6B6B"}},
+        {"Disabled elements", {"#65656A", "#ACACAC"}},
+        {"Separator/Title line", {"#4C4C55", "#EEEEEE"}},
+        {"Light panel bg", {"#3E3E45", "#E8E8E8"}},
+        {"Softer text", {"#E5E5E4", "#323A3D"}},
+        {"Window background", {"#2D2D31", "#FFFFFF"}},
+        
+        // Layout elements
+        {"Sidebar titlebar top", {"#36363C", "#F8F8F8"}},
+        {"Sidebar titlebar bottom", {"#36363B", "#F1F1F1"}},
+        {"Top bar/Tab bar", {"#2D2D30", "#3B4446"}},
+        {"Sidebar panel bg", {"#54545B", "#CECECE"}},
+        
+        // Deprecated/legacy
+        {"Deprecated combo bg", {"#3B3B40", "#DBFDD5"}},
+        {"Main text (wxBLACK)", {"#FFFFFE", "#000000"}},
+        {"Light UI element", {"#36363D", "#F4F4F4"}},
+        {"Input/Combo border", {"#4A4A51", "#DBDBDB"}},
+        {"Deprecated dropdown focus", {"#283232", "#EDFAF2"}},
+        {"Search list text", {"#E5E5E6", "#323A3C"}},
+        {"Table header/StaticBox border", {"#E5E5E5", "#303A3C"}},
+        {"Side tabbar bg", {"#242428", "#FEFFFF"}},
+        {"Separator color", {"#2D2D29", "#A6A9AA"}},
+        {"Sidebar labels/tabs", {"#B2B3B5", "#363636"}},
+        {"Disabled element bg", {"#333337", "#F0F0F1"}},
+        {"Medium gray", {"#53545A", "#9E9E9E"}},
+        {"Deprecated BBS color", {"#1F2B27", "#D7E8DE"}},
+        {"Deprecated icon fill", {"#808080", "#2B3436"}},
+        {"Neutral gray", {"#ABABAB", "#ABABAB"}},
+        {"Toggle track", {"#2D2D32", "#D9D9D9"}},
+        {"Deprecated light green", {"#293F34", "#EBF9F0"}},
+        {"Dropdown checked (ORCA 25%)", {"#223C3C", "#BFE1DE"}},
+        {"Dropdown focus (ORCA 10%)", {"#283232", "#E5F0EE"}}
+    };
+
+    for (const auto& [label, pair] : colorMap) {
+        wxColour light = wxColour(pair.first);   // light hex
+        wxColour dark  = wxColour(pair.second);  // dark hex
+        colors.emplace_back(label, light, dark);
+    }
+    
+    return colors;
+}
+
+wxBoxSizer* PreferencesDialog::create_item_color_picker_single(wxString                           labelTitle,
+                                                          wxString                           resetButtonTitle,
+                                                          wxString                           labelTooltip,
+                                                          wxString                           resetButtonTooltip,
                                                           std::function<void(wxColourData&)> onColorSet,
                                                           wxColour                           defaultColor) // optional default
 {
@@ -1099,11 +1165,11 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
     main_sizer->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
 
     // Label
-    auto label = new wxStaticText(m_parent, wxID_ANY, title, wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
-    label->SetForegroundColour(DESIGN_GRAY900_COLOR);
-    label->SetFont(::Label::Body_14);
-    label->Wrap(DESIGN_TITLE_SIZE.x);
-    label->SetToolTip(tooltip);
+    auto labelText = new wxStaticText(m_parent, wxID_ANY, labelTitle, wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
+    labelText->SetForegroundColour(DESIGN_GRAY900_COLOR);
+    labelText->SetFont(::Label::Body_14);
+    labelText->Wrap(DESIGN_TITLE_SIZE.x);
+    labelText->SetToolTip(labelTooltip);
 
     // Local colour data
     wxColourData* sharedColourData = new wxColourData();
@@ -1116,11 +1182,10 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
     colourIcon->SetBackgroundColour(sharedColourData->GetColour());
 
     // Reset button (initially hidden)
-    auto resetBtn = new Button(m_parent, _L("Reset"));
+    auto resetBtn = new Button(m_parent, _L(resetButtonTitle));
     resetBtn->SetStyle(ButtonStyle::Alert, ButtonType::Parameter);
     resetBtn->SetMinSize(wxSize(FromDIP(80), FromDIP(20)));
-    resetBtn->Hide(); // hidden initially
-    resetBtn->SetToolTip(_L("Reset to default color"));
+    resetBtn->SetToolTip(_L(resetButtonTooltip));
 
     // Main horizontal sizer for icon + reset
     wxBoxSizer* icon_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -1129,7 +1194,7 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
     icon_sizer->Add(resetBtn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
 
     // Color picker lambda - takes wxMouseEvent (for wxEVT_LEFT_DOWN)
-    auto pickerLambda = [this, colourIcon, resetBtn, label, sharedColourData, defaultColor, onColorSet](wxMouseEvent& evt) {
+    auto pickerLambda = [this, colourIcon, resetBtn, labelText, sharedColourData, defaultColor, onColorSet](wxMouseEvent& evt) {
         wxColourData result = show_sys_picker_dialog(this, *sharedColourData);
         if (result.GetColour().IsOk()) {
             *sharedColourData = result; 
@@ -1141,7 +1206,7 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
             colourIcon->Refresh();
 
             // Show label color
-            label->SetForegroundColour(newColor);
+            labelText->SetForegroundColour(newColor);
 
             // Show reset button
             resetBtn->Show();
@@ -1157,12 +1222,12 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
     colourIcon->Bind(wxEVT_LEFT_UP, [colourIcon](wxMouseEvent&) { colourIcon->Refresh(); });
 
   // Reset lambda - takes wxCommandEvent (for Button)
-    auto resetLambda = [this, colourIcon, resetBtn, label, sharedColourData /* shared_ptr */, defaultColor, onColorSet](wxCommandEvent&) {
+    auto resetLambda = [this, colourIcon, resetBtn, labelText, sharedColourData /* shared_ptr */, defaultColor, onColorSet](wxCommandEvent&) {
         sharedColourData->SetColour(defaultColor);
         colourIcon->SetBackgroundColour(defaultColor);
         colourIcon->SetForegroundColour(defaultColor.GetLuminance() > 0.5 ? *wxBLACK : *wxWHITE);
         colourIcon->Refresh();
-        label->SetForegroundColour(DESIGN_GRAY900_COLOR);
+        labelText->SetForegroundColour(DESIGN_GRAY900_COLOR);
         resetBtn->Hide();
         colourIcon->GetParent()->Layout();
         onColorSet(*sharedColourData);
@@ -1171,11 +1236,84 @@ ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString              
     resetBtn->Bind(wxEVT_BUTTON, resetLambda);
 
     // Assemble layout: label | [icon + reset]
-    main_sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
+    main_sizer->Add(labelText, 0, wxALIGN_CENTER_VERTICAL);
     main_sizer->AddSpacer(FromDIP(5));
     main_sizer->Add(icon_sizer, 0, wxALIGN_CENTER_VERTICAL);
+    resetBtn->Hide(); // hidden initially
+    main_sizer->Layout(); // Force final layout
 
-return ColourPickerInfo(main_sizer, sharedColourData, colourIcon, resetBtn, onColorSet);
+    return main_sizer;
+}
+
+wxBoxSizer* PreferencesDialog::create_item_color_picker_panel(const std::vector<ThemeColor>& colorsToPickFrom)
+{
+    auto mainSizer = new wxBoxSizer(wxVERTICAL);
+
+    mainSizer->AddSpacer(FromDIP(10));
+
+    const int size = colorsToPickFrom.size();
+
+    for (size_t i = 0; i < size; ++i) {
+        const auto& themeColor = colorsToPickFrom[i];
+
+        // Color name row (spans full width)
+        wxStaticText* colorName = new wxStaticText(m_parent, wxID_ANY, themeColor.label, wxDefaultPosition, DESIGN_TITLE_SIZE,
+                                                   wxST_NO_AUTORESIZE);
+        colorName->SetForegroundColour(DESIGN_GRAY900_COLOR);
+        colorName->SetFont(::Label::Body_14);
+        mainSizer->Add(colorName, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(DESIGN_LEFT_MARGIN));
+
+        /// Color picker rows - 
+        /// Label
+        /// [● Pick Light]      
+        /// [● Pick Dark]
+        /// -------------
+
+
+        // Light picker - shorter label
+        wxBoxSizer* lightPickerRow = new wxBoxSizer(wxHORIZONTAL);
+        lightPickerRow->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+        auto lightPicker = create_item_color_picker_single(
+            _L("Light"), _L("Pick"), "", "",
+            [themeColor](wxColourData& data) {
+                wxLogMessage("Light %s → RGB(%d,%d,%d)", themeColor.label, data.GetColour().Red(), data.GetColour().Green(),
+                             data.GetColour().Blue());
+            },
+            themeColor.lightColor);
+        lightPickerRow->Add(lightPicker, 0, wxALIGN_CENTER_VERTICAL);
+        lightPickerRow->AddSpacer(FromDIP(30)); // Space between pickers
+
+        mainSizer->Add(lightPickerRow, 0, wxEXPAND | wxTOP, FromDIP(2));
+
+
+        // Dark picker
+        wxBoxSizer* darkPickerRow = new wxBoxSizer(wxHORIZONTAL);
+        darkPickerRow->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+        auto darkPicker = create_item_color_picker_single(
+            _L("Dark"), _L("Pick"), "", "",
+            [themeColor](wxColourData& data) {
+                wxLogMessage("Dark %s → RGB(%d,%d,%d)", themeColor.label, data.GetColour().Red(), data.GetColour().Green(),
+                             data.GetColour().Blue());
+            },
+            themeColor.darkColor);
+        darkPickerRow->Add(darkPicker, 0, wxALIGN_CENTER_VERTICAL);
+        darkPickerRow->AddSpacer(FromDIP(10)); // Right padding
+
+        mainSizer->Add(darkPickerRow, 0, wxEXPAND | wxTOP, FromDIP(2));
+
+
+        // Separator line (except for last item)
+        if (i < size - 1) {
+            wxPanel* separator = new wxPanel(m_parent, wxID_ANY);
+            separator->SetBackgroundColour(DESIGN_GRAY600_COLOR);
+            separator->SetMinSize(wxSize(-1, FromDIP(1)));
+            mainSizer->Add(separator, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(DESIGN_LEFT_MARGIN + 10));
+            mainSizer->AddSpacer(FromDIP(12));
+        }
+    }
+
+    mainSizer->AddSpacer(FromDIP(10));
+    return mainSizer;
 }
 
 wxBoxSizer* PreferencesDialog::create_item_downloads(wxString title, wxString tooltip)
@@ -1837,7 +1975,7 @@ void PreferencesDialog::create_items()
     
     wxStaticText* colourPreview = new wxStaticText(this, wxID_ANY, "DEBUG: COLOR VIEW"); // preview text
 
-    auto testColor_clrPickerObj = create_item_clrPicker(
+    auto testColor_colorPickerObj = create_item_color_picker_single(
         _L("TestColor"), _L("Click square"), "", "",
         [this, colourPreview](wxColourData& newColour) {
             colourPreview->SetBackgroundColour(newColour.GetColour());
@@ -1846,9 +1984,14 @@ void PreferencesDialog::create_items()
         wxColour(100, 150, 200) // optional default blue-ish
     );
 
-    g_sizer->Add(testColor_clrPickerObj.sizer, 0, wxEXPAND);
+    g_sizer->Add(testColor_colorPickerObj, 0, wxEXPAND);
 
     g_sizer->Add(colourPreview, 0, wxEXPAND | wxTOP, 50);
+
+    g_sizer->Add(create_item_title(_L("Theme Colors")), 1, wxEXPAND);
+    g_sizer->Add(create_item_color_picker_panel(parseOrcaColors()), 0, wxEXPAND | wxALL, FromDIP(10));
+
+
 
     //// DEVELOPER > Debug
 #if !BBL_RELEASE_TO_PUBLIC
