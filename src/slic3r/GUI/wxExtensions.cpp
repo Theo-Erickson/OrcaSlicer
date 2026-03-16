@@ -584,7 +584,7 @@ std::vector<std::vector<std::string>> read_color_pack(std::vector<std::string> c
     return color_info;
 }
 
-wxColourData show_sys_picker_dialog(wxWindow *parent, const wxColourData &clr_data)
+wxColourData show_sys_picker_dialog(wxWindow* parent, const wxColourData& clr_data, const char* optionalDefaultWindowTitle)
 {
     wxColourData data = clr_data;
     data.SetChooseFull(true);
@@ -602,7 +602,7 @@ wxColourData show_sys_picker_dialog(wxWindow *parent, const wxColourData &clr_da
     }
 
     wxColourDialog dialog(parent, &data);
-    dialog.SetTitle(_L("Please choose the filament colour"));
+    dialog.SetTitle(_L(optionalDefaultWindowTitle));
 
     if (dialog.ShowModal() == wxID_OK) {
         data = dialog.GetColourData();
