@@ -33,16 +33,22 @@ class TextInput;
 
  struct ColourPickerInfo
 {
-    // core box sizer ref
-    wxBoxSizer*           sizer;
-    wxColourData          colourData;
-    Button*               buttonRef;
-    // The lambda that we use when the button is clicked
-    std::function<void(wxCommandEvent& evt)> pickerButtonLambda;
+    wxBoxSizer*                        sizer;
+    std::shared_ptr<wxColourData>      colourData;  // Automatic lifetime
+    wxPanel*                           colorIcon;   // colored square button
+    Button*                            resetButton; // appears on color change
+    std::function<void(wxColourData&)> onColorSet;
 
-    ColourPickerInfo(wxBoxSizer* s, wxColourData d, Button* b, std::function<void(wxCommandEvent& evt)> l)
-        : sizer(s), colourData(d), buttonRef(b), pickerButtonLambda(l)
+    // Default constructor - safe initialization
+    ColourPickerInfo() : sizer(nullptr), colourData(nullptr), colorIcon(nullptr), resetButton(nullptr) {}
+
+    // Parametrized constructor
+    ColourPickerInfo(wxBoxSizer* s, wxColourData* d, wxPanel* icon, Button* reset, std::function<void(wxColourData&)> cb)
+        : sizer(s), colourData(d), colorIcon(icon), resetButton(reset), onColorSet(std::move(cb))
     {}
+
+    // Validity Function
+    bool IsValid() { return sizer || colourData || colorIcon || resetButton || onColorSet; }
 };
 
 class PreferencesDialog : public DPIDialog
@@ -107,7 +113,7 @@ public:
     wxBoxSizer *create_item_darkmode(wxString title,wxString tooltip, std::string param);
     void set_dark_mode();
     wxBoxSizer *create_item_button(wxString title, wxString title2, wxString tooltip, wxString tooltip2, std::function<void()> onclick);
-    ColourPickerInfo create_item_clrPicker(wxString title, wxString title2, wxString tooltip, wxString tooltip2, std::function<void(wxColourData&)> onColorSet);
+    ColourPickerInfo create_item_clrPicker(wxString title, wxString title2, wxString tooltip, wxString tooltip2, std::function<void(wxColourData&)> onColorSet, wxColour defaultColor = *wxWHITE);  // optional default);
     wxBoxSizer *create_item_downloads(wxString title, wxString tooltip);
     wxBoxSizer *create_item_input(wxString title, wxString title2, wxString tooltip, std::string param, std::function<void(wxString)> onchange = {});
     wxBoxSizer *create_item_spinctrl(wxString title, wxString title2, wxString side_label, wxString tooltip, std::string param, int min, int max, std::function<void(int)> onchange = nullptr);

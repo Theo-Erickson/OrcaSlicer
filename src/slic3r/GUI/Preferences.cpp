@@ -1093,47 +1093,93 @@ wxBoxSizer* PreferencesDialog::create_item_button(wxString title, wxString title
     return m_sizer_checkbox;
 }
 
-ColourPickerInfo PreferencesDialog::create_item_clrPicker(
-    wxString title, wxString title2, wxString tooltip, wxString tooltip2, 
-    std::function<void(wxColourData&)> onColorSet)  // callback gets color
+ColourPickerInfo PreferencesDialog::create_item_clrPicker(wxString                           title,
+                                                          wxString                           title2,
+                                                          wxString                           tooltip,
+                                                          wxString                           tooltip2,
+                                                          std::function<void(wxColourData&)> onColorSet,
+                                                          wxColour                           defaultColor) // optional default
 {
-    wxBoxSizer* m_sizer_checkbox = new wxBoxSizer(wxHORIZONTAL);
+    wxBoxSizer* main_sizer = new wxBoxSizer(wxHORIZONTAL);
+    main_sizer->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
 
-    m_sizer_checkbox->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
-    auto m_staticTextPath = new wxStaticText(m_parent, wxID_ANY, title, wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
-    m_staticTextPath->SetForegroundColour(DESIGN_GRAY900_COLOR);
-    m_staticTextPath->SetFont(::Label::Body_14);
-    m_staticTextPath->Wrap(DESIGN_TITLE_SIZE.x);
-    
-    m_staticTextPath->SetToolTip(tooltip.IsEmpty() ? tooltip2 : tooltip); // use button tooltip if label tooltip empty
+    // Label
+    auto label = new wxStaticText(m_parent, wxID_ANY, title, wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
+    label->SetForegroundColour(DESIGN_GRAY900_COLOR);
+    label->SetFont(::Label::Body_14);
+    label->Wrap(DESIGN_TITLE_SIZE.x);
+    label->SetToolTip(tooltip);
 
-    auto m_button_download = new Button(m_parent, title2);
-    m_button_download->SetStyle(title2 == _L("Clear") ? ButtonStyle::Alert : ButtonStyle::Regular, ButtonType::Parameter);
-    m_button_download->SetToolTip(tooltip2.IsEmpty() ? tooltip : tooltip2); // use label tooltip if button tooltip empty
+    // Local colour data
+    wxColourData* sharedColourData = new wxColourData();
+    sharedColourData->SetColour(defaultColor);
 
-    // local colour data to pass in and store
-    wxColourData colourData;
+    // Colored square icon (24x24px button)
+    // Perfect solid color square, fully clickable, no crashes:
+    auto colourIcon = new wxPanel(m_parent, wxID_ANY);
+    colourIcon->SetMinSize({FromDIP(24), FromDIP(24)});
+    colourIcon->SetBackgroundColour(sharedColourData->GetColour());
 
-    auto clrPickerButtonLambda = [this, m_button_download, m_staticTextPath, colourData, onColorSet](wxCommandEvent& evt) mutable {
-        colourData = show_sys_picker_dialog(this, colourData);
-        const wxColour colour = colourData.GetColour();
-        if (colour.IsOk()) {
-            m_button_download->SetBackgroundColour(colour);
-            m_button_download->SetForegroundColour(colour.GetLuminance() > 0.5 ? *wxBLACK : *wxWHITE);
-            m_button_download->Refresh();
+    // Reset button (initially hidden)
+    auto resetBtn = new Button(m_parent, _L("Reset"));
+    resetBtn->SetStyle(ButtonStyle::Alert, ButtonType::Parameter);
+    resetBtn->SetMinSize(wxSize(FromDIP(80), FromDIP(20)));
+    resetBtn->Hide(); // hidden initially
+    resetBtn->SetToolTip(_L("Reset to default color"));
 
-            m_staticTextPath->SetForegroundColour(colour);
+    // Main horizontal sizer for icon + reset
+    wxBoxSizer* icon_sizer = new wxBoxSizer(wxHORIZONTAL);
+    icon_sizer->Add(colourIcon, 0, wxALIGN_CENTER_VERTICAL);
+    icon_sizer->Add(resetBtn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
 
-            onColorSet(colourData);
+    // Color picker lambda - takes wxMouseEvent (for wxEVT_LEFT_DOWN)
+    auto pickerLambda = [this, colourIcon, resetBtn, label, sharedColourData, defaultColor, onColorSet](wxMouseEvent& evt) {
+        wxColourData result = show_sys_picker_dialog(this, *sharedColourData);
+        if (result.GetColour().IsOk()) {
+            *sharedColourData = result; 
+
+            // Update icon color
+            wxColour newColor = sharedColourData->GetColour();
+            colourIcon->SetBackgroundColour(newColor);
+            colourIcon->SetForegroundColour(newColor.GetLuminance() > 0.5 ? *wxBLACK : *wxWHITE);
+            colourIcon->Refresh();
+
+            // Show label color
+            label->SetForegroundColour(newColor);
+
+            // Show reset button
+            resetBtn->Show();
+
+            // Layout update
+            colourIcon->GetParent()->Layout();
+
+            onColorSet(*sharedColourData);
         }
     };
 
-    m_button_download->Bind(wxEVT_BUTTON, clrPickerButtonLambda);
+    colourIcon->Bind(wxEVT_LEFT_DOWN, pickerLambda); // Add binding to colourIcon button on click
+    colourIcon->Bind(wxEVT_LEFT_UP, [colourIcon](wxMouseEvent&) { colourIcon->Refresh(); });
 
-    m_sizer_checkbox->Add(m_staticTextPath , 0, wxALIGN_CENTER_VERTICAL);
-    m_sizer_checkbox->Add(m_button_download, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
+  // Reset lambda - takes wxCommandEvent (for Button)
+    auto resetLambda = [this, colourIcon, resetBtn, label, sharedColourData /* shared_ptr */, defaultColor, onColorSet](wxCommandEvent&) {
+        sharedColourData->SetColour(defaultColor);
+        colourIcon->SetBackgroundColour(defaultColor);
+        colourIcon->SetForegroundColour(defaultColor.GetLuminance() > 0.5 ? *wxBLACK : *wxWHITE);
+        colourIcon->Refresh();
+        label->SetForegroundColour(DESIGN_GRAY900_COLOR);
+        resetBtn->Hide();
+        colourIcon->GetParent()->Layout();
+        onColorSet(*sharedColourData);
+    };
 
-    return ColourPickerInfo(m_sizer_checkbox, colourData, m_button_download, clrPickerButtonLambda);
+    resetBtn->Bind(wxEVT_BUTTON, resetLambda);
+
+    // Assemble layout: label | [icon + reset]
+    main_sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
+    main_sizer->AddSpacer(FromDIP(30));
+    main_sizer->Add(icon_sizer, 0, wxALIGN_CENTER_VERTICAL);
+
+return ColourPickerInfo(main_sizer, sharedColourData, colourIcon, resetBtn, onColorSet);
 }
 
 wxBoxSizer* PreferencesDialog::create_item_downloads(wxString title, wxString tooltip)
@@ -1801,13 +1847,17 @@ void PreferencesDialog::create_items()
     
     wxStaticText* colourPreview = new wxStaticText(this, wxID_ANY, "DEBUG: COLOR VIEW"); // preview text
 
-    auto testColor_clrPickerObj = create_item_clrPicker(_L("TestColor"), _L("Click 2 Pick"), "", "", [this, colourPreview](wxColourData& newColour) {
-        // Button already changes color in the lambda, this is just for logging/debug
-        //wxLogMessage("Color set to RGB(%d,%d,%d)", newColor.GetColour().Red(), newColor.GetColour().Green(), newColor.GetColour().Blue());
-        colourPreview->SetBackgroundColour(newColour.GetColour());
-    });
+    auto testColor_clrPickerObj = create_item_clrPicker(
+        _L("TestColor"), _L("Click square"), "", "",
+        [this, colourPreview](wxColourData& newColour) {
+            colourPreview->SetBackgroundColour(newColour.GetColour());
+            colourPreview->Refresh();
+        },
+        wxColour(100, 150, 200) // optional default blue-ish
+    );
 
     g_sizer->Add(testColor_clrPickerObj.sizer, 0, wxEXPAND);
+
     g_sizer->Add(colourPreview, 0, wxEXPAND | wxTOP, 50);
 
     //// DEVELOPER > Debug
