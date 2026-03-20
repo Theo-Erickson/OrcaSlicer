@@ -1274,7 +1274,7 @@ wxBoxSizer* PreferencesDialog::create_item_color_picker_panel(const std::vector<
         wxBoxSizer* lightPickerRow = new wxBoxSizer(wxHORIZONTAL);
         lightPickerRow->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
         auto lightPicker = create_item_color_picker_single(
-            _L("Light"), _L("Pick"), "", "",
+            _L("Light"), _L("Reset Color"), "", "",
             [themeColor](wxColourData& data) {
                 wxLogMessage("Light %s → RGB(%d,%d,%d)", themeColor.label, data.GetColour().Red(), data.GetColour().Green(),
                              data.GetColour().Blue());
@@ -1290,7 +1290,7 @@ wxBoxSizer* PreferencesDialog::create_item_color_picker_panel(const std::vector<
         wxBoxSizer* darkPickerRow = new wxBoxSizer(wxHORIZONTAL);
         darkPickerRow->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
         auto darkPicker = create_item_color_picker_single(
-            _L("Dark"), _L("Pick"), "", "",
+            _L("Dark"), _L("Reset Color"), "", "",
             [themeColor](wxColourData& data) {
                 wxLogMessage("Dark %s → RGB(%d,%d,%d)", themeColor.label, data.GetColour().Red(), data.GetColour().Green(),
                              data.GetColour().Blue());
@@ -1976,7 +1976,7 @@ void PreferencesDialog::create_items()
     wxStaticText* colourPreview = new wxStaticText(this, wxID_ANY, "DEBUG: COLOR VIEW"); // preview text
 
     auto testColor_colorPickerObj = create_item_color_picker_single(
-        _L("TestColor"), _L("Click square"), "", "",
+        _L("TestColor"), _L("Reset Color"), "", "",
         [this, colourPreview](wxColourData& newColour) {
             colourPreview->SetBackgroundColour(newColour.GetColour());
             colourPreview->Refresh();
