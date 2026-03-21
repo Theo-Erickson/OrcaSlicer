@@ -11724,6 +11724,11 @@ void Plater::load_project(wxString const& filename2,
         return;
     }
 
+    if (auto* hist = wxGetApp().mainframe->m_history_panel)
+    {
+        hist->record_project(filename2.ToStdString());
+    }
+
     // BBS
     if (m_loading_project) {
         //some error cases happens
@@ -11843,6 +11848,11 @@ int Plater::save_project(bool saveAs)
         return wxID_NO;
     if (filename == "<cancel>")
         return wxID_CANCEL;
+
+    if (auto* hist = wxGetApp().mainframe->m_history_panel) 
+    {
+       hist->record_project(filename.ToStdString());
+    }
 
     //BBS export 3mf without gcode
     auto save_strategy = SaveStrategy::SplitModel | SaveStrategy::ShareMesh;
@@ -14550,6 +14560,10 @@ void Plater::export_gcode(bool prefer_removable)
             NetworkAgent *agent = wxGetApp().getAgent();
         } catch (...) {}
 
+        if (auto* hist = wxGetApp().mainframe->m_history_panel) {
+            std::string printer = wxGetApp().preset_bundle->printers.get_selected_preset().name;
+            hist->record_gcode(output_path.string(), printer);
+        }
     }
 }
 
