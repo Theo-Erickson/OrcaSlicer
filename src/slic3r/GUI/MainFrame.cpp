@@ -72,6 +72,8 @@
 #include "libslic3r/PrintBase.hpp"
 #include "SliceHistoryPanel.hpp"
 
+#include "HistoryPanel.hpp"
+
 #ifdef _WIN32
 #include <dbt.h>
 #include <shlobj.h>
@@ -1388,10 +1390,9 @@ void MainFrame::init_tabpanel() {
         }
     }
 
-    m_history_panel = new SliceHistoryPanel(m_tabpanel, m_plater, m_plater->m_slice_history_mgr);
+    m_history_panel = new HistoryPanel(m_tabpanel);
     m_history_panel->SetBackgroundColour(*wxWHITE);
-
-    m_tabpanel->AddPage(m_history_panel, _L("History"), std::string("tab_calibration_active"), std::string("tab_calibration_active"), false);
+    m_tabpanel->AddPage(m_history_panel, _L("History"), std::string("tab_auxiliary_active"), std::string("tab_auxiliary_active"), false);
 }
 
 // SoftFever

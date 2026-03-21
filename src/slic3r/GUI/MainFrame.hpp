@@ -39,6 +39,8 @@
 #include "PrintStatusIcon.hpp"
 #include "PrinterStatusPoller.hpp"
 
+#include "HistoryPanel.hpp"
+
 #define ENABEL_PRINT_ALL 0
 
 class Notebook;
@@ -229,6 +231,7 @@ public:
         tpCalibration   = 6,
         tpAuxiliary     = 7,
         toDebugTool     = 8,
+        tpHistory       = 9,
     };
 
     //BBS: add slice&&print status update logic
@@ -384,11 +387,13 @@ public:
     MultiMachinePage*     m_multi_machine{ nullptr };
     ProjectPanel*         m_project{ nullptr };
 
+    //Print history panel
+    HistoryPanel*         m_history_panel{nullptr};
+
     CalibrationPanel*     m_calibration{ nullptr };
     WebViewPanel*         m_webview { nullptr };
     PrinterWebView*       m_printer_view{nullptr};
     wxLogWindow*          m_log_window { nullptr };
-    SliceHistoryPanel*    m_history_panel{ nullptr };
     // BBS
     //wxBookCtrlBase*       m_tabpanel { nullptr };
     Notebook*             m_tabpanel{ nullptr };
