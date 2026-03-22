@@ -397,6 +397,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/ProjectDirtyStateManager.cpp
     GUI/ProjectDirtyStateManager.hpp
     GUI/Project.hpp
+    GUI/ProjectVCBackupManager.cpp
+    GUI/ProjectVCBackupManager.hpp
     GUI/PublishDialog.cpp
     GUI/PublishDialog.hpp
     GUI/RammingChart.cpp
@@ -468,6 +470,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/UserManager.hpp
     GUI/UserNotification.cpp
     GUI/UserNotification.hpp
+    GUI/VCBackupPanel.cpp
+    GUI/VCBackupPanel.hpp
     GUI/WebDownPluginDlg.cpp
     GUI/WebDownPluginDlg.hpp
     GUI/WebGuideDialog.cpp
