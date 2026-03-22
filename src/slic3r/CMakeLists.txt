@@ -472,6 +472,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/UserNotification.hpp
     GUI/VCBackupPanel.cpp
     GUI/VCBackupPanel.hpp
+    GUI/VCBackupSettingsPanel.cpp
+    GUI/VCBackupSettingsPanel.hpp
     GUI/WebDownPluginDlg.cpp
     GUI/WebDownPluginDlg.hpp
     GUI/WebGuideDialog.cpp
