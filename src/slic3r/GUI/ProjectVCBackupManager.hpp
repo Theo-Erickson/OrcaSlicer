@@ -47,14 +47,46 @@ struct VCBackup //Version Control VCBackup
 };
 
 // ---------------------------------------------------------------------------
+// MigrationResult — returned by migrate_backups_to()
+// ---------------------------------------------------------------------------
+struct MigrationResult {
+    size_t      files_moved{0};
+    size_t      files_failed{0};
+    std::string new_dir;
+    std::string error_message; // non-empty on hard failure
+};
+
+// ---------------------------------------------------------------------------
 // ProjectVCBackupManager
 // ---------------------------------------------------------------------------
 class ProjectVCBackupManager
 {
 public:
-    // max_VCBackups_per_project: oldest VCBackups beyond this cap are pruned
+    // data_dir        : OrcaSlicer user-data directory (for vc_config.json)
+    // max_backups     : oldest backups beyond this cap are pruned per project
     explicit ProjectVCBackupManager(const std::string& data_dir, size_t max_VCBackups_per_project = 20);
 
+    /// Returns the currently active backup root directory.
+    const std::string& VCBackup_dir() const { return m_VCBackup_dir; }
+ 
+    /// Returns the default backup root (used on first run or reset).
+    const std::string& default_VCBackup_dir() const { return m_default_VCBackup_dir; }
+ 
+    /// Change the active backup root.
+    /// Does NOT move existing backups — call migrate_backups_to() for that.
+    /// Persists the new path to vc_config.json.
+    void set_backup_dir(const std::string& new_dir);
+ 
+    /// Reset to the default directory (does not migrate files).
+    void reset_backup_dir();
+ 
+    /// Move all existing backups from the current backup_dir to new_dir.
+    /// Updates backup_dir on success.
+    /// progress_cb is called with (files_done, files_total) during the copy.
+    MigrationResult migrate_backups_to(
+        const std::string& new_dir,
+        std::function<void(size_t done, size_t total)> progress_cb = nullptr);
+    
     // -----------------------------------------------------------------------
     // Core API
     // -----------------------------------------------------------------------
@@ -91,6 +123,11 @@ private:
     // Helpers
     // -----------------------------------------------------------------------
 
+    // Config persistence
+    void load_config();
+    void save_config() const;
+    std::string config_file_path() const;
+    
     /// Turn a project filename into a safe directory name.
     /// e.g. "my bracket (v2).3mf" -> "my_bracket__v2_"
     static std::string sanitise_name(const std::string& source_path);
@@ -109,7 +146,13 @@ private:
     /// Remove VCBackups beyond the cap, oldest first.
     void prune(const std::string& project_dir) const;
 
-    std::string m_base_dir; ///< <data_dir>/orca_history/VCBackups/
+    // Count all .3mf files recursively under a root dir
+    static size_t count_backup_files(const std::string& root);
+    
+    std::string m_data_dir;            ///< OrcaSlicer user-data dir
+    std::string m_default_VCBackup_dir; ///< <data_dir>/orca_history/VCBackups/
+    std::string m_VCBackup_dir;          ///< Currently active root (may be custom)
+
     size_t      m_max_VCBackups;
     
     // Shared button factory with explicit colour styling

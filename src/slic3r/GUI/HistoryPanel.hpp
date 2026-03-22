@@ -12,6 +12,7 @@
 
 #include "ProjectVCBackupManager.hpp"
 #include "VCBackupPanel.hpp"
+#include "VCBackupSettingsPanel.hpp"
 
 #include <string>
 #include <vector>
@@ -112,7 +113,8 @@ private:
     wxSearchCtrl*  m_search_projects{nullptr};
     wxButton*      m_btn_capture{nullptr};    // "Snapshot now"
     VCBackupPanel* m_VCBackup_panel{nullptr}; // collapsible timeline
-
+    VCBackupSettingsPanel* m_settings_panel  {nullptr};
+    
     // G-code sub-tab
     wxPanel*      m_gcode_page{nullptr};
     wxListCtrl*   m_gcode_list{nullptr};
