@@ -163,9 +163,14 @@ void HistoryPanel::build_project_page(wxNotebook* nb)
     m_VCBackup_panel = new VCBackupPanel(m_project_page, m_VCBackup_manager.get());
     sizer->Add(m_VCBackup_panel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
 
+    // Backup storage settings panel (always visible at the bottom)
+    m_settings_panel = new VCBackupSettingsPanel(m_project_page, m_VCBackup_manager.get());
+    sizer->Add(m_settings_panel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
+    
+    
     m_project_page->SetSizer(sizer);
     nb->AddPage(m_project_page, _L("Projects"), true);
-
+    
     // Events
     m_project_list->Bind(wxEVT_LIST_ITEM_ACTIVATED, &HistoryPanel::on_project_activated, this);
     m_project_list->Bind(wxEVT_LIST_ITEM_SELECTED, &HistoryPanel::on_project_selected, this);

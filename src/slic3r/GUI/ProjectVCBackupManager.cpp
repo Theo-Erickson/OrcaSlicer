@@ -4,6 +4,8 @@
 
 #include "ProjectVCBackupManager.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -14,6 +16,7 @@
 // Filesystem — OrcaSlicer already requires C++17, so std::filesystem is fine.
 #include <filesystem>
 namespace fs = std::filesystem;
+using json   = nlohmann::json;
 
 namespace Slic3r { namespace GUI {
 
@@ -63,9 +66,91 @@ std::string VCBackup::relative_age() const
 ProjectVCBackupManager::ProjectVCBackupManager(const std::string& data_dir, size_t max_VCBackups_per_project)
     : m_max_VCBackups(max_VCBackups_per_project)
 {
-    fs::path base = fs::path(data_dir) / "orca_history" / "VCBackups";
-    m_base_dir    = base.string();
-    make_dirs(m_base_dir);
+    m_default_VCBackup_dir = (fs::path(data_dir) / "orca_vc_backups").string();
+    m_VCBackup_dir         = m_default_VCBackup_dir;
+ 
+    // Load any previously saved custom path
+    load_config();
+ 
+    // Ensure the active dir exists
+    make_dirs(m_default_VCBackup_dir);
+}
+
+// ============================================================
+//  Backup directory management
+// ============================================================
+ 
+void ProjectVCBackupManager::set_backup_dir(const std::string& new_dir)
+{
+    if (new_dir.empty()) return;
+    m_VCBackup_dir = new_dir;
+    make_dirs(m_VCBackup_dir);
+    save_config();
+}
+ 
+void ProjectVCBackupManager::reset_backup_dir()
+{
+    m_VCBackup_dir = m_default_VCBackup_dir;
+    make_dirs(m_VCBackup_dir);
+    save_config();
+}
+ 
+MigrationResult ProjectVCBackupManager::migrate_backups_to(
+    const std::string& new_dir,
+    std::function<void(size_t, size_t)> progress_cb)
+{
+    MigrationResult result;
+    result.new_dir = new_dir;
+ 
+    if (new_dir.empty() || new_dir == m_VCBackup_dir) {
+        result.error_message = "Target directory is the same as the current one.";
+        return result;
+    }
+ 
+    if (!make_dirs(new_dir)) {
+        result.error_message = "Could not create target directory: " + new_dir;
+        return result;
+    }
+ 
+    // Collect every .3mf file under the current backup root
+    std::vector<fs::path> all_files;
+    if (fs::exists(m_VCBackup_dir)) {
+        for (const auto& entry : fs::recursive_directory_iterator(m_VCBackup_dir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".3mf")
+                all_files.push_back(entry.path());
+        }
+    }
+ 
+    size_t total = all_files.size();
+    size_t done  = 0;
+ 
+    for (const auto& src : all_files) {
+        // Reconstruct the relative path under the new root
+        auto rel = fs::relative(src, m_VCBackup_dir);
+        fs::path dst_path = fs::path(new_dir) / rel;
+ 
+        std::error_code ec;
+        fs::create_directories(dst_path.parent_path(), ec);
+        if (ec) { ++result.files_failed; continue; }
+ 
+        fs::copy_file(src, dst_path, fs::copy_options::overwrite_existing, ec);
+        if (ec) { ++result.files_failed; }
+        else    { ++result.files_moved; }
+ 
+        ++done;
+        if (progress_cb) progress_cb(done, total);
+    }
+ 
+    // Only switch the active dir if at least one file moved (or there was
+    // nothing to move), i.e. the operation was not a total failure.
+    if (result.files_failed == 0 || result.files_moved > 0) {
+        m_VCBackup_dir = new_dir;
+        save_config();
+    } else {
+        result.error_message = "All files failed to copy. Backup directory not changed.";
+    }
+ 
+    return result;
 }
 
 // ============================================================
@@ -174,7 +259,37 @@ bool ProjectVCBackupManager::delete_all_VCBackups(const std::string& source_path
 
 std::string ProjectVCBackupManager::VCBackup_dir_for(const std::string& source_path) const
 {
-    return (fs::path(m_base_dir) / sanitise_name(source_path)).string();
+    return (fs::path(m_default_VCBackup_dir) / sanitise_name(source_path)).string();
+}
+
+// ============================================================
+//  Config persistence
+// ============================================================
+ 
+std::string ProjectVCBackupManager::config_file_path() const
+{
+    return (fs::path(m_data_dir) / "vc_config.json").string();
+}
+ 
+void ProjectVCBackupManager::load_config()
+{
+    std::ifstream ifs(config_file_path());
+    if (!ifs.is_open()) return;
+    try {
+        json root = json::parse(ifs);
+        std::string saved = root.value("backup_dir", "");
+        if (!saved.empty())
+            m_VCBackup_dir = saved;
+    } catch (...) {}
+}
+ 
+void ProjectVCBackupManager::save_config() const
+{
+    json root;
+    root["backup_dir"] = m_VCBackup_dir;
+    std::ofstream ofs(config_file_path());
+    if (ofs.is_open())
+        ofs << root.dump(2);
 }
 
 // ============================================================
@@ -255,6 +370,16 @@ void ProjectVCBackupManager::prune(const std::string& project_dir) const
         fs::remove(files.front(), ec);
         files.erase(files.begin());
     }
+}
+
+size_t ProjectVCBackupManager::count_backup_files(const std::string& root)
+{
+    if (!fs::exists(root)) return 0;
+    size_t n = 0;
+    for (const auto& e : fs::recursive_directory_iterator(root))
+        if (e.is_regular_file() && e.path().extension() == ".3mf")
+            ++n;
+    return n;
 }
 
 wxButton* ProjectVCBackupManager::make_button(wxWindow* parent, const wxString& label, BtnStyle style)
