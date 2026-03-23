@@ -657,7 +657,7 @@ set(SLIC3R_GUI_SOURCES
     Utils/WxFontUtils.hpp
     Utils/FileTransferUtils.cpp
     Utils/FileTransferUtils.hpp
-)
+) 
 
 add_subdirectory(GUI/DeviceCore)
 add_subdirectory(GUI/DeviceTab)
