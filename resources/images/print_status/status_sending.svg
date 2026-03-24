@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <style>
+    @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .upload-arrow { animation: bob 1.2s ease-in-out infinite; }
+    .dot1 { animation: pulse 1s ease-in-out infinite 0.0s; }
+    .dot2 { animation: pulse 1s ease-in-out infinite 0.3s; }
+    .dot3 { animation: pulse 1s ease-in-out infinite 0.6s; }
+    @media (prefers-reduced-motion: reduce) {
+      .upload-arrow, .dot1, .dot2, .dot3 { animation: none; }
+    }
+  </style>
+  <!-- Diamond frame -->
+  <polygon points="36,12 56,36 36,60 16,36"
+    fill="none" stroke="#185FA5" stroke-width="1.5"/>
+  <!-- Animated upload arrow group -->
+  <g class="upload-arrow">
+    <line x1="36" y1="46" x2="36" y2="26"
+      stroke="#378ADD" stroke-width="2" stroke-linecap="round"/>
+    <polyline points="29,34 36,26 43,34"
+      fill="none" stroke="#378ADD" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- Progress dots -->
+  <circle class="dot1" cx="28" cy="54" r="2.5" fill="#B5D4F4"/>
+  <circle class="dot2" cx="36" cy="54" r="2.5" fill="#85B7EB"/>
+  <circle class="dot3" cx="44" cy="54" r="2.5" fill="#378ADD"/>
+  <!-- Axolotl eyes on diamond -->
+  <circle cx="32" cy="34" r="1.5" fill="#185FA5"/>
+  <circle cx="40" cy="34" r="1.5" fill="#185FA5"/>
+</svg>
