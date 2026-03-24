@@ -36,6 +36,8 @@
 #include "calib_dlg.hpp"
 #include "MultiMachinePage.hpp"
 
+#include "PrintStatusIcon.hpp"
+
 #define ENABEL_PRINT_ALL 0
 
 class Notebook;
@@ -396,7 +398,6 @@ public:
     DiffPresetDialog      diff_dialog;
     wxWindow*             m_plater_page{ nullptr };
     PrintHostQueueDialog* m_printhost_queue_dlg;
-
     
     mutable int m_print_select{ ePrintAll };
     mutable int m_slice_select{ eSliceAll };
@@ -407,6 +408,8 @@ public:
     SideButton* m_print_option_btn{ nullptr };
 
     SidePopup*  m_slice_option_pop_up{ nullptr };
+
+    PrintStatusIcon* m_print_status_icon { nullptr };
 
     FilamentGroupPopup* m_filament_group_popup{ nullptr };
     mutable bool          m_slice_enable{ true };
