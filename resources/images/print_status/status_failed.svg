@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <style>
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .tear { animation: pulse 2s ease-in-out infinite; }
+    .tear2 { animation: pulse 2s ease-in-out infinite 0.5s; }
+    @media (prefers-reduced-motion: reduce) { .tear, .tear2 { animation: none; } }
+  </style>
+  <!-- Warning triangle -->
+  <polygon points="36,10 58,48 14,48"
+    fill="#FCEBEB" stroke="#A32D2D" stroke-width="1.5"/>
+  <!-- X mark -->
+  <line x1="28" y1="28" x2="44" y2="44"
+    stroke="#E24B4A" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="44" y1="28" x2="28" y2="44"
+    stroke="#E24B4A" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Sad axolotl at bottom -->
+  <circle cx="36" cy="54" r="6" fill="#FCEBEB" stroke="#A32D2D" stroke-width="1"/>
+  <circle cx="34" cy="53" r="1.2" fill="#791F1F"/>
+  <circle cx="38" cy="53" r="1.2" fill="#791F1F"/>
+  <!-- Sad frown -->
+  <path d="M33 57 Q36 55 39 57"
+    fill="none" stroke="#791F1F" stroke-width="1" stroke-linecap="round"/>
+  <!-- Tear drops -->
+  <ellipse class="tear"  cx="33" cy="59" rx="1" ry="1.5" fill="#F7C1C1"/>
+  <ellipse class="tear2" cx="39" cy="59" rx="1" ry="1.5" fill="#F7C1C1"/>
+</svg>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <style>
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .idle-dot { animation: pulse 2.5s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .idle-dot { animation: none; } }
+  </style>
+  <!-- Hexagonal frame -->
+  <polygon points="36,14 50,24 50,48 36,58 22,48 22,24"
+    fill="none" stroke="#7F77DD" stroke-width="1.5"/>
+  <!-- Axolotl body -->
+  <circle cx="36" cy="36" r="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1"/>
+  <!-- Eyes -->
+  <circle cx="33" cy="34" r="2" fill="#534AB7"/>
+  <circle cx="39" cy="34" r="2" fill="#534AB7"/>
+  <!-- Gills -->
+  <line x1="22" y1="24" x2="15" y2="18" stroke="#AFA9EC" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="22" y1="28" x2="14" y2="24" stroke="#AFA9EC" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="50" y1="24" x2="57" y2="18" stroke="#AFA9EC" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="50" y1="28" x2="58" y2="24" stroke="#AFA9EC" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Smile -->
+  <path d="M32 39 Q36 43 40 39" fill="none" stroke="#534AB7" stroke-width="1" stroke-linecap="round"/>
+  <!-- Idle pulse dot -->
+  <circle class="idle-dot" cx="36" cy="56" r="3" fill="#AFA9EC"/>
+</svg>
