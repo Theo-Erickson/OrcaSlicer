@@ -50,6 +50,7 @@
 #include <fstream>
 #include <string_view>
 
+#include "BackgroundSlicingProcess.hpp"
 #include "GUI_App.hpp"
 #include "UnsavedChangesDialog.hpp"
 #include "MsgDialog.hpp"
@@ -67,6 +68,10 @@
 #include "DeviceCore/DevManager.h"
 
 #include "HistoryPanel.hpp"
+
+#include "BackgroundSlicingProcess.hpp"   // SlicingProcessCompletedEvent, EVT_PROCESS_COMPLETED
+#include "Jobs/PrintJob.hpp"              // EVT_PRINT_JOB_PROGRESS
+#include "libslic3r/PrintBase.hpp"        // SlicingStatus, DEFAULT_WAIT_IF_CANCELED_FLAGS
 
 #ifdef _WIN32
 #include <dbt.h>
@@ -1211,8 +1216,8 @@ void MainFrame::init_tabpanel() {
     // wxNB_NOPAGETHEME: Disable Windows Vista theme for the Notebook background. The theme performance is terrible on
     // Windows 10 with multiple high resolution displays connected.
     // BBS
-    wxBoxSizer *side_tools = create_side_tools();
-    m_tabpanel = new Notebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, side_tools,
+    m_side_tools = create_side_tools();
+    m_tabpanel = new Notebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, m_side_tools,
                               wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
     m_tabpanel->SetBackgroundColour(*wxWHITE);
 
@@ -1296,6 +1301,33 @@ void MainFrame::init_tabpanel() {
     m_plater->SetBackgroundColour(*wxWHITE);
     m_plater->Hide();
 
+    m_print_status_icon = new PrintStatusIcon(this, FromDIP(28));
+    m_side_tools->Insert(0, m_print_status_icon, 0,
+        wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, FromDIP(6));
+    m_side_tools->Layout();
+
+    m_print_status_icon->BindClickHandler([this]() {
+        select_tab(size_t(TabPosition::tpMonitor));
+    });
+
+    // EVT_SLICING_UPDATE is declared in Plater.hpp (already included).
+    // SlicingStatusEvent is declared in libslic3r/PrintBase.hpp (already
+    // included transitively via Plater.hpp -> PrintBase.hpp).
+    // We use percent to detect both in-progress and completion.
+    m_plater->Bind(EVT_SLICING_UPDATE, [this](SlicingStatusEvent& evt) {
+        if (evt.status.percent < 100) {
+            m_print_status_icon->SetState(PrintState::SLICING);
+            m_print_status_icon->SetStatusLabel(
+                wxString::Format(_L("Slicing \u2014 %d%%"), evt.status.percent));
+        } else {
+            m_print_status_icon->SetState(PrintState::SLICED);
+            m_print_status_icon->SetStatusLabel(_L("Sliced \u2014 ready to send"));
+        }
+    });
+
+    m_print_status_icon->SetState(PrintState::OFFLINE);
+
+    
     wxGetApp().plater_ = m_plater;
 
     create_preset_tabs();
@@ -1342,9 +1374,14 @@ void MainFrame::init_tabpanel() {
         }
     }
 
-    m_history_panel = new HistoryPanel(m_tabpanel);
+    m_history_panel = new HistoryPanel(m_tabpanel, wxID_ANY, wxDefaultPosition, wxDefaultSize);
     m_history_panel->SetBackgroundColour(*wxWHITE);
     m_tabpanel->AddPage(m_history_panel, _L("History"), std::string("tab_auxiliary_active"), std::string("tab_auxiliary_active"), false);
+    
+    
+
+
+
 }
 
 // SoftFever
@@ -2406,6 +2443,13 @@ void MainFrame::on_dpi_changed(const wxRect& suggested_rect)
     this->SetSize(sz);
 
     this->Maximize(is_maximized);
+    
+    if (m_print_status_icon) {
+        int new_size = FromDIP(28);
+        m_print_status_icon->SetMinSize(wxSize(new_size, new_size));
+        m_print_status_icon->SetMaxSize(wxSize(new_size, new_size));
+        m_tabpanel->Refresh();
+    }
 }
 
 void MainFrame::on_sys_color_changed()

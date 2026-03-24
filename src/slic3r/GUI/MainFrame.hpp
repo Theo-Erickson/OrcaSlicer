@@ -37,6 +37,7 @@
 #include "MultiMachinePage.hpp"
 
 #include "HistoryPanel.hpp"
+#include "PrintStatusIcon.hpp"
 
 #define ENABEL_PRINT_ALL 0
 
@@ -401,7 +402,6 @@ public:
     DiffPresetDialog      diff_dialog;
     wxWindow*             m_plater_page{ nullptr };
     PrintHostQueueDialog* m_printhost_queue_dlg;
-
     
     mutable int m_print_select{ ePrintAll };
     mutable int m_slice_select{ eSliceAll };
@@ -413,6 +413,8 @@ public:
 
     SidePopup*  m_slice_option_pop_up{ nullptr };
 
+    PrintStatusIcon* m_print_status_icon { nullptr };
+    
     FilamentGroupPopup* m_filament_group_popup{ nullptr };
     mutable bool          m_slice_enable{ true };
     mutable bool          m_print_enable{ true };

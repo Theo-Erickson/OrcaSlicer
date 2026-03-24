@@ -46,7 +46,7 @@ enum class HistoryBtnStyle { Primary, Secondary, Danger };
 class HistoryPanel : public wxPanel
 {
 public:
-    explicit HistoryPanel(wxWindow* parent, wxWindowID id = wxID_ANY);
+    explicit HistoryPanel(wxWindow* parent, wxWindowID id = wxID_ANY, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = wxTAB_TRAVERSAL);
     ~HistoryPanel() override = default;
 
     // ── Public API (call from Plater / GUI_App hooks) ──────────────────────

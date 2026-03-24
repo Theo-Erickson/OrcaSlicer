@@ -54,11 +54,14 @@ std::string HistoryEntry::short_path(size_t max_chars) const
 //  Construction
 // ============================================================
 
-HistoryPanel::HistoryPanel(wxWindow* parent, wxWindowID id) : wxPanel(parent, id)
+HistoryPanel::HistoryPanel(wxWindow* parent, wxWindowID id, const wxPoint& pos, const wxSize& size, long style) : wxPanel(parent, id, pos, size, style)
 {
     // Initialise the VCBackup manager pointing at the OrcaSlicer data dir
     m_VCBackup_manager = std::make_unique<ProjectVCBackupManager>(data_dir(), MAX_VCBackups);
 
+    wxBoxSizer* sizer_main = new wxBoxSizer(wxVERTICAL);
+    sizer_main->Add(parent, 1, wxEXPAND, 0);
+    
     build_ui();
     load();
     populate_project_list();

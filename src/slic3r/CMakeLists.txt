@@ -416,6 +416,9 @@ set(SLIC3R_GUI_SOURCES
     GUI/PartSkipCommon.hpp
     GUI/PartSkipDialog.cpp
     GUI/PartSkipDialog.hpp
+    GUI/PrintStatusIcon.cpp
+    GUI/PrintStatusIcon.hpp
+    GUI/PrintStatusIconSVG.hpp
     GUI/SkipPartCanvas.cpp
     GUI/SkipPartCanvas.hpp
     GUI/Search.cpp
@@ -658,6 +661,12 @@ set(SLIC3R_GUI_SOURCES
     Utils/FileTransferUtils.cpp
     Utils/FileTransferUtils.hpp
 ) 
+
+install(
+    DIRECTORY   "${CMAKE_CURRENT_SOURCE_DIR}/../../../orca_status_icons/svg/"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/images/print_status"
+    FILES_MATCHING PATTERN "*.svg"
+)
 
 add_subdirectory(GUI/DeviceCore)
 add_subdirectory(GUI/DeviceTab)
