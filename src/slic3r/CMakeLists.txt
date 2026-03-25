@@ -418,7 +418,9 @@ set(SLIC3R_GUI_SOURCES
     GUI/PartSkipDialog.hpp
     GUI/PrintStatusIcon.cpp
     GUI/PrintStatusIcon.hpp
-    GUI/PrintStatusIconSVG.hpp
+    GUI/PrintStatusIconGIF.hpp
+    GUI/PrinterStatusPoller.cpp
+    GUI/PrinterStatusPoller.hpp
     GUI/SkipPartCanvas.cpp
     GUI/SkipPartCanvas.hpp
     GUI/Search.cpp
