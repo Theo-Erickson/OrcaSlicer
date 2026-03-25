@@ -1,61 +1,61 @@
-// PrintStatusIcon.cpp
-// See PrintStatusIcon.hpp for architecture notes.
+// PrintStatusIcon.cpp  (v4)
 
 #include "PrintStatusIcon.hpp"
-#include "PrintStatusIconSVG.hpp"   // embedded SVG strings (generated)
+#include "PrintStatusIconGIF.hpp"
 
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
-#include <wx/base64.h>
+#include <wx/mstream.h>
 
 namespace Slic3r {
 namespace GUI {
 
-// ---------------------------------------------------------------------------
-// Event table
-// ---------------------------------------------------------------------------
 wxBEGIN_EVENT_TABLE(PrintStatusIcon, wxPanel)
-    EVT_LEFT_UP(PrintStatusIcon::OnLeftClick)
+    EVT_LEFT_UP(PrintStatusIcon::OnClick)
 wxEND_EVENT_TABLE()
 
 // ---------------------------------------------------------------------------
-// Construction
-// ---------------------------------------------------------------------------
 PrintStatusIcon::PrintStatusIcon(wxWindow* parent, int icon_size)
-    : wxPanel(parent, wxID_ANY, wxDefaultPosition,
-              wxSize(icon_size, icon_size), wxBORDER_NONE)
+    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+              wxBORDER_NONE | wxTRANSPARENT_WINDOW)
     , m_icon_size(icon_size)
 {
-    SetBackgroundColour(parent->GetBackgroundColour());
-    CreateWebView();
+    // Set the background color of the whole icon and text widget.
+    // Comment out for no color override (default = hidden)
+    // SetBackgroundColour(parent->GetBackgroundColour());
+    Build();
+    Apply(PrintState::OFFLINE, -1);
 }
 
-void PrintStatusIcon::CreateWebView()
+void PrintStatusIcon::Build()
 {
-    // wxWebView renders SVG+CSS animations without any extra dependencies.
-    // The panel is transparent so it blends with the toolbar background.
-    m_webview = wxWebView::New(
-        this, wxID_ANY,
-        wxEmptyString,
-        wxPoint(0, 0),
-        wxSize(m_icon_size, m_icon_size),
-        wxWebViewBackendDefault,
-        wxBORDER_NONE
-    );
+    auto* row = new wxBoxSizer(wxHORIZONTAL);
 
-    if (!m_webview) {
-        // Fallback: render a static wxBitmap instead (see notes below).
-        wxLogWarning("PrintStatusIcon: wxWebView not available; "
-                     "falling back to static icon.");
-        return;
-    }
+    // ── Animated GIF ──────────────────────────────────────────────────────
+    // wxAC_NO_AUTORESIZE: lock the control to m_icon_size.
+    // The GIFs are generated at exactly m_icon_size × m_icon_size pixels,
+    // so there is no clipping or scaling.
+    m_anim = new wxAnimationCtrl(
+        this, wxID_ANY, wxNullAnimation,
+        wxDefaultPosition, wxSize(m_icon_size, m_icon_size),
+        wxAC_DEFAULT_STYLE | wxAC_NO_AUTORESIZE | wxBORDER_NONE);
+    m_anim->SetBackgroundColour(GetBackgroundColour());
+    m_anim->Bind(wxEVT_LEFT_UP, &PrintStatusIcon::OnClick, this);
+    row->Add(m_anim, 0, wxALIGN_CENTER_VERTICAL);
 
-    // Allow the WebView to be transparent so toolbar background shows through.
-    m_webview->SetPage("<html><body></body></html>", "");
-    m_webview->Bind(wxEVT_WEBVIEW_LOADED, &PrintStatusIcon::OnWebViewLoaded, this);
+    // ── Debug label ───────────────────────────────────────────────────────
+    row->AddSpacer(8);
+    m_text = new wxStaticText(this, wxID_ANY, "OFFLINE",
+                              wxDefaultPosition, wxDefaultSize,
+                              wxST_NO_AUTORESIZE);
+    wxFont font = m_text->GetFont();
+    font.SetPointSize(12);
+    font.SetWeight(wxFONTWEIGHT_MEDIUM);
+    m_text->SetFont(font);
+    m_text->Bind(wxEVT_LEFT_UP, &PrintStatusIcon::OnClick, this);
+    row->Add(m_text, 0, wxALIGN_CENTER_VERTICAL);
 
-    // Load initial state.
-    LoadState(m_state, m_progress);
+    SetSizerAndFit(row);
 }
 
 // ---------------------------------------------------------------------------
@@ -63,20 +63,18 @@ void PrintStatusIcon::CreateWebView()
 // ---------------------------------------------------------------------------
 void PrintStatusIcon::SetState(PrintState state, int progress_pct)
 {
-    // Always dispatch to the main thread — this may be called from the
-    // MQTT worker thread inside DeviceManager::on_machine_data_update().
     CallAfter([this, state, progress_pct]() {
-        if (m_state == state && m_progress == progress_pct)
-            return;  // No-op — avoid redundant re-renders.
+        // Always apply — don't skip on equal state, because
+        // progress_pct may change within the same state (e.g. SLICING 10→50).
         m_state    = state;
         m_progress = progress_pct;
-        LoadState(state, progress_pct);
+        Apply(state, progress_pct);
     });
 }
 
 void PrintStatusIcon::SetStatusLabel(const wxString& label)
 {
-    SetToolTip(label);
+    CallAfter([this, label]() { SetToolTip(label); });
 }
 
 void PrintStatusIcon::BindClickHandler(std::function<void()> handler)
@@ -85,183 +83,127 @@ void PrintStatusIcon::BindClickHandler(std::function<void()> handler)
 }
 
 // ---------------------------------------------------------------------------
-// Internal rendering
+// Internal
 // ---------------------------------------------------------------------------
-void PrintStatusIcon::LoadState(PrintState state, int progress_pct)
+void PrintStatusIcon::Apply(PrintState state, int progress_pct)
 {
-    if (!m_webview) return;
-
-    wxString svg     = LoadSVG(state);
-    wxString html    = BuildHtmlPage(svg, progress_pct);
-    m_webview->SetPage(html, "about:blank");
-}
-
-wxString PrintStatusIcon::BuildHtmlPage(const wxString& svg_content,
-                                         int            progress_pct) const
-{
-    // We set the background to "transparent" and match the system color.
-    // The SVG is scaled to exactly fill the WebView viewport.
-    wxString progress_js;
-    if (progress_pct >= 0) {
-        // Inject a thin progress arc over the icon (used in RUNNING state).
-        // The arc is drawn in a <canvas> overlay sized to the SVG viewport.
-        progress_js = wxString::Format(R"JS(
-(function() {
-    const pct = %d / 100.0;
-    const c   = document.getElementById('progress-arc');
-    if (!c) return;
-    const ctx = c.getContext('2d');
-    const cx  = c.width / 2, cy = c.height / 2, r = cx - 4;
-    ctx.clearRect(0, 0, c.width, c.height);
-    // Background track
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, -Math.PI/2, Math.PI*1.5);
-    ctx.strokeStyle = 'rgba(93,202,165,0.25)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    // Filled arc
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
-    ctx.strokeStyle = '#1D9E75';
-    ctx.lineWidth   = 3;
-    ctx.lineCap     = 'round';
-    ctx.stroke();
-})();
-        )JS", progress_pct);
+    // ── GIF ──
+    wxAnimation anim = LoadAnim(state);
+    if (anim.IsOk()) {
+        m_anim->SetAnimation(anim);
+        m_anim->Play();
     }
 
-    return wxString::Format(R"HTML(
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8"/>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html, body {
-    width:  %dpx;
-    height: %dpx;
-    overflow: hidden;
-    background: transparent;
-  }
-  .icon-wrap {
-    position: relative;
-    width:  %dpx;
-    height: %dpx;
-  }
-  .icon-wrap svg {
-    width:  100%%;
-    height: 100%%;
-    display: block;
-  }
-  #progress-arc {
-    position: absolute;
-    top: 0; left: 0;
-    pointer-events: none;
-  }
-</style>
-</head>
-<body>
-<div class="icon-wrap">
-  %s
-  <canvas id="progress-arc" width="%d" height="%d"></canvas>
-</div>
-<script>%s</script>
-</body>
-</html>
-    )HTML",
-        m_icon_size, m_icon_size,
-        m_icon_size, m_icon_size,
-        svg_content,
-        m_icon_size, m_icon_size,
-        progress_js
-    );
-}
+    // ── Label text ──
+    wxString txt = Label(state);
+    if (progress_pct >= 0 &&
+        (state == PrintState::SLICING ||
+         state == PrintState::RUNNING ||
+         state == PrintState::SENDING))
+        txt = wxString::Format("%s %d%%", txt, progress_pct);
 
-// ---------------------------------------------------------------------------
-// SVG loading — filesystem first, embedded strings as fallback
-// ---------------------------------------------------------------------------
-wxString PrintStatusIcon::SVGFilename(PrintState state)
-{
-    switch (state) {
-        case PrintState::IDLE:            return "status_idle.svg";
-        case PrintState::SLICING:         return "status_slicing.svg";
-        case PrintState::SLICED:          return "status_sliced.svg";
-        case PrintState::SENDING:         return "status_sending.svg";
-        case PrintState::PREPARE:         return "status_prepare.svg";
-        case PrintState::RUNNING:         return "status_running.svg";
-        case PrintState::PAUSE:           return "status_pause.svg";
-        case PrintState::FILAMENT_CHANGE: return "status_filament_change.svg";
-        case PrintState::CALIBRATING:     return "status_calibrating.svg";
-        case PrintState::FINISH:          return "status_finish.svg";
-        case PrintState::FAILED:          return "status_failed.svg";
-        case PrintState::OFFLINE:         return "status_offline.svg";
-        default:                          return "status_idle.svg";
+    // Change label for the text next to the animated icon
+    m_text->SetLabel(txt);
+    // Set the color of the text
+    m_text->SetForegroundColour(LabelColour(state));
+    // Set the backround for the text element (default hidden)
+    // m_text->SetBackgroundColour(*wxBLACK); 
+    // Refresh the text object
+    m_text->Refresh();
+
+    // Force the parent sizer to re-measure (label width may change).
+    if (GetSizer()) 
+    {
+        GetSizer()->Layout();
     }
 }
 
-wxString PrintStatusIcon::LoadSVG(PrintState state)
+// ---------------------------------------------------------------------------
+// GIF loading
+// ---------------------------------------------------------------------------
+wxString PrintStatusIcon::GifName(PrintState s)
 {
-    // Try loading from the resources directory first so users can
-    // swap in custom icons without recompiling.
-    wxFileName path(wxStandardPaths::Get().GetResourcesDir(),
-                    SVGFilename(state));
-    path.AppendDir("icons");
-    path.AppendDir("print_status");
-
-    if (path.FileExists()) {
-        wxFile f(path.GetFullPath());
-        if (f.IsOpened()) {
-            wxString content;
-            f.ReadAll(&content);
-            return content;
-        }
+    switch (s) {
+    case PrintState::IDLE:            return "status_idle.gif";
+    case PrintState::SLICING:         return "status_slicing.gif";
+    case PrintState::SLICED:          return "status_sliced.gif";
+    case PrintState::SENDING:         return "status_sending.gif";
+    case PrintState::PREPARE:         return "status_prepare.gif";
+    case PrintState::RUNNING:         return "status_running.gif";
+    case PrintState::PAUSE:           return "status_pause.gif";
+    case PrintState::FILAMENT_CHANGE: return "status_filament_change.gif";
+    case PrintState::CALIBRATING:     return "status_calibrating.gif";
+    case PrintState::FINISH:          return "status_finish.gif";
+    case PrintState::FAILED:          return "status_failed.gif";
+    case PrintState::OFFLINE:         return "status_offline.gif";
+    default:                          return "status_idle.gif";
     }
+}
 
-    // Fall back to embedded strings (see PrintStatusIconSVG.hpp).
-    return PrintStatusIconSVG::Get(state);
+wxAnimation PrintStatusIcon::LoadAnim(PrintState s)
+{
+    // 1. Filesystem (resources/icons/print_status/) — hot-swappable.
+    wxFileName p(wxStandardPaths::Get().GetResourcesDir(), GifName(s));
+    p.AppendDir("icons");
+    p.AppendDir("print_status");
+    if (p.FileExists()) {
+        wxAnimation a;
+        if (a.LoadFile(p.GetFullPath(), wxANIMATION_TYPE_GIF))
+            return a;
+    }
+    // 2. Embedded bytes.
+    size_t len = 0;
+    const uint8_t* data = PrintStatusIconGIF::GetData(s, len);
+    if (data && len) {
+        wxMemoryInputStream stream(data, len);
+        wxAnimation a;
+        if (a.Load(stream, wxANIMATION_TYPE_GIF))
+            return a;
+    }
+    return wxNullAnimation;
 }
 
 // ---------------------------------------------------------------------------
-// Event handlers
+// Label helpers
 // ---------------------------------------------------------------------------
-void PrintStatusIcon::OnWebViewLoaded(wxWebViewEvent& /*evt*/)
+wxString PrintStatusIcon::Label(PrintState s)
 {
-    // Re-inject progress arc after page load (WebView cleared it).
-    if (m_progress >= 0)
-        UpdateProgressArc(m_progress);
+    switch (s) {
+    case PrintState::IDLE:            return "IDLE";
+    case PrintState::SLICING:         return "SLICING";
+    case PrintState::SLICED:          return "SLICED";
+    case PrintState::SENDING:         return "SENDING";
+    case PrintState::PREPARE:         return "PREPARE";
+    case PrintState::RUNNING:         return "PRINTING";
+    case PrintState::PAUSE:           return "PAUSED";
+    case PrintState::FILAMENT_CHANGE: return "FILAMENT";
+    case PrintState::CALIBRATING:     return "CALIB";
+    case PrintState::FINISH:          return "DONE!";
+    case PrintState::FAILED:          return "FAILED";
+    case PrintState::OFFLINE:         return "OFFLINE";
+    default:                          return "UNKNOWN";
+    }
 }
 
-void PrintStatusIcon::UpdateProgressArc(int pct)
+wxColour PrintStatusIcon::LabelColour(PrintState s)
 {
-    if (!m_webview) return;
-    wxString js = wxString::Format(R"JS(
-(function() {
-    const pct = %d / 100.0;
-    const c   = document.getElementById('progress-arc');
-    if (!c) return;
-    const ctx = c.getContext('2d');
-    const cx  = c.width / 2, cy = c.height / 2, r = cx - 4;
-    ctx.clearRect(0, 0, c.width, c.height);
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, -Math.PI/2, Math.PI*1.5);
-    ctx.strokeStyle = 'rgba(93,202,165,0.25)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
-    ctx.strokeStyle = '#1D9E75';
-    ctx.lineWidth   = 3;
-    ctx.lineCap     = 'round';
-    ctx.stroke();
-})();
-    )JS", pct);
-    m_webview->RunScript(js);
+    switch (s) {
+    case PrintState::RUNNING:          return wxColour( 80, 200, 160);
+    case PrintState::FINISH:           return wxColour( 80, 200, 160);
+    case PrintState::FAILED:           return wxColour(240,  90,  90);
+    case PrintState::PAUSE:            return wxColour(240, 170,  60);
+    case PrintState::PREPARE:          return wxColour(240, 170,  60);
+    case PrintState::SLICING:          return wxColour( 80, 200, 160);
+    case PrintState::SLICED:           return wxColour(130, 200,  70);
+    case PrintState::SENDING:          return wxColour( 80, 160, 240);
+    case PrintState::FILAMENT_CHANGE:  return wxColour(175, 160, 240);
+    default:                           return wxColour(180, 180, 180);
+    }
 }
 
-void PrintStatusIcon::OnLeftClick(wxMouseEvent& evt)
+void PrintStatusIcon::OnClick(wxMouseEvent& evt)
 {
-    if (m_on_click)
-        m_on_click();
+    if (m_on_click) m_on_click();
     evt.Skip();
 }
 

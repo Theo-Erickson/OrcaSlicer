@@ -67,6 +67,8 @@
 
 #include "DeviceCore/DevManager.h"
 
+#include "HistoryPanel.hpp"
+
 #include "BackgroundSlicingProcess.hpp"   // SlicingProcessCompletedEvent, EVT_PROCESS_COMPLETED
 #include "Jobs/PrintJob.hpp"              // EVT_PRINT_JOB_PROGRESS
 #include "libslic3r/PrintBase.hpp"        // SlicingStatus, DEFAULT_WAIT_IF_CANCELED_FLAGS
@@ -1141,6 +1143,13 @@ void MainFrame::shutdown()
 //             m_plater->print = undef;
 //         Slic3r::GUI::deregister_on_request_update_callback();
 
+    // Stop the poller before the icon widget is destroyed.
+    if (m_status_poller) {
+        m_status_poller->Stop();
+        delete m_status_poller;
+        m_status_poller = nullptr;
+    }
+
     // set to null tabs and a plater
     // to avoid any manipulations with them from App->wxEVT_IDLE after of the mainframe closing
     wxGetApp().tabs_list.clear();
@@ -1203,6 +1212,7 @@ void MainFrame::init_tabpanel() {
     // Windows 10 with multiple high resolution displays connected.
     // BBS
     m_side_tools = create_side_tools();
+
     m_tabpanel = new Notebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, m_side_tools,
                               wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
     m_tabpanel->SetBackgroundColour(*wxWHITE);
@@ -1287,15 +1297,6 @@ void MainFrame::init_tabpanel() {
     m_plater = new Plater(this, this);
     m_plater->SetBackgroundColour(*wxWHITE);
     m_plater->Hide();
-
-    m_print_status_icon = new PrintStatusIcon(this, FromDIP(28));
-    m_side_tools->Insert(0, m_print_status_icon, 0,
-        wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, FromDIP(6));
-    m_side_tools->Layout();
-
-    m_print_status_icon->BindClickHandler([this]() {
-        select_tab(size_t(TabPosition::tpMonitor));
-    });
 
     // EVT_SLICING_UPDATE is declared in Plater.hpp (already included).
     // SlicingStatusEvent is declared in libslic3r/PrintBase.hpp (already
@@ -1848,6 +1849,24 @@ wxBoxSizer* MainFrame::create_side_tools()
     sizer->Add(FromDIP(15), 0, 0, 0, 0);
     sizer->Add(print_panel);
     sizer->Add(FromDIP(19), 0, 0, 0, 0);
+
+    m_print_status_icon = new PrintStatusIcon(this, 32);
+    sizer->Add(m_print_status_icon);
+    //m_side_tools->Layout();
+
+    // When clicking on the print status icon, jump to the printer/monitor tab
+    m_print_status_icon->BindClickHandler([this]() {
+        select_tab(size_t(TabPosition::tpMonitor));
+    });
+
+    // default to Idle
+    m_print_status_icon->SetState(PrintState::IDLE);
+
+    // Start the polling loop.  The poller reads MachineObject state
+    // every 500ms (same cadence as StatusPanel) and calls SetState
+    // on the icon whenever print_status or stage_curr changes.
+    m_status_poller = new PrinterStatusPoller(m_print_status_icon);
+    m_status_poller->Start();
 
     sizer->Layout();
 

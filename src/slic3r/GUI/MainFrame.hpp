@@ -37,6 +37,7 @@
 #include "MultiMachinePage.hpp"
 
 #include "PrintStatusIcon.hpp"
+#include "PrinterStatusPoller.hpp"
 
 #define ENABEL_PRINT_ALL 0
 
@@ -410,6 +411,7 @@ public:
     SidePopup*  m_slice_option_pop_up{ nullptr };
 
     PrintStatusIcon* m_print_status_icon { nullptr };
+    PrinterStatusPoller* m_status_poller { nullptr };
 
     FilamentGroupPopup* m_filament_group_popup{ nullptr };
     mutable bool          m_slice_enable{ true };
