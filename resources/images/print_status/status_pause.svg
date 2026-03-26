@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <style>
+    @keyframes pulse-ring { 0%,100%{opacity:0.6; r:10} 50%{opacity:0.2; r:14} }
+    .pause-ring { animation: pulse-ring 2s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .pause-ring { animation: none; } }
+  </style>
+  <!-- Hexagonal frame amber -->
+  <polygon points="36,10 56,22 56,50 36,62 16,50 16,22"
+    fill="#FAEEDA" stroke="#BA7517" stroke-width="1.5"/>
+  <!-- Pause bars -->
+  <rect x="27" y="27" width="6" height="18" rx="2" fill="#EF9F27"/>
+  <rect x="39" y="27" width="6" height="18" rx="2" fill="#EF9F27"/>
+  <!-- Axolotl face: worried expression -->
+  <circle cx="33" cy="24" r="1.5" fill="#854F0B"/>
+  <circle cx="39" cy="24" r="1.5" fill="#854F0B"/>
+  <!-- Furrowed brow lines -->
+  <line x1="31" y1="21" x2="35" y2="22" stroke="#854F0B" stroke-width="0.8"/>
+  <line x1="37" y1="22" x2="41" y2="21" stroke="#854F0B" stroke-width="0.8"/>
+  <!-- Flat mouth -->
+  <line x1="33" y1="26" x2="39" y2="26"
+    stroke="#854F0B" stroke-width="0.8" stroke-linecap="round"/>
+  <!-- Gills -->
+  <line x1="16" y1="30" x2="9"  y2="24" stroke="#FAC775" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="56" y1="30" x2="63" y2="24" stroke="#FAC775" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Pulsing ring -->
+  <circle class="pause-ring"
+    cx="36" cy="36" r="10" fill="none" stroke="#EF9F27" stroke-width="0.8"/>
+</svg>

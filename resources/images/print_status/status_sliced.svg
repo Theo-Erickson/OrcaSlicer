@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <!-- No animation needed - static success state -->
+  <!-- Hexagonal frame filled green -->
+  <polygon points="36,10 52,20 52,52 36,62 20,52 20,20"
+    fill="#EAF3DE" stroke="#639922" stroke-width="1.5"/>
+  <!-- Axolotl body -->
+  <circle cx="36" cy="36" r="10" fill="#C0DD97" stroke="#639922" stroke-width="1"/>
+  <!-- Eyes -->
+  <circle cx="33" cy="34" r="1.8" fill="#3B6D11"/>
+  <circle cx="39" cy="34" r="1.8" fill="#3B6D11"/>
+  <!-- Smile -->
+  <path d="M33 39 Q36 43 39 39" fill="none" stroke="#3B6D11" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Large checkmark -->
+  <path d="M26 36 L32 43 L46 28"
+    fill="none" stroke="#3B6D11" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Gills -->
+  <line x1="20" y1="28" x2="13" y2="22" stroke="#97C459" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="20" y1="33" x2="12" y2="30" stroke="#97C459" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="52" y1="28" x2="59" y2="22" stroke="#97C459" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="52" y1="33" x2="60" y2="30" stroke="#97C459" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
