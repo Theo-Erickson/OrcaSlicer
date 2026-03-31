@@ -3992,6 +3992,29 @@ void Sidebar::update_printer_thumbnail()
     }
 }
 
+DynamicPrintConfig& Sidebar::get_project_config()
+{
+    return wxGetApp().preset_bundle->prints.get_edited_preset().config;
+}
+
+void Sidebar::on_config_change(const DynamicPrintConfig& config)
+{
+    wxGetApp().obj_list()->update_and_show_object_settings_item();
+    wxGetApp().plater()->sidebar().update_presets(Preset::TYPE_PRINT);
+    wxGetApp().plater()->set_plater_dirty(true);
+}
+
+void Sidebar::toggle_slice_history_panel()
+{
+    if (wxGetApp().plater() && wxGetApp().plater()->get_slice_history_panel()) {
+        SliceHistoryPanel* panel = wxGetApp().plater()->get_slice_history_panel();
+        if (panel->IsShown())
+            panel->Dismiss();
+        else
+            panel->Popup();
+    }
+}
+
 void Sidebar::auto_calc_flushing_volumes(const int filament_idx, const int extruder_id) {
 
     std::vector<int> filament_indices;
@@ -4914,6 +4937,25 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         }
     });
 
+    // ── Slice History: create manager ────────────────────────────────
+    q->m_slice_history_mgr = new SliceHistoryManager();
+    // Panel is a child of the Plater (q), floats over the canvas
+    q->m_slice_history_panel = new SliceHistoryPanel(
+        panel_3d,
+        q,
+        q->m_slice_history_mgr
+    );
+    q->m_slice_history_panel->SetPosition(wxPoint(q->GetSize().x - 430, 50));
+
+    // Reposition on resize
+    q->Bind(wxEVT_SIZE, [this](wxSizeEvent& evt) {
+        evt.Skip();
+        if (this->q->m_slice_history_panel)
+            this->q->m_slice_history_panel->SetPosition(
+                wxPoint(this->q->GetSize().x - 430, 50));
+    });
+    // ─────────────────────────────────────────────────────────────────
+    
     update();
 
     // Orca: Make sidebar dockable
@@ -5147,6 +5189,26 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         //BBS: set on_slice to false
         q->Bind(EVT_GLVIEWTOOLBAR_PREVIEW, [q](SimpleEvent&) { q->select_view_3D("Preview", false); });
         q->Bind(EVT_GLTOOLBAR_SLICE_PLATE, &priv::on_action_slice_plate, this);
+        // ── HISTORY BUTTON ───────────────────────────────────────────
+        // Wire it up once the main toolbar area is available via CallAfter
+        q->CallAfter([this, q]() {
+            if (!q->m_btn_history && q->GetParent()) {
+                q->m_btn_history = new wxButton(
+                    q, wxID_ANY, wxString::FromUTF8("\xE2\x8F\xB3"),
+                    wxDefaultPosition, wxSize(28, 28),
+                    wxBU_EXACTFIT | wxBORDER_NONE);
+                q->m_btn_history->SetToolTip(_L("Slice History & Compare"));
+                q->m_btn_history->SetBackgroundColour(wxColour(60, 60, 72));
+                q->m_btn_history->SetForegroundColour(*wxWHITE);
+                q->m_btn_history->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+                    if (wxGetApp().plater() && wxGetApp().plater()->get_slice_history_panel()) {
+                        SliceHistoryPanel* panel = wxGetApp().plater()->get_slice_history_panel();
+                            panel->Popup();
+                    }
+                });
+            }
+        });
+        // ────────────────────────────────────────────────────────────
         q->Bind(EVT_GLTOOLBAR_SLICE_ALL, &priv::on_action_slice_all, this);
         q->Bind(EVT_GLTOOLBAR_PRINT_PLATE, &priv::on_action_print_plate, this);
         q->Bind(EVT_PRINT_FROM_SDCARD_VIEW, &priv::on_action_print_plate_from_sdcard, this);
@@ -9392,6 +9454,58 @@ void Plater::priv::on_slicing_completed(wxCommandEvent & evt)
         return;
     }
 
+    // ── SLICE HISTORY SNAPSHOT ────────────────────────────────────────
+    
+    PartPlate* plate = partplate_list.get_curr_plate();
+    bool result = plate->is_slice_result_valid();
+    //if (plate) {
+        GCodeProcessorResult* res = partplate_list.get_current_slice_result();
+        if (res) {
+            // Build time string
+            float total_sec = 0.f;
+            for (auto& mode : res->print_statistics.modes)
+                total_sec = std::max(total_sec, mode.time);
+            int h = int(total_sec) / 3600;
+            int m = (int(total_sec) % 3600) / 60;
+            std::string time_str = h > 0
+                ? (boost::format("%dh %dm") % h % m).str()
+                : (boost::format("%dm") % m).str();
+
+            // Filament totals
+            double total_mm = 0.0;
+            for (auto& kv : res->print_statistics.model_volumes_per_extruder)
+                total_mm += kv.second;
+            double total_g = total_mm * 1.24 / 1000.0;
+
+            // Object count on this plate
+            int obj_count = (int)plate->get_objects_on_this_plate().size();
+
+            // Global print preset name (strip dirty marker)
+            const Preset& print_preset =
+                wxGetApp().preset_bundle->prints.get_edited_preset();
+            std::string preset_name = print_preset.name;
+            while (!preset_name.empty() &&
+                   (preset_name.back() == '*' || preset_name.back() == ' '))
+                preset_name.pop_back();
+
+            const DynamicPrintConfig& cfg = print_preset.config;
+
+            if (q->m_slice_history_mgr) {
+                q->m_slice_history_mgr->push_snapshot(
+                    time_str,
+                    total_g,
+                    total_mm,
+                    obj_count,      // <-- was missing
+                    preset_name,    // <-- was missing
+                    cfg);
+                if (q->m_slice_history_panel)
+                    q->m_slice_history_panel->refresh(&cfg);
+            }
+        }
+    //}
+    
+    // ─────────────────────────────────────────────────────────────────
+    
     if (view3D->is_dragging()) // updating scene now would interfere with the gizmo dragging
         delayed_scene_refresh = true;
     else {

@@ -1344,8 +1344,7 @@ void MainFrame::init_tabpanel() {
 
     m_history_panel = new HistoryPanel(m_tabpanel);
     m_history_panel->SetBackgroundColour(*wxWHITE);
-
-    m_tabpanel->AddPage(m_history_panel, _L("History"), std::string("tab_history_pages_static"), std::string("tab_history_pages_static"), false);
+    m_tabpanel->AddPage(m_history_panel, _L("History"), std::string("tab_auxiliary_active"), std::string("tab_auxiliary_active"), false);
 }
 
 // SoftFever
