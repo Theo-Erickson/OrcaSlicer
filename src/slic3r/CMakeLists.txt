@@ -436,6 +436,10 @@ set(SLIC3R_GUI_SOURCES
     GUI/SliceInfoPanel.hpp
     GUI/SlicingProgressNotification.cpp
     GUI/SlicingProgressNotification.hpp
+    GUI/SliceHistoryManager.cpp
+    GUI/SliceHistoryManager.hpp
+    GUI/SliceHistoryPanel.cpp
+    GUI/SliceHistoryPanel.hpp
     GUI/StatusPanel.cpp
     GUI/StatusPanel.hpp
     GUI/StepMeshDialog.cpp
