@@ -1,16 +1,18 @@
-﻿#include "SliceHistoryManager.hpp"
+#include "SliceHistoryManager.hpp"
 #include <sstream>
 #include <iomanip>
 #include <ctime>
 
 namespace Slic3r { namespace GUI {
 
-void SliceHistoryManager::push_snapshot(const std::string&        print_time,
-                                         double                    filament_g,
-                                         double                    filament_mm,
-                                         int                       object_count,
-                                         const std::string&        preset_name,
-                                         const DynamicPrintConfig& cfg)
+void SliceHistoryManager::push_snapshot(
+    const std::string&                 print_time,
+    double                             filament_g,
+    double                             filament_mm,
+    int                                object_count,
+    const std::string&                 preset_name,
+    const DynamicPrintConfig&          cfg,
+    std::vector<ExtruderFilamentUsage> extruder_usages)
 {
     if (m_snapshots.size() >= MAX_SNAPSHOTS)
         m_snapshots.pop_front();
@@ -25,13 +27,22 @@ void SliceHistoryManager::push_snapshot(const std::string&        print_time,
        << std::setw(2) << std::setfill('0') << lt->tm_min;
 
     SliceSnapshot snap;
-    snap.label        = ts.str();
-    snap.print_time   = print_time;
-    snap.filament_g   = filament_g;
-    snap.filament_mm  = filament_mm;
-    snap.object_count = object_count;
-    snap.preset_name  = preset_name;
-    snap.config       = cfg;   // deep copy of global print config
+    snap.label          = ts.str();
+    snap.print_time     = print_time;
+    snap.filament_g     = filament_g;
+    snap.filament_mm    = filament_mm;
+    snap.object_count   = object_count;
+    snap.preset_name    = preset_name;
+    snap.config         = cfg;
+    snap.extruder_usages = std::move(extruder_usages);
+
+    // Compute cross-extruder totals
+    for (const auto& eu : snap.extruder_usages) {
+        snap.total_model_g   += eu.model_g;
+        snap.total_support_g += eu.support_g;
+        snap.total_flush_g   += eu.flush_g;
+        snap.total_other_g   += eu.other_g;
+    }
 
     m_snapshots.push_back(std::move(snap));
 }
@@ -53,6 +64,12 @@ std::vector<ConfigDiff> SliceHistoryManager::diff(
             result.push_back({ key, snap_val, curr_val });
     }
     return result;
+}
+
+void SliceHistoryManager::clear()
+{
+    m_snapshots.clear(); 
+    m_counter = 0;
 }
 
 }} // namespace Slic3r::GUI

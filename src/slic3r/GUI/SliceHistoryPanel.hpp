@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <wx/popupwin.h>
 #include <wx/notebook.h>
 #include <wx/listctrl.h>
@@ -28,11 +28,17 @@ private:
     Plater*              m_plater;
     SliceHistoryManager* m_mgr;
     wxNotebook*          m_notebook  = nullptr;
+    wxButton*            m_clear_btn = nullptr;
 
     const DynamicPrintConfig* m_last_config = nullptr; // non-owning
 
     void build_tabs();
     void on_restore(wxCommandEvent& evt);
+    void on_clear_history(wxCommandEvent&);
+    
+    void OnDismiss() override;
+    wxWindow* m_anchor_btn = nullptr;
+
 };
 
 }} // namespace Slic3r::GUI
