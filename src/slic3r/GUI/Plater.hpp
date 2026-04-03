@@ -933,8 +933,6 @@ public:
 
     SliceHistoryManager*   m_slice_history_mgr   = nullptr;
     SliceHistoryPanel*     m_slice_history_panel = nullptr;
-    wxButton*              m_btn_history         = nullptr;
-    
 private:
     struct priv;
     std::unique_ptr<priv> p;

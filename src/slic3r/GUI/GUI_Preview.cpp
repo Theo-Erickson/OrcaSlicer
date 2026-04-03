@@ -474,7 +474,7 @@ void Preview::init_slice_history_button()
     });
 }
 
-void Preview::on_slice_history_button(wxCommandEvent& /*evt*/)
+void Preview::on_slice_history_button(wxCommandEvent& evt)
 {
     Plater* plater = wxGetApp().plater();
     if (!plater) return;
@@ -482,17 +482,15 @@ void Preview::on_slice_history_button(wxCommandEvent& /*evt*/)
     SliceHistoryPanel* panel = plater->get_slice_history_panel();
     if (!panel) return;
 
-    // Refresh diffs against current global print config
-    const DynamicPrintConfig* cfg = nullptr;
-    if (wxGetApp().preset_bundle)
-        cfg = &wxGetApp().preset_bundle->prints.get_edited_preset().config;
-    panel->refresh(cfg);
-
-    // Popup anchored just below the button
-    wxPoint pos = m_btn_slice_history->ClientToScreen(
-        wxPoint(0, m_btn_slice_history->GetSize().y + FromDIP(4)));
-    panel->Position(pos, wxSize(0, 0));
-    panel->Popup();
+    if (panel->IsShown()) {
+        panel->Dismiss();
+        m_btn_slice_history->Show(true);
+        m_btn_slice_history->GetParent()->Layout();
+    } else {
+        m_btn_slice_history->Show(false);
+        m_btn_slice_history->GetParent()->Layout();
+        panel->popup_below(m_btn_slice_history);
+    }
 }
 
 
