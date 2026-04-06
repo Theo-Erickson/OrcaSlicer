@@ -13,6 +13,9 @@
 #include "format.hpp"
 #include <slic3r/GUI/Widgets/Label.hpp>
 
+#include "FavoritesManager.hpp"
+#include "StarButton.hpp"
+
 namespace Slic3r { namespace GUI {
 
  // BBS: modify param ui style
@@ -113,6 +116,100 @@ void OG_CustomCtrl::init_ctrl_lines()
         }
         else
             assert(false);
+
+        // ★ Create a StarButton for the first option in this line.
+        if (!option_set.empty()) {
+            const std::string& opt_id = option_set.front().opt_id;
+            if (m_star_buttons.find(opt_id) == m_star_buttons.end()) {
+                auto* star = new StarButton(this, opt_id);
+                
+                m_star_buttons[opt_id] = star;
+
+                // When mouse leaves the star, check if it also left
+                // the parent control — if so hide non-favorited stars.
+                star->Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent& e) {
+                    wxPoint screen_pos = wxGetMousePosition();
+                    if (!GetScreenRect().Contains(screen_pos)) {
+                        m_last_hovered_opt_id = "";
+                        for (auto& [key, s] : m_star_buttons) {
+                            if (!s->is_favorited())
+                                s->Hide();
+                        }
+                    }
+                    e.Skip();
+                });
+            }
+        }
+    }
+
+    if (!m_hover_binds_registered) {
+        m_hover_binds_registered = true;
+
+        Bind(wxEVT_MOTION, [this](wxMouseEvent& evt) {
+            const wxCoord mouse_y = evt.GetY();
+
+            wxCoord row_top = 0;
+            std::string hovered_opt_id;
+
+            for (const CtrlLine& ctrl_line : ctrl_lines) {
+                if (ctrl_line.height == 0)
+                    continue;
+
+                wxCoord row_bottom = row_top + ctrl_line.height;
+
+                if (mouse_y >= row_top && mouse_y < row_bottom) {
+                    const std::vector<Option>& options = ctrl_line.og_line.get_options();
+                    if (!options.empty())
+                        hovered_opt_id = options.front().opt_id;
+
+                    // Position the star to the left of the label text.
+                    // The label starts at get_title_width() * m_em_unit + 4
+                    // so we place the star just before that.
+                    if (m_star_buttons.count(hovered_opt_id)) {
+                        StarButton* star = m_star_buttons[hovered_opt_id];
+                        int star_y = row_top + (ctrl_line.height - StarButton::STAR_HEIGHT) / 2;
+                        int label_start_x = get_title_width() * m_em_unit + 4;
+                        int star_x = label_start_x - StarButton::STAR_WIDTH - m_h_gap;
+                        if (star_x < 2) star_x = 2;
+                        star->SetPosition(wxPoint(star_x, star_y));
+                    }
+                    break;
+                }
+
+                row_top = row_bottom;
+            }
+
+            // Only update star visibility when hovered row changes
+            // to avoid flickering on every mouse move pixel.
+            if (hovered_opt_id != m_last_hovered_opt_id) {
+                m_last_hovered_opt_id = hovered_opt_id;
+                for (auto& [key, star] : m_star_buttons) {
+                    if (!star->is_favorited())
+                        star->Show(key == hovered_opt_id);
+                }
+            }
+
+            evt.Skip();
+        });
+
+        Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent& evt) {
+            // Don't hide stars if mouse moved onto one of the star buttons —
+            // entering a child window fires LEAVE_WINDOW on the parent.
+            wxPoint screen_pos = wxGetMousePosition();
+            for (auto& [key, star] : m_star_buttons) {
+                if (star->GetScreenRect().Contains(screen_pos)) {
+                    evt.Skip();
+                    return;
+                }
+            }
+            // Mouse genuinely left the control — hide all non-favorited stars.
+            m_last_hovered_opt_id = "";
+            for (auto& [key, star] : m_star_buttons) {
+                if (!star->is_favorited())
+                    star->Hide();
+            }
+            evt.Skip();
+        });
     }
 }
 

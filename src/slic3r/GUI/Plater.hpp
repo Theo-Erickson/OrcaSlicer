@@ -64,6 +64,7 @@ namespace UndoRedo {
 }
 
 namespace GUI {
+class FavoritesPanel;
 class SyncAmsInfoDialog;
 class MainFrame;
 class ConfigOptionsGroup;
@@ -212,6 +213,9 @@ public:
     wxPanel*                scrolled_panel();
     wxPanel* print_panel();
     wxPanel* filament_panel();
+    
+    wxButton*       m_btn_tab_favorites { nullptr };
+    FavoritesPanel* m_favorites_panel   { nullptr };
 
     ConfigOptionsGroup*     og_freq_chng_params(const bool is_fff);
     wxButton*               get_wiping_dialog_button();
