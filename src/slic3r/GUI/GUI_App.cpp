@@ -112,6 +112,7 @@
 #include "Widgets/ProgressDialog.hpp"
 
 //BBS: DailyTip and UserGuide Dialog
+#include "FavoritesManager.hpp"
 #include "WebDownPluginDlg.hpp"
 #include "WebGuideDialog.hpp"
 #include "ReleaseNote.hpp"
@@ -2231,6 +2232,8 @@ void GUI_App::init_networking_callbacks()
 
 GUI_App::~GUI_App()
 {
+    FavoritesManager::get().save_to_config();
+    
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__<< boost::format(": enter");
     if (app_config != nullptr) {
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__<< boost::format(": destroy app_config");
@@ -2375,6 +2378,8 @@ void GUI_App::init_app_config()
 	// Windows : "C:\Users\username\AppData\Roaming\Slic3r" or "C:\Documents and Settings\username\Application Data\Slic3r"
 	// Mac : "~/Library/Application Support/Slic3r"
 
+    FavoritesManager::get().load_from_config();
+    
     if (data_dir().empty()) {
         // Orca: check if data_dir folder exists in application folder use it if it exists
         // Note:wxStandardPaths::Get().GetExecutablePath() return following paths
@@ -2589,6 +2594,8 @@ bool GUI_App::OnInit()
 
 int GUI_App::OnExit()
 {
+    FavoritesManager::get().save_to_config();
+    
     stop_sync_user_preset();
 
     if (m_device_manager) {

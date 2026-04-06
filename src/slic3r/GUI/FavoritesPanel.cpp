@@ -222,21 +222,33 @@ void FavoritesPanel::rebuild()
             // Click the value to jump to the setting in its original tab
             const std::string opt_key_copy = fav.opt_key;
             const std::string section_copy = fav.section_label;
-            val_lbl->Bind(wxEVT_LEFT_UP, [this, opt_key_copy, section_copy](wxMouseEvent& e) {
-                // Dismiss favorites panel
-                m_owner_tab->show_favorites(); // toggles it off since it's currently on
-                // Navigate to setting
+
+            // ★ Click anywhere on the row to jump to the setting
+            row_panel->Bind(wxEVT_LEFT_UP, [this, opt_key_copy, section_copy](wxMouseEvent& e) {
+                m_owner_tab->show_favorites(); // close favorites panel
                 if (auto* tab = wxGetApp().get_tab(Preset::TYPE_PRINT)) {
-                    wxGetApp().mainframe->select_tab((wxPanel*)tab->GetParent());
+                    wxGetApp().mainframe->select_tab((wxPanel*)tab->parent());
                     tab->activate_option(opt_key_copy, wxString::FromUTF8(
-                        section_copy.substr(0, section_copy.find(" *** "))));
+                        section_copy.substr(0, section_copy.find(" \xe2\x80\xba "))));
                 }
+                e.Skip();
+            });
+
+            // Also bind on the child labels so clicks on text bubble up correctly
+            name_lbl->Bind(wxEVT_LEFT_UP, [row_panel](wxMouseEvent& e) {
+                wxCommandEvent evt(wxEVT_LEFT_UP, row_panel->GetId());
+                row_panel->GetEventHandler()->ProcessEvent(evt);
+                e.Skip();
+            });
+            val_lbl->Bind(wxEVT_LEFT_UP, [row_panel](wxMouseEvent& e) {
+                wxCommandEvent evt(wxEVT_LEFT_UP, row_panel->GetId());
+                row_panel->GetEventHandler()->ProcessEvent(evt);
                 e.Skip();
             });
 
             star_lbl->Bind(wxEVT_LEFT_UP, [opt_key_copy](wxMouseEvent& e) {
                 FavoritesManager::get().toggle(opt_key_copy);
-                e.Skip();
+                // we purposely DONT skip, so that we don't trigger the on click of the row twice
             });
             
             row_panel->SetSizer(row_sizer);
