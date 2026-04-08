@@ -957,8 +957,9 @@ void Tab::show_favorites()
         // Toggle back to normal view
         m_favorites_panel->Hide();
         m_page_view->Show();
-        // Restore the tab button to normal appearance
-        m_btn_tab_favorites->SetForegroundColour(wxNullColour);
+        // Restore hollow star icon
+        m_btn_tab_favorites->SetBitmap_(ScalableBitmap(this, "favorites"));
+        m_btn_tab_favorites->Refresh();
     } else {
         // Switch to favorites view
         m_page_view->Hide();
@@ -966,8 +967,9 @@ void Tab::show_favorites()
         m_favorites_panel->SetPosition(m_page_view->GetPosition());
         m_favorites_panel->refresh();
         m_favorites_panel->Show();
-        // Highlight the FAV button to show it's active
-        m_btn_tab_favorites->SetForegroundColour(wxColour(249, 226, 175));
+        // Swap to filled gold star icon
+        m_btn_tab_favorites->SetBitmap_(ScalableBitmap(this, "favorites_active"));
+        m_btn_tab_favorites->Refresh();
     }
 
     m_parent->Layout();

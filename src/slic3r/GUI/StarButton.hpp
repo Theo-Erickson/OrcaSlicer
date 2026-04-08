@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // StarButton.hpp
 // A lightweight wxControl that shows an empty or filled star.

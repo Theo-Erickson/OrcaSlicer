@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // FavoritesPanel.hpp
 // The scrollable panel that fills the sidebar when the ★ tab is selected.

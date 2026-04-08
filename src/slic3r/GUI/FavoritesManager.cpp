@@ -1,4 +1,4 @@
-﻿#include "FavoritesManager.hpp"
+#include "FavoritesManager.hpp"
 #include "GUI_App.hpp"        // wxGetApp()
 #include "libslic3r/AppConfig.hpp"      // AppConfig::set / get
 

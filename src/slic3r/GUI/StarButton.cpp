@@ -1,4 +1,4 @@
-﻿#include "StarButton.hpp"
+#include "StarButton.hpp"
 #include "FavoritesManager.hpp"
 
 #include <wx/dcbuffer.h>

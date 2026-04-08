@@ -1,4 +1,4 @@
-﻿#include "FavoritesPanel.hpp"
+#include "FavoritesPanel.hpp"
 #include "FavoritesManager.hpp"
 #include "StarButton.hpp"
 #include "GUI_App.hpp"        // wxGetApp() — for plater/tabs access when navigating
