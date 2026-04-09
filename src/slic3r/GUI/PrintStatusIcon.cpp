@@ -44,14 +44,20 @@ void PrintStatusIcon::Build()
     row->Add(m_anim, 0, wxALIGN_CENTER_VERTICAL);
 
     // ── Debug label ───────────────────────────────────────────────────────
-    row->AddSpacer(8);
-    m_text = new wxStaticText(this, wxID_ANY, "OFFLINE",
-                              wxDefaultPosition, wxDefaultSize,
-                              wxST_NO_AUTORESIZE);
-    wxFont font = m_text->GetFont();
-    font.SetPointSize(12);
-    font.SetWeight(wxFONTWEIGHT_MEDIUM);
-    m_text->SetFont(font);
+    row->AddSpacer(4);
+    m_text = new wxStaticText(this, wxID_ANY, "FILAMENT SWAP",  // longest string sets initial width
+                              wxDefaultPosition, wxDefaultSize);
+    wxFont f = m_text->GetFont();
+    f.SetPointSize(8);
+    f.SetWeight(wxFONTWEIGHT_BOLD);
+    m_text->SetFont(f);
+
+    // Lock the width to the longest label so it never shrinks or clips.
+    // GetBestSize() measures "FILAMENT SWAP" at the font set above.
+    // If you want to have the label resize dynamically according to string length, comment out the two lines below
+    wxSize best = m_text->GetBestSize();
+    m_text->SetMinSize(wxSize(best.GetWidth() + 4, best.GetHeight()));
+
     m_text->Bind(wxEVT_LEFT_UP, &PrintStatusIcon::OnClick, this);
     row->Add(m_text, 0, wxALIGN_CENTER_VERTICAL);
 
@@ -176,8 +182,8 @@ wxString PrintStatusIcon::Label(PrintState s)
     case PrintState::PREPARE:         return "PREPARE";
     case PrintState::RUNNING:         return "PRINTING";
     case PrintState::PAUSE:           return "PAUSED";
-    case PrintState::FILAMENT_CHANGE: return "FILAMENT";
-    case PrintState::CALIBRATING:     return "CALIB";
+    case PrintState::FILAMENT_CHANGE: return "FILAMENT SWAP";
+    case PrintState::CALIBRATING:     return "CALIBRATING";
     case PrintState::FINISH:          return "DONE!";
     case PrintState::FAILED:          return "FAILED";
     case PrintState::OFFLINE:         return "OFFLINE";

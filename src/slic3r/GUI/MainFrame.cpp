@@ -67,8 +67,6 @@
 
 #include "DeviceCore/DevManager.h"
 
-#include "HistoryPanel.hpp"
-
 #include "BackgroundSlicingProcess.hpp"   // SlicingProcessCompletedEvent, EVT_PROCESS_COMPLETED
 #include "Jobs/PrintJob.hpp"              // EVT_PRINT_JOB_PROGRESS
 #include "libslic3r/PrintBase.hpp"        // SlicingStatus, DEFAULT_WAIT_IF_CANCELED_FLAGS
