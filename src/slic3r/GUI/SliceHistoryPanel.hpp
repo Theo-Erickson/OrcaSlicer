@@ -35,6 +35,7 @@ private:
     void build_tabs();
     void on_restore(wxCommandEvent& evt);
     void on_clear_history(wxCommandEvent&);
+    void on_delete_entry(wxCommandEvent& evt);
     
     void OnDismiss() override;
     wxWindow* m_anchor_btn = nullptr;

@@ -9804,14 +9804,15 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
                 ? res->print_statistics.support_volumes_per_extruder.at(ext_id) : 0.0;
             double flush_vol = res->print_statistics.flush_per_filament.count(ext_id)
                 ? res->print_statistics.flush_per_filament.at(ext_id) : 0.0;
-            double wipe_vol = res->print_statistics.wipe_tower_volumes_per_extruder.count(ext_id)
+            double tower_vol = res->print_statistics.wipe_tower_volumes_per_extruder.count(ext_id)
                 ? res->print_statistics.wipe_tower_volumes_per_extruder.at(ext_id) : 0.0;
-            double other_vol = std::max(0.0, wipe_vol - flush_vol);
+            double other_vol = std::max(0.0, tower_vol - flush_vol);
 
             eu.model_mm   = vol_to_mm(model_vol);   eu.model_g   = vol_to_g(model_vol);
             eu.support_mm = vol_to_mm(support_vol); eu.support_g = vol_to_g(support_vol);
             eu.flush_mm   = vol_to_mm(flush_vol);   eu.flush_g   = vol_to_g(flush_vol);
             eu.other_mm   = vol_to_mm(other_vol);   eu.other_g   = vol_to_g(other_vol);
+            eu.tower_mm   = vol_to_mm(tower_vol);   eu.tower_g   = vol_to_g(tower_vol);
             eu.total_mm   = eu.model_mm + eu.support_mm + eu.flush_mm + eu.other_mm;
             eu.total_g    = eu.model_g  + eu.support_g  + eu.flush_g  + eu.other_g;
 

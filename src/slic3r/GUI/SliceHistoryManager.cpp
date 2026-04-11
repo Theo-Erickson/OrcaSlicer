@@ -41,6 +41,7 @@ void SliceHistoryManager::push_snapshot(
         snap.total_model_g   += eu.model_g;
         snap.total_support_g += eu.support_g;
         snap.total_flush_g   += eu.flush_g;
+        snap.total_tower_g   += eu.tower_g;  
         snap.total_other_g   += eu.other_g;
     }
 
@@ -64,6 +65,12 @@ std::vector<ConfigDiff> SliceHistoryManager::diff(
             result.push_back({ key, snap_val, curr_val });
     }
     return result;
+}
+
+void SliceHistoryManager::remove(size_t idx)
+{
+    if (idx >= m_snapshots.size()) return;
+    m_snapshots.erase(m_snapshots.begin() + idx);
 }
 
 void SliceHistoryManager::clear()

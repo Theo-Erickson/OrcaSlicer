@@ -181,6 +181,7 @@ void SliceHistoryPanel::build_tabs()
             hdr_sizer->Add(make_hdr(_L("Model"),    60), 0);
             hdr_sizer->Add(make_hdr(_L("Support"),  60), 0);
             hdr_sizer->Add(make_hdr(_L("Flush"),    55), 0);
+            hdr_sizer->Add(make_hdr(_L("Tower"),    50), 0);   
             hdr_sizer->Add(make_hdr(_L("Other"),    55), 0);
             hdr_sizer->Add(make_hdr(_L("Total"),    60), 0);
             vs->Add(hdr_sizer, 0, wxLEFT | wxRIGHT, 8);
@@ -212,6 +213,7 @@ void SliceHistoryPanel::build_tabs()
                 row->Add(make_cell(wxString::Format("%.1fg", eu.model_g),   60), 0);
                 row->Add(make_cell(wxString::Format("%.1fg", eu.support_g), 60), 0);
                 row->Add(make_cell(wxString::Format("%.1fg", eu.flush_g),   55), 0);
+                row->Add(make_cell(wxString::Format("%.1fg", eu.tower_g),   50), 0);   
                 row->Add(make_cell(wxString::Format("%.1fg", eu.other_g),   55), 0);
                 row->Add(make_cell(wxString::Format("%.1fg", eu.total_g),   60), 0);
 
@@ -221,9 +223,10 @@ void SliceHistoryPanel::build_tabs()
             // Cross-extruder totals row
             vs->Add(new wxStaticLine(pg), 0, wxEXPAND | wxLEFT | wxRIGHT, 6);
             wxString tot_str = wxString::Format(
-                _L("Totals  —  Model: %.1fg   Support: %.1fg   Flush: %.1fg   Other: %.1fg"),
+            _L("Totals  --  Model: %.1fg   Support: %.1fg   Flush: %.1fg   Tower: %.1fg   Other: %.1fg"),
                 snap.total_model_g, snap.total_support_g,
-                snap.total_flush_g, snap.total_other_g);
+                snap.total_flush_g, snap.total_tower_g,
+                snap.total_other_g);
             auto* tot_lbl = new wxStaticText(pg, wxID_ANY, tot_str);
             tot_lbl->SetForegroundColour(wxColour(220, 200, 130));
             vs->Add(tot_lbl, 0, wxLEFT | wxTOP | wxBOTTOM, 8);
@@ -247,9 +250,16 @@ void SliceHistoryPanel::build_tabs()
         // Store snapshot index via SetId (offset by 1000 to avoid wxID clashes)
         restore_btn->SetId(1000 + i);
         restore_btn->Bind(wxEVT_BUTTON, &SliceHistoryPanel::on_restore, this);
-        
+
+        auto* delete_btn = new wxButton(pg, wxID_ANY, _L("Delete"));
+        delete_btn->SetBackgroundColour(wxColour(80, 35, 35));
+        delete_btn->SetForegroundColour(wxColour(220, 100, 100));
+        delete_btn->SetId(2000 + i);  // offset 2000 to avoid clashing with restore IDs
+        delete_btn->Bind(wxEVT_BUTTON, &SliceHistoryPanel::on_delete_entry, this);
+
         diff_row->Add(diff_lbl, 1, wxALIGN_CENTER_VERTICAL);
         diff_row->Add(restore_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 12);
+        diff_row->Add(delete_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 6);
         vs->Add(diff_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
         
 
@@ -326,6 +336,27 @@ void SliceHistoryPanel::on_clear_history(wxCommandEvent&)
 
     m_mgr->clear();
     refresh(nullptr);  // or pass current config if you have it
+}
+
+void SliceHistoryPanel::on_delete_entry(wxCommandEvent& evt)
+{
+    int snap_idx = evt.GetId() - 2000;
+    if (snap_idx < 0 || snap_idx >= (int)m_mgr->count()) return;
+
+    const std::string& label = m_mgr->get((size_t)snap_idx).label;
+
+    wxMessageDialog dlg(
+        this,
+        wxString::Format(_L("Delete snapshot \"%s\"?"),
+            wxString::FromUTF8(label)),
+        _L("Delete Snapshot"),
+        wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION);
+
+    if (dlg.ShowModal() != wxID_YES)
+        return;
+
+    m_mgr->remove((size_t)snap_idx);
+    refresh(m_last_config);
 }
 
 void SliceHistoryPanel::OnDismiss()

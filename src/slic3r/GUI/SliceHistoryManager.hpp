@@ -18,6 +18,8 @@ struct ExtruderFilamentUsage {
     double        support_g   = 0.0;
     double        flush_mm    = 0.0;
     double        flush_g     = 0.0;
+    double        tower_mm    = 0.0;   
+    double        tower_g     = 0.0;   
     double        other_mm    = 0.0;  // wipe tower, etc.
     double        other_g     = 0.0;
     double        total_mm    = 0.0;
@@ -42,6 +44,7 @@ struct SliceSnapshot {
     double  total_model_g   = 0.0;
     double  total_support_g = 0.0;
     double  total_flush_g   = 0.0;
+    double  total_tower_g   = 0.0;
     double  total_other_g   = 0.0;
 };
 
@@ -69,7 +72,7 @@ public:
 
     std::vector<ConfigDiff> diff(size_t snapshot_idx,
                                  const DynamicPrintConfig& current_config) const;
-    
+    void remove(size_t idx); 
     void clear();
 
 private:
