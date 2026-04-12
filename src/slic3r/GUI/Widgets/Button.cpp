@@ -95,6 +95,15 @@ void Button::SetIcon(const wxString& icon)
     }
 }
 
+void Button::SetIcon(const wxBitmap& bmp)
+{
+    if (bmp.IsOk()) 
+    {
+        active_icon.bmp() = bmp;
+        Refresh();
+    }
+}
+
 void Button::SetInactiveIcon(const wxString &icon)
 {
     if (!icon.IsEmpty()) {
@@ -104,6 +113,14 @@ void Button::SetInactiveIcon(const wxString &icon)
         this->inactive_icon = ScalableBitmap();
     }
     Refresh();
+}
+
+void Button::SetInactiveIcon(const wxBitmap& bmp)
+{
+    if (bmp.IsOk()) 
+    {
+        inactive_icon.bmp() = bmp;    
+    }
 }
 
 void Button::SetMinSize(const wxSize& size)

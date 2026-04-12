@@ -167,7 +167,9 @@ public:
                     const bool resize = false,
                     const bool bitmap2 = false,
                     const std::vector<std::string>& new_color = std::vector<std::string>());// BBS: support resize by fill border
-
+    explicit ScalableBitmap(const wxBitmap& bmp)
+        : m_bmp(bmp), m_icon_name(""), m_px_cnt(bmp.GetHeight())
+    {}
     ~ScalableBitmap() {}
 
     wxSize  GetBmpSize() const;

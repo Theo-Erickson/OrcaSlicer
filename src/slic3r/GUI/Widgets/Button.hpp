@@ -60,8 +60,10 @@ public:
     bool SetFont(const wxFont& font) override;
 
     void SetIcon(const wxString& icon);
-
+    void SetIcon(const wxBitmap& bmp);
+    
     void SetInactiveIcon(const wxString& icon);
+    void SetInactiveIcon(const wxBitmap& bmp);
 
     void SetMinSize(const wxSize& size) override;
     void SetMaxSize(const wxSize& size) override;
