@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <style>
+    @keyframes pulse-scale {
+      0%,100% { transform: scale(1); }
+      50%      { transform: scale(1.1); }
+    }
+    @keyframes ring-expand {
+      0%   { r: 8;  opacity: 0.7; }
+      100% { r: 30; opacity: 0; }
+    }
+    .star-burst   { animation: pulse-scale 2s ease-in-out infinite; transform-origin: 36px 36px; }
+    .finish-ring  { animation: ring-expand 2s ease-out infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .star-burst, .finish-ring { animation: none; }
+    }
+  </style>
+  <!-- Starburst celebration -->
+  <g class="star-burst">
+    <polygon
+      points="36,12 39,28 54,24 44,36 58,44 42,44 44,60 36,48 28,60 30,44 14,44 28,36 18,24 33,28"
+      fill="#9FE1CB" stroke="#1D9E75" stroke-width="0.5" opacity="0.7"/>
+  </g>
+  <!-- Completed part layers on bed -->
+  <rect x="22" y="44" width="28" height="8" rx="2" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.8"/>
+  <rect x="26" y="36" width="20" height="8" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.8"/>
+  <rect x="29" y="30" width="14" height="6" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.8"/>
+  <!-- Axolotl cheering on top -->
+  <circle cx="36" cy="24" r="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+  <circle cx="34" cy="23" r="1.2" fill="#085041"/>
+  <circle cx="38" cy="23" r="1.2" fill="#085041"/>
+  <!-- Big smile -->
+  <path d="M33 26 Q36 30 39 26"
+    fill="none" stroke="#085041" stroke-width="1" stroke-linecap="round"/>
+  <!-- Arms raised -->
+  <line x1="30" y1="24" x2="24" y2="18" stroke="#5DCAA5" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="42" y1="24" x2="48" y2="18" stroke="#5DCAA5" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Expanding ring -->
+  <circle class="finish-ring"
+    cx="36" cy="36" r="8" fill="none" stroke="#5DCAA5" stroke-width="1"/>
+</svg>

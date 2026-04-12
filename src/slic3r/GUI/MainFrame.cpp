@@ -50,6 +50,7 @@
 #include <fstream>
 #include <string_view>
 
+#include "BackgroundSlicingProcess.hpp"
 #include "GUI_App.hpp"
 #include "UnsavedChangesDialog.hpp"
 #include "MsgDialog.hpp"
@@ -65,6 +66,10 @@
 #include "FilamentMapDialog.hpp"
 
 #include "DeviceCore/DevManager.h"
+
+#include "BackgroundSlicingProcess.hpp"   // SlicingProcessCompletedEvent, EVT_PROCESS_COMPLETED
+#include "Jobs/PrintJob.hpp"              // EVT_PRINT_JOB_PROGRESS
+#include "libslic3r/PrintBase.hpp"        // SlicingStatus, DEFAULT_WAIT_IF_CANCELED_FLAGS
 
 #ifdef _WIN32
 #include <dbt.h>
@@ -1136,6 +1141,13 @@ void MainFrame::shutdown()
 //             m_plater->print = undef;
 //         Slic3r::GUI::deregister_on_request_update_callback();
 
+    // Stop the poller before the icon widget is destroyed.
+    if (m_status_poller) {
+        m_status_poller->Stop();
+        delete m_status_poller;
+        m_status_poller = nullptr;
+    }
+
     // set to null tabs and a plater
     // to avoid any manipulations with them from App->wxEVT_IDLE after of the mainframe closing
     wxGetApp().tabs_list.clear();
@@ -1197,8 +1209,9 @@ void MainFrame::init_tabpanel() {
     // wxNB_NOPAGETHEME: Disable Windows Vista theme for the Notebook background. The theme performance is terrible on
     // Windows 10 with multiple high resolution displays connected.
     // BBS
-    wxBoxSizer *side_tools = create_side_tools();
-    m_tabpanel = new Notebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, side_tools,
+    m_side_tools = create_side_tools();
+
+    m_tabpanel = new Notebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, m_side_tools,
                               wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
     m_tabpanel->SetBackgroundColour(*wxWHITE);
 
@@ -1282,6 +1295,24 @@ void MainFrame::init_tabpanel() {
     m_plater = new Plater(this, this);
     m_plater->SetBackgroundColour(*wxWHITE);
     m_plater->Hide();
+
+    // EVT_SLICING_UPDATE is declared in Plater.hpp (already included).
+    // SlicingStatusEvent is declared in libslic3r/PrintBase.hpp (already
+    // included transitively via Plater.hpp -> PrintBase.hpp).
+    // We use percent to detect both in-progress and completion.
+    m_plater->Bind(EVT_SLICING_UPDATE, [this](SlicingStatusEvent& evt) {
+        if (evt.status.percent < 100) {
+            m_print_status_icon->SetState(PrintState::SLICING);
+            m_print_status_icon->SetStatusLabel(
+                wxString::Format(_L("Slicing \u2014 %d%%"), evt.status.percent));
+        } else {
+            m_print_status_icon->SetState(PrintState::SLICED);
+            m_print_status_icon->SetStatusLabel(_L("Sliced \u2014 ready to send"));
+        }
+    });
+
+    m_print_status_icon->SetState(PrintState::OFFLINE);
+
 
     wxGetApp().plater_ = m_plater;
 
@@ -1816,6 +1847,24 @@ wxBoxSizer* MainFrame::create_side_tools()
     sizer->Add(FromDIP(15), 0, 0, 0, 0);
     sizer->Add(print_panel);
     sizer->Add(FromDIP(19), 0, 0, 0, 0);
+
+    m_print_status_icon = new PrintStatusIcon(this, 32);
+    sizer->Add(m_print_status_icon);
+    //m_side_tools->Layout();
+
+    // When clicking on the print status icon, jump to the printer/monitor tab
+    m_print_status_icon->BindClickHandler([this]() {
+        select_tab(size_t(TabPosition::tpMonitor));
+    });
+
+    // default to Idle
+    m_print_status_icon->SetState(PrintState::IDLE);
+
+    // Start the polling loop.  The poller reads MachineObject state
+    // every 500ms (same cadence as StatusPanel) and calls SetState
+    // on the icon whenever print_status or stage_curr changes.
+    m_status_poller = new PrinterStatusPoller(m_print_status_icon);
+    m_status_poller->Start();
 
     sizer->Layout();
 
@@ -2439,6 +2488,12 @@ void MainFrame::on_dpi_changed(const wxRect& suggested_rect)
 
     this->Maximize(is_maximized);
 
+    if (m_print_status_icon) {
+        int new_size = FromDIP(28);
+        m_print_status_icon->SetMinSize(wxSize(new_size, new_size));
+        m_print_status_icon->SetMaxSize(wxSize(new_size, new_size));
+        m_tabpanel->Refresh();
+    }
     fit_tab_labels(); // ORCA
 }
 
