@@ -3761,7 +3761,37 @@ void GLCanvas3D::on_key(wxKeyEvent& evt)
             }
             else if (evt.GetEventType() == wxEVT_KEY_DOWN) {
                 m_tab_down = keyCode == WXK_TAB && !evt.HasAnyModifiers();
-                if (keyCode == WXK_SHIFT) {
+                
+                if (keyCode == WXK_SPACE)
+                {
+                    if (!m_selection.is_empty() && m_canvas_type != CanvasAssembleView) {
+                        // Check which transform gizmo is currently active
+                        int current = -1;
+                        const GLGizmosManager::EType cur = m_gizmos.get_current_type();
+                        if      (cur == GLGizmosManager::Move)   current = 0;
+                        else if (cur == GLGizmosManager::Rotate)  current = 1;
+                        else if (cur == GLGizmosManager::Scale)   current = 2;
+
+                        if (current != -1) {
+                            static const GLGizmosManager::EType cycle[] = {
+                                GLGizmosManager::Move,
+                                GLGizmosManager::Rotate,
+                                GLGizmosManager::Scale,
+                            };
+                            static const int cycle_len = 3;
+
+                            bool shift = evt.ShiftDown();
+                            int next = shift
+                                ? (current - 1 + cycle_len) % cycle_len
+                                : (current + 1) % cycle_len;
+
+                            m_gizmos.open_gizmo(cycle[next]);
+                            evt.StopPropagation();
+                            m_dirty = true;
+                        }
+                    }
+                }
+                else if (keyCode == WXK_SHIFT) {
                     translationProcessor.process(evt);
 
                     if (m_picking_enabled /*&& (m_gizmos.get_current_type() != GLGizmosManager::SlaSupports)*/)
