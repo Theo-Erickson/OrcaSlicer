@@ -118,6 +118,8 @@
 #include "PrivacyUpdateDialog.hpp"
 #include "ModelMall.hpp"
 #include "HintNotification.hpp"
+#include "KeybindRegistry.hpp"
+#include "KeybindConfig.hpp"
 
 #include "slic3r/Utils/NetworkAgentFactory.hpp"
 #include "slic3r/Utils/BBLNetworkPlugin.hpp"
@@ -2687,6 +2689,12 @@ std::string get_system_info()
 
 bool GUI_App::on_init_inner()
 {
+    // Must be in this order:
+    // 1. Register all defaults into the registry
+    KeybindRegistry::register_default_canvas_keybinds();
+    // 2. Overlay any user-saved remaps on top
+    KeybindConfig::get().load();
+    
     wxLog::SetActiveTarget(new wxBoostLog());
 #if BBL_RELEASE_TO_PUBLIC
     wxLog::SetLogLevel(wxLOG_Message);

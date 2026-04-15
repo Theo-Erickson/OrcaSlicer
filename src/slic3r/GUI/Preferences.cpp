@@ -18,6 +18,9 @@
 #include "slic3r/Utils/bambu_networking.hpp"
 #include "slic3r/Utils/NetworkAgent.hpp"
 #include "DownloadProgressDialog.hpp"
+#include "KeybindPrefsPanel.hpp"
+#include "KeyBindWidget.hpp"
+
 
 #ifdef __WINDOWS__
 #ifdef _MSW_DARK_MODE
@@ -1764,6 +1767,19 @@ void PreferencesDialog::create_items()
     g_sizer->AddSpacer(FromDIP(10));
     sizer_page->Add(g_sizer, 0, wxEXPAND);
 
+    
+    m_pref_tabs->AppendItem(_L("Keybinds"));
+    f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));
+    g_sizer = f_sizers.back();
+    g_sizer->AddGrowableCol(0, 1);
+
+    {
+        auto* keybind_panel = new KeybindPrefsPanel(m_parent);
+        g_sizer->Add(keybind_panel, 0, wxEXPAND | wxALL, FromDIP(4));
+    }
+
+    sizer_page->Add(g_sizer, 0, wxEXPAND);
+    
     /////////////////////////////////////
     //////////////////////////
 

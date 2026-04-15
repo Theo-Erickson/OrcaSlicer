@@ -301,6 +301,12 @@ set(SLIC3R_GUI_SOURCES
     GUI/KBShortcutsDialog.hpp
     GUI/KeyBindWidget.cpp
     GUI/KeyBindWidget.hpp
+    GUI/KeybindRegistry.cpp
+    GUI/KeybindRegistry.hpp
+    GUI/KeybindConfig.cpp
+    GUI/KeybindConfig.hpp
+    GUI/KeybindPrefsPanel.cpp
+    GUI/KeybindPrefsPanel.hpp
     GUI/LibVGCode/LibVGCodeWrapper.hpp
     GUI/LibVGCode/LibVGCodeWrapper.cpp
     GUI/LinuxDisplayBackend.cpp
