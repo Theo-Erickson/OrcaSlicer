@@ -212,7 +212,7 @@ void KeybindPrefsPanel::populate_rows(const wxString& filter)
         // Action label
         auto* action_lbl = new wxStaticText(row, wxID_ANY, entry->label);
         if (!entry->description.IsEmpty())
-            action_lbl->SetToolTip(entry->description);
+            action_lbl->SetToolTip( entry->is_locked? _L("This keybind is hardcoded and cannot be changed") : entry->description);
 
         hs->Add(action_lbl, 4, wxALIGN_CENTER_VERTICAL | wxLEFT, 6);
         
@@ -226,7 +226,7 @@ void KeybindPrefsPanel::populate_rows(const wxString& filter)
                 refresh_all_modified_states();
             });
         if (!entry->description.IsEmpty())
-            kbw->SetToolTip(entry->description);
+            kbw->SetToolTip( entry->is_locked ? _L("This keybind is hardcoded and cannot be changed") :entry->description);
         hs->Add(kbw, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 6);  // proportion 0, fixed width
         
         // Only show if modified
@@ -234,10 +234,17 @@ void KeybindPrefsPanel::populate_rows(const wxString& filter)
                                    entry->modifier != entry->default_modifier);
         
         auto* btn_undo = new wxButton(row, wxID_ANY, _L("Undo"),
-                               wxDefaultPosition, wxSize(FromDIP(50), -1),
-                               wxBU_EXACTFIT);
-        btn_undo->Enable(is_modified);  // greyed out when at default, never hidden
+                       wxDefaultPosition, wxSize(FromDIP(50), -1),
+                       wxBU_EXACTFIT);
 
+        // locked entries can never be reset (they have no meaningful "modified" state)
+        if (entry->is_locked) {
+            btn_undo->Enable(false);
+            btn_undo->SetToolTip(_L("This keybind cannot be changed"));
+        } else {
+            btn_undo->Enable(is_modified);
+        }
+        
         // Style it to look inactive when not modified
         if (!is_modified)
             btn_undo->SetForegroundColour(
@@ -268,6 +275,8 @@ void KeybindPrefsPanel::refresh_all_modified_states()
     for (auto& row : m_rows) {
         const KeybindEntry* e = reg.find_action(row.action_id);
         if (!e || !row.widget) continue;
+
+        if (e->is_locked) continue;   // locked rows never change state
 
         bool modified = (e->keycode  != e->default_keycode ||
                          e->modifier != e->default_modifier);

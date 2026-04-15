@@ -24,15 +24,20 @@ inline bool operator&(KeybindModifier a, KeybindModifier b) {
 
 struct KeybindEntry {
     std::string     action_id;
+    // User accessible label
     wxString        label;
+    // Used for UI categorization
     wxString        category;
-    wxString         description;
+    // on hover tooltip
+    wxString        description;
     // Current (possibly remapped) binding
     int             keycode         { 0 };
     KeybindModifier modifier        { KeybindModifier::None };
-    // Original default — never changes after registration
+    // Original default: never changes after registration
     int             default_keycode { 0 };
     KeybindModifier default_modifier{ KeybindModifier::None };
+    // whether a given keybind should allow re-binding. If true, the action is likely hardcoded
+    bool            is_locked       { false };
 };
 
 struct KeybindKey {
@@ -88,7 +93,8 @@ public:
                           const std::string& action_id,
                           const wxString& label,
                           const wxString& category = wxString("General"),
-                          const wxString& description = wxString(""));
+                          const wxString& description = wxString(""),
+                          const bool isLocked = false);
 
     static void register_default_canvas_keybinds();
     

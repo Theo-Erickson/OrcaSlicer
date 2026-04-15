@@ -45,6 +45,7 @@ private:
     std::string m_action_id;
     bool        m_is_modified { false };  // true if differs from default
     KeybindModifier         m_pending_modifier;
+    bool            m_locked        { false }; // determines whether widget can be rebound
 };
 
 }} // namespace Slic3r::GUI

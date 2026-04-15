@@ -55,12 +55,25 @@ KeyBindWidget::KeyBindWidget(wxWindow* parent, const std::string& action_id,
 {
     // Check if already modified from default at construction time
     const KeybindEntry* e = KeybindRegistry::get().find_action(action_id);
-    if (e)
+    if (e) {
         m_is_modified = (e->keycode != e->default_keycode ||
                          e->modifier != e->default_modifier);
+    }
+    
+    // Pass along the locked state from the entry into the widget member
+    m_locked = e->is_locked;
 
+    // Button that you click on to start capturing the keybind
     m_btn = new wxButton(this, wxID_ANY, keycode_to_label(m_keycode),
                          wxDefaultPosition, wxSize(FromDIP(90), -1));
+
+    // show a lock icon and disable the button for locked entries
+    if (m_locked) {
+        m_btn->SetToolTip(_L("This keybind is hardcoded and cannot be changed"));
+        m_btn->Enable(false);
+        // Optionally prepend a lock glyph — works on all platforms without image loading:
+        m_btn->SetLabel(wxString::FromUTF8("\xf0\x9f\x94\x92 ") + keycode_to_label(m_keycode));
+    }
 
     m_conflict_label = new wxStaticText(this, wxID_ANY, wxEmptyString);
     m_conflict_label->SetForegroundColour(*wxRED);
@@ -74,7 +87,8 @@ KeyBindWidget::KeyBindWidget(wxWindow* parent, const std::string& action_id,
     update_modified_appearance();
 
     m_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        enter_capture_mode();
+        if (!m_locked)          
+            enter_capture_mode();
     });
 
     Bind(wxEVT_CHAR_HOOK, [this](wxKeyEvent& evt) {
@@ -145,6 +159,9 @@ void KeyBindWidget::set_keycode(int keycode)
 
 void KeyBindWidget::enter_capture_mode()
 {
+    // early exit if the widget is locked
+    if (m_locked) return;
+    
     m_capturing = true;
     m_conflict_label->Hide();
     m_has_conflict = false;
