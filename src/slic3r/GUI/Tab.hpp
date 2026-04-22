@@ -53,6 +53,7 @@ namespace GUI {
 
 class TabPresetComboBox;
 class OG_CustomCtrl;
+class FavoritesPanel;
 
 // Single Tab page containing a{ vsizer } of{ optgroups }
 // package Slic3r::GUI::Tab::Page;
@@ -148,10 +149,14 @@ protected:
 	wxGridSizer* m_top_right_sizer;
 	wxBoxSizer* m_select_sizer;
 	wxBoxSizer* m_tree_sizer;
+    
+    FavoritesPanel*     m_favorites_panel   { nullptr };
 
 	ScalableButton*		m_btn_compare_preset;
 	ScalableButton*		m_btn_save_preset;
 	ScalableButton*		m_btn_delete_preset;
+    ScalableButton*     m_btn_tab_favorites;
+
 	//ScalableButton*		m_btn_edit_ph_printer {nullptr};
 	//ScalableButton*		m_btn_hide_incompatible_presets;
 	//wxBoxSizer*			m_hsizer;
@@ -426,6 +431,8 @@ public:
 
     void        update_extruder_variants(int extruder_id = -1);
     void        switch_excluder(int extruder_id = -1);
+    
+    void        show_favorites();
 
 protected:
 	void			create_line_with_widget(ConfigOptionsGroup* optgroup, const std::string& opt_key, const std::string& path, widget_t widget);

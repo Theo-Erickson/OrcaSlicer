@@ -115,6 +115,10 @@ set(SLIC3R_GUI_SOURCES
     GUI/ExtraRenderers.hpp
     GUI/ExtrusionCalibration.cpp
     GUI/ExtrusionCalibration.hpp
+    GUI/FavoritesManager.cpp
+    GUI/FavoritesManager.hpp
+    GUI/FavoritesPanel.cpp
+    GUI/FavoritesPanel.hpp
     GUI/Field.cpp
     GUI/Field.hpp
     GUI/FileArchiveDialog.cpp
@@ -122,6 +126,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/format.hpp
     GUI/GCodeViewer.cpp
     GUI/GCodeViewer.hpp
+    GUI/StarButton.hpp
+    GUI/StarButton.cpp
     GUI/Gizmos/GizmoObjectManipulation.cpp
     GUI/Gizmos/GizmoObjectManipulation.hpp
     GUI/Gizmos/GLGizmoAssembly.cpp

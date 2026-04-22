@@ -21,6 +21,7 @@
 #endif
 
 namespace Slic3r { namespace GUI {
+class StarButton;
 
 //  Static text shown among the options.
 class OG_CustomCtrl :public wxPanel
@@ -112,6 +113,9 @@ public:
 
     OptionsGroup*  opt_group;
 
+    std::map<std::string, StarButton*> m_star_buttons;
+    bool m_hover_binds_registered { false };
+    std::string m_last_hovered_opt_id;
 };
 
 }}
