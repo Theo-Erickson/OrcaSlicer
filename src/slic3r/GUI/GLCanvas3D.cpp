@@ -3778,11 +3778,49 @@ void GLCanvas3D::on_key(wxKeyEvent& evt)
             else if (evt.GetEventType() == wxEVT_KEY_DOWN) {
                 m_tab_down = keyCode == WXK_TAB && !evt.HasAnyModifiers();
                 if (keyCode == 'U') {
-                    if  (evt.AltDown()) 
+                    if  (evt.AltDown())
                     {
                         Slic3r::GUI::UnitSystem::Get().TogglePermanent();
                         m_dirty = true;
                     }
+                    translationProcessor.process(evt);
+
+                    if (m_picking_enabled /*&& (m_gizmos.get_current_type() != GLGizmosManager::SlaSupports)*/)
+                    {
+                        m_mouse.ignore_left_up = false;
+//                        set_cursor(Cross);
+                    }
+                }
+				else if (keyCode == WXK_SPACE)
+                {
+                    if (!m_selection.is_empty() && m_canvas_type != CanvasAssembleView) {
+                        // Check which transform gizmo is currently active
+                        int current = -1;
+                        const GLGizmosManager::EType cur = m_gizmos.get_current_type();
+                        if      (cur == GLGizmosManager::Move)   current = 0;
+                        else if (cur == GLGizmosManager::Rotate)  current = 1;
+                        else if (cur == GLGizmosManager::Scale)   current = 2;
+
+                        if (current != -1) {
+                            static const GLGizmosManager::EType cycle[] = {
+                                GLGizmosManager::Move,
+                                GLGizmosManager::Rotate,
+                                GLGizmosManager::Scale,
+                            };
+                            static const int cycle_len = 3;
+
+                            bool shift = evt.ShiftDown();
+                            int next = shift
+                                ? (current - 1 + cycle_len) % cycle_len
+                                : (current + 1) % cycle_len;
+
+                            m_gizmos.open_gizmo(cycle[next]);
+                            evt.StopPropagation();
+                            m_dirty = true;
+                        }
+                    }
+                }
+				else if (keyCode == WXK_SHIFT) {
                     translationProcessor.process(evt);
 
                     if (m_picking_enabled /*&& (m_gizmos.get_current_type() != GLGizmosManager::SlaSupports)*/)
@@ -4887,7 +4925,7 @@ void GLCanvas3D::do_move(const std::string& snapshot_type)
 
             // Move instances/volumes
             ModelObject* model_object = m_model->objects[object_idx];
-            if (model_object == nullptr) 
+            if (model_object == nullptr)
                 continue;
 
             if (selection_mode == Selection::Instance) {
@@ -4910,7 +4948,7 @@ void GLCanvas3D::do_move(const std::string& snapshot_type)
 
             object_moved = true;
             model_object->invalidate_bounding_box();
-            
+
         }
         else if (object_idx >= 1000 && object_idx < 1000 + n_plates) {
             // Move a wipe tower proxy.
@@ -4925,7 +4963,7 @@ void GLCanvas3D::do_move(const std::string& snapshot_type)
     for (const std::pair<int, int>& i : done) {
         ModelObject* mo = m_model->objects[i.first];
         ModelInstance* mi  = mo->instances[i.second];
-            
+
         if (!mi->auto_drop) {
             continue;
         }
@@ -4941,7 +4979,7 @@ void GLCanvas3D::do_move(const std::string& snapshot_type)
         }
         wxGetApp().obj_list()->update_info_items(static_cast<size_t>(i.first));
     }
-    
+
     //BBS: nofity object list to update
     wxGetApp().plater()->sidebar().obj_list()->update_plate_values_for_items();
 
@@ -5153,7 +5191,7 @@ void GLCanvas3D::do_scale(const std::string& snapshot_type)
         }
         wxGetApp().obj_list()->update_info_items(static_cast<size_t>(i.first));
     }
-    
+
     //BBS: nofity object list to update
     wxGetApp().plater()->sidebar().obj_list()->update_plate_values_for_items();
     //BBS: notify object info update
@@ -5266,8 +5304,8 @@ void GLCanvas3D::do_mirror(const std::string& snapshot_type)
         //BBS: notify instance updates to part plater list
         PartPlateList &plate_list = wxGetApp().plater()->get_partplate_list();
         plate_list.notify_instance_update(i.first, i.second);
-    }    
-    
+    }
+
     //BBS: nofity object list to update
     wxGetApp().plater()->sidebar().obj_list()->update_plate_values_for_items();
 
