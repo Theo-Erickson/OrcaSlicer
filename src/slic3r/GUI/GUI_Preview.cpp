@@ -290,7 +290,13 @@ bool Preview::init(wxWindow* parent, Bed3D& bed, Model* model)
     GetSizer()->SetSizeHints(this);
 
     bind_event_handlers();
-
+    
+    // ── Slice History button ──────────────────────────────────────────
+    // Positioned in the top-right corner over the canvas, same pattern
+    // as OrcaSlicer's own overlay buttons.
+    init_slice_history_button();
+    // ─────────────────────────────────────────────────────────────────
+   
     return true;
 }
 
@@ -411,6 +417,80 @@ void Preview::show_moves_sliders(bool show)
 void Preview::show_layers_sliders(bool show)
 {
     ;//TODO
+}
+
+void Preview::init_slice_history_button()
+{
+    // Create a small button that sits in the bottom-right of the canvas.
+    // We parent it to 'this' (the Preview wxPanel) so it floats above
+    // the GLCanvas3D widget — the same technique OrcaSlicer uses for the
+    // collapse-sidebar button.
+    m_btn_slice_history = new wxButton(
+        this, wxID_ANY,
+        _L("History"),
+        wxDefaultPosition, wxDefaultSize,
+        wxBORDER_NONE | wxBU_EXACTFIT);
+
+    // Style to match OrcaSlicer's dark overlay buttons
+    m_btn_slice_history->SetBackgroundColour(wxColour(45, 45, 55));
+    m_btn_slice_history->SetForegroundColour(wxColour(220, 220, 230));
+    wxFont f = m_btn_slice_history->GetFont();
+    f.SetPointSize(f.GetPointSize() - 1);
+    m_btn_slice_history->SetFont(f);
+    m_btn_slice_history->SetToolTip(
+        _L("Show slice history — compare and restore previous settings"));
+
+    m_btn_slice_history->Bind(wxEVT_BUTTON,
+        &Preview::on_slice_history_button, this);
+
+    // Position it: we use EVT_SIZE to keep it anchored to the top-right
+    // corner whenever the panel resizes.
+    this->Bind(wxEVT_SIZE, [this](wxSizeEvent& evt) {
+        evt.Skip();   // must call Skip() so the base handler also runs
+        if (m_btn_slice_history) {
+            wxSize  btn_sz  = m_btn_slice_history->GetBestSize();
+            wxSize  panel_sz = GetClientSize();
+            // Anchor: top-right, 8px margin, below any existing toolbar
+            m_btn_slice_history->SetSize(
+                panel_sz.x - btn_sz.x - FromDIP(8),
+                FromDIP(8),
+                btn_sz.x,
+                btn_sz.y);
+        }
+    });
+
+    // Do an initial placement now (panel may already have a valid size)
+    CallAfter([this]() {
+        if (m_btn_slice_history) {
+            wxSize btn_sz   = m_btn_slice_history->GetBestSize();
+            wxSize panel_sz = GetClientSize();
+            m_btn_slice_history->SetSize(
+                panel_sz.x - btn_sz.x - FromDIP(8),
+                FromDIP(8),
+                btn_sz.x,
+                btn_sz.y);
+            m_btn_slice_history->Raise(); // ensure it's above the canvas widget
+        }
+    });
+}
+
+void Preview::on_slice_history_button(wxCommandEvent& evt)
+{
+    Plater* plater = wxGetApp().plater();
+    if (!plater) return;
+
+    SliceHistoryPanel* panel = plater->get_slice_history_panel();
+    if (!panel) return;
+
+    if (panel->IsShown()) {
+        panel->Dismiss();
+        m_btn_slice_history->Show(true);
+        m_btn_slice_history->GetParent()->Layout();
+    } else {
+        m_btn_slice_history->Show(false);
+        m_btn_slice_history->GetParent()->Layout();
+        panel->popup_below(m_btn_slice_history);
+    }
 }
 
 

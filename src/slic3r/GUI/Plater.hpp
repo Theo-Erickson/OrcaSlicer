@@ -20,6 +20,8 @@
 #include "Search.hpp"
 #include "PartPlate.hpp"
 #include "GUI_App.hpp"
+#include "SliceHistoryManager.hpp"
+#include "SliceHistoryPanel.hpp"
 #include "Jobs/PrintJob.hpp"
 #include "Jobs/SendJob.hpp"
 #include "libslic3r/Model.hpp"
@@ -265,6 +267,16 @@ public:
     bool need_auto_sync_after_connect_printer() const { return m_need_auto_sync_after_connect_printer; }
     void set_need_auto_sync_after_connect_printer(bool need_auto_sync) { m_need_auto_sync_after_connect_printer = need_auto_sync; }
 
+    // ── Slice History ─────────────────────────────────────────────────
+    // Returns the mutable active print config (used by SliceHistoryPanel)
+    DynamicPrintConfig& get_project_config();
+
+    // Called by SliceHistoryPanel::on_restore to notify sidebar of changes
+    void on_config_change(const DynamicPrintConfig& config);
+
+    // Toggle the history flyout panel visible/hidden
+    void toggle_slice_history_panel();
+    
 private:
     void  auto_calc_flushing_volumes_internal(const int filament_id, const int extruder_id);
 
@@ -446,6 +458,9 @@ public:
 
     void reset_window_layout();
 
+    // Accessor for the slice history popup panel
+    SliceHistoryPanel*  get_slice_history_panel() const { return m_slice_history_panel; }
+    
     // Called after the Preferences dialog is closed and the program settings are saved.
     // Update the UI based on the current preferences.
     void update_ui_from_settings();
@@ -921,6 +936,8 @@ public:
 
     bool is_loading_project() const { return m_loading_project; }
 
+    SliceHistoryManager*   m_slice_history_mgr   = nullptr;
+    SliceHistoryPanel*     m_slice_history_panel = nullptr;
 private:
     struct priv;
     std::unique_ptr<priv> p;

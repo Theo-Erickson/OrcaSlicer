@@ -4063,6 +4063,29 @@ void Sidebar::update_printer_thumbnail()
     }
 }
 
+DynamicPrintConfig& Sidebar::get_project_config()
+{
+    return wxGetApp().preset_bundle->prints.get_edited_preset().config;
+}
+
+void Sidebar::on_config_change(const DynamicPrintConfig& config)
+{
+    wxGetApp().obj_list()->update_and_show_object_settings_item();
+    wxGetApp().plater()->sidebar().update_presets(Preset::TYPE_PRINT);
+    wxGetApp().plater()->set_plater_dirty(true);
+}
+
+void Sidebar::toggle_slice_history_panel()
+{
+    if (wxGetApp().plater() && wxGetApp().plater()->get_slice_history_panel()) {
+        SliceHistoryPanel* panel = wxGetApp().plater()->get_slice_history_panel();
+        if (panel->IsShown())
+            panel->Dismiss();
+        else
+            panel->Popup();
+    }
+}
+
 void Sidebar::auto_calc_flushing_volumes(const int filament_idx, const int extruder_id) {
 
     std::vector<int> filament_indices;
@@ -4994,6 +5017,25 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         }
     });
 
+    // ── Slice History: create manager ────────────────────────────────
+    q->m_slice_history_mgr = new SliceHistoryManager();
+    // Panel is a child of the Plater (q), floats over the canvas
+    q->m_slice_history_panel = new SliceHistoryPanel(
+        panel_3d,
+        q,
+        q->m_slice_history_mgr
+    );
+    q->m_slice_history_panel->SetPosition(wxPoint(q->GetSize().x - 430, 50));
+
+    // Reposition on resize
+    q->Bind(wxEVT_SIZE, [this](wxSizeEvent& evt) {
+        evt.Skip();
+        if (this->q->m_slice_history_panel)
+            this->q->m_slice_history_panel->SetPosition(
+                wxPoint(this->q->GetSize().x - 430, 50));
+    });
+    // ─────────────────────────────────────────────────────────────────
+    
     update();
 
     // Orca: Make sidebar dockable
@@ -9543,7 +9585,7 @@ void Plater::priv::on_slicing_completed(wxCommandEvent & evt)
         BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << boost::format("slicing all, finished plate %1%, will continue next.")%m_cur_slice_plate;
         return;
     }
-
+    
     if (view3D->is_dragging()) // updating scene now would interfere with the gizmo dragging
         delayed_scene_refresh = true;
     else {
@@ -9819,6 +9861,142 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
     //    }
     //}
 
+    
+    // ── SLICE HISTORY SNAPSHOT ────────────────────────────────────────
+    
+    PartPlate* plate = partplate_list.get_curr_plate();
+
+    // get the result directly from the plate that just finished
+    //if (plate && plate->is_slice_result_valid()) return;
+    
+    if (GCodeProcessorResult* res = plate->get_slice_result()) {
+        // Build time string
+        float total_sec = 0.f;
+        for (auto& mode : res->print_statistics.modes)
+            total_sec = std::max(total_sec, mode.time);
+        int h = int(total_sec) / 3600;
+        int m = (int(total_sec) % 3600) / 60;
+        std::string time_str = h > 0
+            ? (boost::format("%dh %dm") % h % m).str()
+            : (boost::format("%dm") % m).str();
+
+        // Filament totals
+        double total_mm = 0.0;
+        for (auto& kv : res->print_statistics.model_volumes_per_extruder)
+            total_mm += kv.second;
+        double total_g = total_mm * 1.24 / 1000.0;
+
+        // Object count on this plate
+        int obj_count = (int)plate->get_objects_on_this_plate().size();
+
+        // Global print preset name (strip dirty marker)
+        const Preset& print_preset =
+            wxGetApp().preset_bundle->prints.get_edited_preset();
+        std::string preset_name = print_preset.name;
+        while (!preset_name.empty() &&
+               (preset_name.back() == '*' || preset_name.back() == ' '))
+            preset_name.pop_back();
+
+        const DynamicPrintConfig& cfgg = wxGetApp().plater()->fff_print().full_print_config();
+        
+        const DynamicPrintConfig& cfg = print_preset.config;
+
+        
+         // ── Build per-extruder filament breakdown ─────────────────────────
+        std::vector<Slic3r::GUI::ExtruderFilamentUsage> ext_usages;
+
+        // Use the same color source as the floating panel
+        const std::vector<std::string>& tool_colors =
+            wxGetApp().plater()->get_extruder_colors_from_plater_config(res);
+
+        // Collect all extruder IDs across all stat maps
+        std::set<int> all_extruders;
+        for (auto& kv : res->print_statistics.model_volumes_per_extruder)
+            all_extruders.insert(kv.first);
+        for (auto& kv : res->print_statistics.support_volumes_per_extruder)
+            all_extruders.insert(kv.first);
+        for (auto& kv : res->print_statistics.flush_per_filament)
+            all_extruders.insert(kv.first);
+        for (auto& kv : res->print_statistics.wipe_tower_volumes_per_extruder)
+            all_extruders.insert(kv.first);
+
+        for (int ext_id : all_extruders) {
+            ExtruderFilamentUsage eu;
+            eu.extruder_id = ext_id;
+
+            // Color — same vector the floating panel uses, 0-based index
+            eu.color_hex = (ext_id < (int)tool_colors.size())
+                ? tool_colors[ext_id] : "#888888";
+
+            // Material name from filament_presets (display label only)
+            const auto& fp = wxGetApp().preset_bundle->filament_presets;
+            eu.material_name = (ext_id < (int)fp.size()) ? fp[ext_id] : "Unknown";
+
+            // Density and diameter from the result itself — most reliable source
+            double density  = (ext_id < (int)res->filament_densities.size())
+                ? res->filament_densities[ext_id] : 1.24;
+            double diameter = (ext_id < (int)res->filament_diameters.size())
+                ? res->filament_diameters[ext_id] : 1.75;
+            double radius   = diameter / 2.0;
+            double area     = M_PI * radius * radius;
+
+            auto vol_to_mm = [&](double mm3) { return mm3 / area; };
+            auto vol_to_g  = [&](double mm3) { return mm3 * density / 1000.0; };
+
+            double model_vol = res->print_statistics.model_volumes_per_extruder.count(ext_id)
+                ? res->print_statistics.model_volumes_per_extruder.at(ext_id) : 0.0;
+            double support_vol = res->print_statistics.support_volumes_per_extruder.count(ext_id)
+                ? res->print_statistics.support_volumes_per_extruder.at(ext_id) : 0.0;
+            double flush_vol = res->print_statistics.flush_per_filament.count(ext_id)
+                ? res->print_statistics.flush_per_filament.at(ext_id) : 0.0;
+            double tower_vol = res->print_statistics.wipe_tower_volumes_per_extruder.count(ext_id)
+                ? res->print_statistics.wipe_tower_volumes_per_extruder.at(ext_id) : 0.0;
+            double other_vol = std::max(0.0, tower_vol - flush_vol);
+
+            eu.model_mm   = vol_to_mm(model_vol);   eu.model_g   = vol_to_g(model_vol);
+            eu.support_mm = vol_to_mm(support_vol); eu.support_g = vol_to_g(support_vol);
+            eu.flush_mm   = vol_to_mm(flush_vol);   eu.flush_g   = vol_to_g(flush_vol);
+            eu.other_mm   = vol_to_mm(other_vol);   eu.other_g   = vol_to_g(other_vol);
+            eu.tower_mm   = vol_to_mm(tower_vol);   eu.tower_g   = vol_to_g(tower_vol);
+            eu.total_mm   = eu.model_mm + eu.support_mm + eu.flush_mm + eu.other_mm;
+            eu.total_g    = eu.model_g  + eu.support_g  + eu.flush_g  + eu.other_g;
+
+            ext_usages.push_back(eu);
+        }
+
+
+        
+        std::sort(ext_usages.begin(), ext_usages.end(),
+    [](const auto& a, const auto& b){ return a.extruder_id < b.extruder_id; });
+
+        // ── Derive correct totals FROM the per-extruder breakdown ────────
+        // (not from model_volumes_per_extruder which is model-only)
+        double correct_total_mm = 0.0;
+        double correct_total_g  = 0.0;
+        for (const auto& eu : ext_usages) {
+            correct_total_mm += eu.total_mm;
+            correct_total_g  += eu.total_g;
+        }
+
+        // ─── push snapshot ───────────────────────────────────────────────
+        if (q->m_slice_history_mgr) {
+            q->m_slice_history_mgr->push_snapshot(
+                time_str,
+                correct_total_g,   // was: total_g  (model-only, wrong)
+                correct_total_mm,  // was: total_mm (model-only, wrong)
+                obj_count,
+                preset_name,
+                cfg,
+                std::move(ext_usages));
+
+            if (q->m_slice_history_panel)
+                q->m_slice_history_panel->refresh(&cfg);
+        }
+    }
+    //}
+    
+    // ─────────────────────────────────────────────────────────────────
+    
 
     if (is_finished)
     {

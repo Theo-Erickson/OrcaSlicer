@@ -13,6 +13,9 @@
 #include "libslic3r/GCode/GCodeProcessor.hpp"
 #include <slic3r/GUI/GCodeViewer.hpp>
 
+#include "SliceHistoryManager.hpp"
+#include "SliceHistoryPanel.hpp"
+
 class wxGLCanvas;
 class wxBoxSizer;
 class wxStaticText;
@@ -104,6 +107,7 @@ class Preview : public wxPanel
     //BBS: add only gcode mode
     bool m_only_gcode { false };
     bool m_reload_paint_after_background_process_apply{false};
+    wxButton* m_btn_slice_history { nullptr };
 
 public:
     enum class OptionType : unsigned int
@@ -158,6 +162,8 @@ public:
     void show_layers_sliders(bool show = true);
     void set_reload_paint_after_background_process_apply(bool flag) { m_reload_paint_after_background_process_apply = flag; }
     bool get_reload_paint_after_background_process_apply() { return m_reload_paint_after_background_process_apply; }
+    void init_slice_history_button();
+    void on_slice_history_button(wxCommandEvent& evt);
 
 private:
     bool init(wxWindow* parent, Bed3D& bed, Model* model);
