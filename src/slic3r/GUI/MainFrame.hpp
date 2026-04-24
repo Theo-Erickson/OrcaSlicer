@@ -388,6 +388,7 @@ public:
     WebViewPanel*         m_webview { nullptr };
     PrinterWebView*       m_printer_view{nullptr};
     wxLogWindow*          m_log_window { nullptr };
+    SliceHistoryPanel*    m_history_panel{ nullptr };
     // BBS
     //wxBookCtrlBase*       m_tabpanel { nullptr };
     Notebook*             m_tabpanel{ nullptr };

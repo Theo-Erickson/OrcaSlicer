@@ -70,7 +70,7 @@
 #include "BackgroundSlicingProcess.hpp"   // SlicingProcessCompletedEvent, EVT_PROCESS_COMPLETED
 #include "Jobs/PrintJob.hpp"              // EVT_PRINT_JOB_PROGRESS
 #include "libslic3r/PrintBase.hpp"
-#include "HistoryPanel.hpp"
+#include "SliceHistoryPanel.hpp"
 
 #ifdef _WIN32
 #include <dbt.h>
@@ -1388,10 +1388,10 @@ void MainFrame::init_tabpanel() {
         }
     }
 
-    m_history_panel = new HistoryPanel(m_tabpanel);
+    m_history_panel = new SliceHistoryPanel(m_tabpanel, m_plater, m_plater->m_slice_history_mgr);
     m_history_panel->SetBackgroundColour(*wxWHITE);
 
-    m_tabpanel->AddPage(m_history_panel, _L("History"), std::string("tab_history_pages_static"), std::string("tab_history_pages_static"), false);
+    m_tabpanel->AddPage(m_history_panel, _L("History"), std::string("tab_calibration_active"), std::string("tab_calibration_active"), false);
 }
 
 // SoftFever
@@ -1466,6 +1466,32 @@ void MainFrame::show_device(bool bBBLPrinter) {
         m_printer_view->Show(false);
         m_tabpanel->InsertPage(tpMonitor, m_printer_view, _L("Device"), std::string("tab_monitor_active"),
                                std::string("tab_monitor_active"));
+    }
+}
+
+void MainFrame::fit_tab_labels()
+{
+    if (!m_tabpanel || !m_slice_option_btn) // ignore layout change while slice/print buttons not visible
+        return;
+
+    auto* ctrl  = m_tabpanel->GetBtnsListCtrl();
+    auto* sizer = ctrl->GetBtnsSizer();
+    int   count = sizer->GetItemCount();
+
+    // Restore all
+    for (size_t i = 1; i < count; ++i)
+        ctrl->SetCompact(i, false);
+    m_tabpanel->Refresh();
+    Layout();
+
+    // Compact (last to first)
+    for (size_t i = count - 1; i >= 1; --i) {
+        int right = ScreenToClient(m_slice_option_btn->ClientToScreen({})).x;
+        int left  = sizer->GetSize().GetWidth();
+        if (right - left - FromDIP(15) > 0) return;
+        ctrl->SetCompact(i, true);
+        m_tabpanel->Refresh();
+        Layout();
     }
 }
 
