@@ -672,7 +672,7 @@ set(SLIC3R_GUI_SOURCES
 
 install(
     DIRECTORY   "${CMAKE_CURRENT_SOURCE_DIR}/../../../orca_status_icons/svg/"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/images/print_status"
+    DESTINATION "resources/images/print_status"
     FILES_MATCHING PATTERN "*.svg"
 )
 
