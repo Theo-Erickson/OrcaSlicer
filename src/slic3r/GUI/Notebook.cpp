@@ -1,220 +1,310 @@
-#include "Notebook.hpp"
+// Notebook.cpp
+//
+// HOW ANIMATION WORKS (timer-driven bitmap swap)
+// ───────────────────────────────────────────────
+// Each tab button is an OrcaSlicer Button widget.  Instead of overlaying a
+// separate wxAnimationCtrl on top (which caused z-order, background, and
+// mouse-event problems), we drive animation by calling
+//     btn->SetBitmapLabel(frame_bitmap)
+// on every timer tick.  This replaces the icon the Button paints itself —
+// no extra windows, no hit-test interference, no background colour mismatch.
+//
+// A single wxTimer fires every 16 ms (~60 Hz).  On each tick it walks the
+// active TabAnim list, advances frames whose per-frame delay has elapsed,
+// and calls SetBitmapLabel only when the frame actually changes.
+//
+// Active = hovered OR selected.
+// On deactivate we restore the original static SVG bitmap via btn->Rescale().
+//
+// Frame data lives in TabIconFrames.hpp (auto-generated RGBA arrays).
 
-//#ifdef _WIN32
+#include "Notebook.hpp"
 
 #include "GUI_App.hpp"
 #include "wxExtensions.hpp"
 #include "Widgets/Button.hpp"
-
-//BBS set font size
 #include "Widgets/Label.hpp"
 
 #include <wx/button.h>
 #include <wx/sizer.h>
+#include <wx/image.h>
+#include <wx/bitmap.h>
+#include <wx/menu.h>
+#include <boost/log/trivial.hpp>
+
+// Auto-generated: RGBA frame arrays + TabIconFrames_Get()
+#include "TabIconFrames.hpp"
 
 wxDEFINE_EVENT(wxCUSTOMEVT_NOTEBOOK_SEL_CHANGED, wxCommandEvent);
 
-ButtonsListCtrl::ButtonsListCtrl(wxWindow *parent, wxBoxSizer* side_tools) :
-    wxControl(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE | wxTAB_TRAVERSAL)
+// ─────────────────────────────────────────────────────────────────────────────
+// TabAnimMode — persistence helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+static const char* kAnimModeKey = "tab_icon_anim_mode";
+
+TabAnimMode TabAnimMode_Load()
+{
+    auto& cfg = *Slic3r::GUI::wxGetApp().app_config;
+    std::string val;
+    if (cfg.get(kAnimModeKey, val).empty())
+        return TabAnimMode::Always;   // default
+    if (val == "active_only") return TabAnimMode::ActiveOnly;
+    if (val == "hover_only")  return TabAnimMode::HoverOnly;
+    if (val == "never")       return TabAnimMode::Never;
+    return TabAnimMode::Always;
+}
+
+void TabAnimMode_Save(TabAnimMode mode)
+{
+    const char* val = "always";
+    switch (mode) {
+    case TabAnimMode::ActiveOnly: val = "active_only"; break;
+    case TabAnimMode::HoverOnly:  val = "hover_only";  break;
+    case TabAnimMode::Never:      val = "never";       break;
+    default: break;
+    }
+    Slic3r::GUI::wxGetApp().app_config->set(kAnimModeKey, val);
+}
+
+const char* TabAnimMode_Label(TabAnimMode mode)
+{
+    switch (mode) {
+    case TabAnimMode::Always:     return "Always animate (active + hover)";
+    case TabAnimMode::ActiveOnly: return "Animate active tab only";
+    case TabAnimMode::HoverOnly:  return "Animate on hover only";
+    case TabAnimMode::Never:      return "Never animate (static icons)";
+    }
+    return "Always animate (active + hover)";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ButtonsListCtrl
+// ─────────────────────────────────────────────────────────────────────────────
+
+ButtonsListCtrl::ButtonsListCtrl(wxWindow* parent, wxBoxSizer* side_tools)
+    : wxControl(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                wxBORDER_NONE | wxTAB_TRAVERSAL)
+    , m_timer(this)
 {
 #ifdef __WINDOWS__
     SetDoubleBuffered(true);
-#endif //__WINDOWS__
+#endif
 
     wxColour default_btn_bg;
 #ifdef __APPLE__
-    default_btn_bg = wxColour("#3B4446"); // Gradient #414B4E
+    default_btn_bg = wxColour("#3B4446");
 #else
-    default_btn_bg = wxColour("#2D2D30"); // Gradient #414B4E
+    default_btn_bg = wxColour("#2D2D30");
 #endif
-
-   
     SetBackgroundColour(default_btn_bg);
 
-    int em = em_unit(this);// Slic3r::GUI::wxGetApp().em_unit();
-    // BBS: no gap
-    m_btn_margin = 0; // std::lround(0.3 * em);
+    int em     = em_unit(this);
+    m_btn_margin  = 0;
     m_line_margin = std::lround(0.1 * em);
 
     m_sizer = new wxBoxSizer(wxHORIZONTAL);
-    this->SetSizer(m_sizer);
+    SetSizer(m_sizer);
 
     m_buttons_sizer = new wxFlexGridSizer(1, m_btn_margin, m_btn_margin);
     m_sizer->Add(m_buttons_sizer, 0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxBOTTOM, m_btn_margin);
 
-    if (side_tools != NULL) {
+    if (side_tools) {
         m_sizer->AddStretchSpacer(1);
         for (size_t idx = 0; idx < side_tools->GetItemCount(); idx++) {
-            wxSizerItem* item = side_tools->GetItem(idx);
-            wxWindow* item_win = item->GetWindow();
-            if (item_win) {
-                item_win->Reparent(this);
-            }
+            if (wxWindow* w = side_tools->GetItem(idx)->GetWindow())
+                w->Reparent(this);
         }
         m_sizer->Add(side_tools, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxBOTTOM, m_btn_margin);
     }
 
-    // BBS: disable custom paint
-    //this->Bind(wxEVT_PAINT, &ButtonsListCtrl::OnPaint, this);
-    Bind(wxEVT_SYS_COLOUR_CHANGED, [this](auto& e){
-    });
+    Bind(wxEVT_TIMER,        &ButtonsListCtrl::OnTimer,      this, m_timer.GetId());
+    Bind(wxEVT_RIGHT_DOWN,   &ButtonsListCtrl::OnRightClick, this);
+
+    // Load persisted animation mode
+    m_anim_mode = TabAnimMode_Load();
 }
 
-void ButtonsListCtrl::OnPaint(wxPaintEvent&)
+ButtonsListCtrl::~ButtonsListCtrl()
 {
-    //Slic3r::GUI::wxGetApp().UpdateDarkUI(this);
-    const wxSize sz = GetSize();
-    wxPaintDC dc(this);
+    m_timer.Stop();
+}
 
-    if (m_selection < 0 || m_selection >= (int)m_pageButtons.size())
-        return;
+// ── Timer ─────────────────────────────────────────────────────────────────────
 
-    wxColour selected_btn_bg("#1F8EEA");
-    wxColour default_btn_bg("#3B4446"); // Gradient #414B4E
-    const wxColour& btn_marker_color = Slic3r::GUI::wxGetApp().get_color_hovered_btn_label();
+void ButtonsListCtrl::OnTimer(wxTimerEvent&)
+{
+    bool any_active = false;
 
-    // highlight selected notebook button
+    for (int n = 0; n < (int)m_anims.size(); n++) {
+        TabAnim& anim = m_anims[n];
+        if (!anim.active || !anim.IsLoaded()) continue;
+        any_active = true;
 
-    for (int idx = 0; idx < int(m_pageButtons.size()); idx++) {
-        Button* btn = m_pageButtons[idx];
-
-        btn->SetBackgroundColor(idx == m_selection ? selected_btn_bg : default_btn_bg);
-
-        wxPoint pos = btn->GetPosition();
-        wxSize size = btn->GetSize();
-        const wxColour& clr = idx == m_selection ? btn_marker_color : default_btn_bg;
-        dc.SetPen(clr);
-        dc.SetBrush(clr);
-        dc.DrawRectangle(pos.x, pos.y + size.y, size.x, sz.y - size.y);
-    }
-
-#if 0
-    // highlight selected mode button
-    if (m_mode_sizer) {
-        const std::vector<ModeButton*>& mode_btns = m_mode_sizer->get_btns();
-        for (int idx = 0; idx < int(mode_btns.size()); idx++) {
-            ModeButton* btn = mode_btns[idx];
-            btn->SetBackgroundColor(btn->is_selected() ? selected_btn_bg : default_btn_bg);
-
-            //wxPoint pos = btn->GetPosition();
-            //wxSize size = btn->GetSize();
-            //const wxColour& clr = btn->is_selected() ? btn_marker_color : default_btn_bg;
-            //dc.SetPen(clr);
-            //dc.SetBrush(clr);
-            //dc.DrawRectangle(pos.x, pos.y + size.y, size.x, sz.y - size.y);
+        if (anim.Tick(kTimerMs)) {
+            m_pageButtons[n]->SetIcon(anim.frames[anim.current]);
         }
     }
-#endif
 
-    // Draw orange bottom line
-
-    dc.SetPen(btn_marker_color);
-    dc.SetBrush(btn_marker_color);
-    dc.DrawRectangle(1, sz.y - m_line_margin, sz.x, m_line_margin);
+    if (!any_active)
+        m_timer.Stop();
 }
 
-void ButtonsListCtrl::UpdateMode()
-{
-    //m_mode_sizer->SetMode(Slic3r::GUI::wxGetApp().get_mode());
-}
+// ── Animation control ─────────────────────────────────────────────────────────
 
-void ButtonsListCtrl::Rescale()
+TabAnim ButtonsListCtrl::LoadTabAnim(const std::string& icon_name) const
 {
-    //m_mode_sizer->msw_rescale();
-    int em = em_unit(this);
-    for (Button* btn : m_pageButtons) {
-        //BBS
-        btn->SetMinSize({(btn->GetLabel().empty() ? 40 : 132) * em / 10, 36 * em / 10});
-        btn->Rescale();
+    TabIconData data;
+    if (!TabIconFrames_Get(icon_name, data))
+        return {};
+
+    TabAnim anim;
+    anim.frames.reserve(data.nframes);
+    anim.delays_ms.reserve(data.nframes);
+
+    for (int i = 0; i < data.nframes; i++) {
+        // Build wxImage from raw RGBA bytes
+        wxImage img(data.w, data.h);
+        img.InitAlpha();
+
+        const uint8_t* src = data.frames[i];
+        for (int y = 0; y < data.h; y++) {
+            for (int x = 0; x < data.w; x++) {
+                int off = (y * data.w + x) * 4;
+                img.SetRGB(x, y, src[off], src[off+1], src[off+2]);
+                img.SetAlpha(x, y, src[off+3]);
+            }
+        }
+
+        anim.frames.emplace_back(img);
+        anim.delays_ms.push_back(data.delays[i]);
     }
 
-    // BBS: no gap
-    //m_btn_margin = std::lround(0.3 * em);
-    //m_line_margin = std::lround(0.1 * em);
-    //m_buttons_sizer->SetVGap(m_btn_margin);
-    //m_buttons_sizer->SetHGap(m_btn_margin);
-
-    m_sizer->Layout();
+    return anim;
 }
 
-void ButtonsListCtrl::SetSelection(int sel)
+void ButtonsListCtrl::SetAnimActive(int n, bool active)
 {
-    if (m_selection == sel)
-        return;
-    // BBS: change button color
-    wxColour selected_btn_bg("#009688");    // Gradient #009688
-    if (m_selection >= 0) {
-        StateColor bg_color = StateColor(
-        std::pair{wxColour(107, 107, 107), (int) StateColor::Hovered},
-        std::pair{wxColour(59, 68, 70), (int) StateColor::Normal});
-        m_pageButtons[m_selection]->SetBackgroundColor(bg_color);
-        StateColor text_color = StateColor(
-        std::pair{wxColour(254,254, 254), (int) StateColor::Normal}
-        );
-        m_pageButtons[m_selection]->SetSelected(false);
-        m_pageButtons[m_selection]->SetTextColor(text_color);
+    if (n < 0 || n >= (int)m_anims.size()) return;
+    TabAnim& anim = m_anims[n];
+
+    if (!anim.IsLoaded()) return;
+
+    // Respect the current animation mode
+    if (active && m_anim_mode == TabAnimMode::Never)
+        active = false;
+
+    if (active) {
+        anim.active = true;
+        anim.Reset();
+        m_pageButtons[n]->SetIcon(anim.frames[0]);
+        if (!m_timer.IsRunning())
+            m_timer.Start(kTimerMs);
+    } else {
+        anim.active = false;
+        anim.Reset();
+        m_pageButtons[n]->Rescale();
     }
-    m_selection = sel;
-
-    StateColor bg_color = StateColor(
-        std::pair{wxColour(0, 150, 136), (int) StateColor::Hovered},
-        std::pair{wxColour(0,150, 136), (int) StateColor::Normal});
-    m_pageButtons[m_selection]->SetBackgroundColor(bg_color);
-
-    StateColor text_color = StateColor(
-        std::pair{wxColour(254, 254, 254), (int) StateColor::Normal}
-        );
-    m_pageButtons[m_selection]->SetSelected(true);
-    m_pageButtons[m_selection]->SetTextColor(text_color);
-    
-    Refresh();
 }
 
-bool ButtonsListCtrl::InsertPage(size_t n, const wxString &text, bool bSelect /* = false*/, const std::string &bmp_name /* = ""*/, const std::string &inactive_bmp_name)
+// ── InsertPage ────────────────────────────────────────────────────────────────
+
+bool ButtonsListCtrl::InsertPage(size_t n, const wxString& text, bool bSelect,
+                                  const std::string& bmp_name,
+                                  const std::string& inactive_bmp_name)
 {
-    Button * btn = new Button(this, text.empty() ? text : " " + text, bmp_name, wxNO_BORDER);
+    Button* btn = new Button(this, text.empty() ? text : " " + text, bmp_name, wxNO_BORDER);
     btn->SetCornerRadius(0);
 
     int em = em_unit(this);
-    //BBS set size for button
     btn->SetMinSize({(text.empty() ? 40 : 136) * em / 10, 36 * em / 10});
 
-    StateColor bg_color = StateColor(
-        std::pair{wxColour(107, 107, 107), (int) StateColor::Hovered},
-        std::pair{wxColour(59, 68, 70), (int) StateColor::Normal});
-
+    StateColor bg_color(
+        std::pair{wxColour(107,107,107), (int)StateColor::Hovered},
+        std::pair{wxColour( 59, 68, 70), (int)StateColor::Normal});
     btn->SetBackgroundColor(bg_color);
-    StateColor text_color = StateColor(
-        std::pair{wxColour(254,254, 254), (int) StateColor::Normal});
+
+    StateColor text_color(std::pair{wxColour(254,254,254), (int)StateColor::Normal});
     btn->SetTextColor(text_color);
     btn->SetInactiveIcon(inactive_bmp_name);
     btn->SetSelected(false);
-    btn->Bind(wxEVT_BUTTON, [this, btn](wxCommandEvent& event) {
-        if (auto it = std::find(m_pageButtons.begin(), m_pageButtons.end(), btn); it != m_pageButtons.end()) {
-            auto sel = it - m_pageButtons.begin();
-            //do it later
-            //SetSelection(sel);
-            
-            wxCommandEvent evt = wxCommandEvent(wxCUSTOMEVT_NOTEBOOK_SEL_CHANGED);
-            evt.SetId(sel);
-            wxPostEvent(this->GetParent(), evt);
+
+    // Click
+    btn->Bind(wxEVT_BUTTON, [this, btn](wxCommandEvent&) {
+        auto it = std::find(m_pageButtons.begin(), m_pageButtons.end(), btn);
+        if (it != m_pageButtons.end()) {
+            wxCommandEvent evt(wxCUSTOMEVT_NOTEBOOK_SEL_CHANGED);
+            evt.SetId(static_cast<int>(it - m_pageButtons.begin()));
+            wxPostEvent(GetParent(), evt);
         }
     });
+
+    // Hover — start/stop animation, gated by mode
+    btn->Bind(wxEVT_ENTER_WINDOW, [this, btn](wxMouseEvent& e) {
+        e.Skip();
+        // HoverOnly and Always both animate on hover
+        if (m_anim_mode == TabAnimMode::Never ||
+            m_anim_mode == TabAnimMode::ActiveOnly)
+            return;
+        auto it = std::find(m_pageButtons.begin(), m_pageButtons.end(), btn);
+        if (it == m_pageButtons.end()) return;
+        int idx = static_cast<int>(it - m_pageButtons.begin());
+        if (m_hovered == idx) return;
+        if (m_hovered >= 0 && m_hovered != m_selection)
+            SetAnimActive(m_hovered, false);
+        m_hovered = idx;
+        SetAnimActive(idx, true);
+    });
+
+    btn->Bind(wxEVT_LEAVE_WINDOW, [this, btn](wxMouseEvent& e) {
+        e.Skip();
+        auto it = std::find(m_pageButtons.begin(), m_pageButtons.end(), btn);
+        if (it == m_pageButtons.end()) return;
+        int idx = static_cast<int>(it - m_pageButtons.begin());
+        // Only deactivate hover anim if not the selected tab (which stays active)
+        if (idx != m_selection)
+            SetAnimActive(idx, false);
+        m_hovered = -1;
+    });
+
+    // Right-click on individual button — forward to the ctrl handler
+    btn->Bind(wxEVT_RIGHT_DOWN, [this](wxMouseEvent& e) {
+        OnRightClick(e);
+    });
+
     Slic3r::GUI::wxGetApp().UpdateDarkUI(btn);
-    m_pageButtons.insert(m_pageButtons.begin() + n, btn);
-    m_pageLabels.insert(m_pageLabels.begin() + n, text); // ORCA
+
+    // Eagerly load the animation frames for this tab
+    TabAnim anim = LoadTabAnim(bmp_name);
+
+    m_pageButtons  .insert(m_pageButtons.begin()   + n, btn);
+    m_pageIconNames.insert(m_pageIconNames.begin() + n, bmp_name);
+    m_anims        .insert(m_anims.begin()         + n, std::move(anim));
+    m_pageLabels   .insert(m_pageLabels.begin()    + n, text);
+
     m_buttons_sizer->Insert(n, new wxSizerItem(btn));
     m_buttons_sizer->SetCols(m_buttons_sizer->GetCols() + 1);
     m_sizer->Layout();
+
+    if (bSelect)
+        SetSelection(static_cast<int>(n));
+
     return true;
 }
 
+// ── RemovePage ────────────────────────────────────────────────────────────────
+
 void ButtonsListCtrl::RemovePage(size_t n)
 {
+    SetAnimActive(static_cast<int>(n), false);
+
     Button* btn = m_pageButtons[n];
-    m_pageButtons.erase(m_pageButtons.begin() + n);
-    m_pageLabels.erase(m_pageLabels.begin() + n); // ORCA
-    m_buttons_sizer->Remove(n);
+    m_pageButtons  .erase(m_pageButtons.begin()   + n);
+    m_pageIconNames.erase(m_pageIconNames.begin() + n);
+    m_anims        .erase(m_anims.begin()         + n);
+    m_pageLabels   .erase(m_pageLabels.begin()    + n);
+
+    m_buttons_sizer->Remove(static_cast<int>(n));
 #if __WXOSX__
     RemoveChild(btn);
 #else
@@ -224,61 +314,176 @@ void ButtonsListCtrl::RemovePage(size_t n)
     m_sizer->Layout();
 }
 
-bool ButtonsListCtrl::SetPageImage(size_t n, const std::string& bmp_name) const
+// ── SetSelection ──────────────────────────────────────────────────────────────
+
+void ButtonsListCtrl::SetSelection(int sel)
 {
-    if (n >= m_pageButtons.size())
-        return false;
-     
-    // BBS
-    //return m_pageButtons[n]->SetBitmap_(bmp_name);
-    ScalableBitmap bitmap(NULL, bmp_name);
-    //m_pageButtons[n]->SetBitmap_(bitmap);
-    return true;
+    if (m_selection == sel) return;
+
+    // Deactivate previous
+    if (m_selection >= 0 && m_selection != m_hovered)
+        SetAnimActive(m_selection, false);
+
+    if (m_selection >= 0) {
+        StateColor bg(std::pair{wxColour(107,107,107),(int)StateColor::Hovered},
+                      std::pair{wxColour( 59, 68, 70),(int)StateColor::Normal});
+        m_pageButtons[m_selection]->SetBackgroundColor(bg);
+        StateColor tc(std::pair{wxColour(254,254,254),(int)StateColor::Normal});
+        m_pageButtons[m_selection]->SetSelected(false);
+        m_pageButtons[m_selection]->SetTextColor(tc);
+    }
+
+    m_selection = sel;
+
+    // Activate new — respects mode (Never is handled inside SetAnimActive)
+    // HoverOnly: don't auto-animate on selection, only on hover
+    if (m_anim_mode != TabAnimMode::HoverOnly)
+        SetAnimActive(sel, true);
+
+    StateColor bg(std::pair{wxColour(0,150,136),(int)StateColor::Hovered},
+                  std::pair{wxColour(0,150,136),(int)StateColor::Normal});
+    m_pageButtons[sel]->SetBackgroundColor(bg);
+    StateColor tc(std::pair{wxColour(254,254,254),(int)StateColor::Normal});
+    m_pageButtons[sel]->SetSelected(true);
+    m_pageButtons[sel]->SetTextColor(tc);
+
+    Refresh();
+}
+
+// ── Rescale ───────────────────────────────────────────────────────────────────
+
+void ButtonsListCtrl::Rescale()
+{
+    int em = em_unit(this);
+    for (Button* btn : m_pageButtons)
+        btn->SetMinSize({(btn->GetLabel().empty() ? 40 : 132) * em / 10, 36 * em / 10});
+    m_sizer->Layout();
+}
+
+// ── Misc ──────────────────────────────────────────────────────────────────────
+
+void ButtonsListCtrl::UpdateMode() {}
+
+void ButtonsListCtrl::OnPaint(wxPaintEvent&) {}
+
+bool ButtonsListCtrl::SetPageImage(size_t n, const std::string&) const
+{
+    return n < m_pageButtons.size();
 }
 
 void ButtonsListCtrl::SetPageText(size_t n, const wxString& strText)
 {
-    Button* btn = m_pageButtons[n];
-    btn->SetLabel(strText);
-    if(!strText.empty())  // ORCA
-        m_pageLabels[n] = strText;
+    m_pageButtons[n]->SetLabel(strText);
+    if (!strText.empty()) m_pageLabels[n] = strText;
 }
 
-// ORCA
 void ButtonsListCtrl::SetCompact(size_t n, bool compact)
 {
     int em = em_unit(this);
-    Button* btn = m_pageButtons[n];
-    btn->SetMinSize({(compact ? 40 : 136) * em / 10, 36 * em / 10});
-    btn->SetLabel(compact ? "" : (" " +  m_pageLabels[n]));
+    m_pageButtons[n]->SetMinSize({(compact ? 40 : 136) * em / 10, 36 * em / 10});
+    m_pageButtons[n]->SetLabel(compact ? "" : (" " + m_pageLabels[n]));
 }
 
 wxString ButtonsListCtrl::GetPageText(size_t n) const
 {
-    Button* btn = m_pageButtons[n];
-    return btn->GetLabel();
+    return m_pageButtons[n]->GetLabel();
 }
 
-//#endif // _WIN32
+// ── Animation mode helpers ─────────────────────────────────────────────────────
+
+void ButtonsListCtrl::ApplyAnimMode()
+{
+    // Stop all animations first, restore static icons
+    for (int n = 0; n < (int)m_anims.size(); n++)
+        SetAnimActive(n, false);
+
+    // Re-activate based on new mode
+    if (m_anim_mode == TabAnimMode::Never)
+        return;
+
+    // Always / ActiveOnly: re-animate the selected tab
+    if (m_anim_mode == TabAnimMode::Always ||
+        m_anim_mode == TabAnimMode::ActiveOnly) {
+        if (m_selection >= 0)
+            SetAnimActive(m_selection, true);
+    }
+    // HoverOnly: nothing to start now (hover events will trigger when needed)
+}
+
+// ── Right-click context menu ───────────────────────────────────────────────────
+
+// Menu IDs — local to this file
+enum {
+    ID_ANIM_ALWAYS = wxID_HIGHEST + 4200,
+    ID_ANIM_ACTIVE_ONLY,
+    ID_ANIM_HOVER_ONLY,
+    ID_ANIM_NEVER,
+};
+
+void ButtonsListCtrl::OnRightClick(wxMouseEvent& /*evt*/)
+{
+    wxMenu menu;
+    menu.SetTitle("Tab icon animation");
+
+    auto add_item = [&](int id, const char* label, TabAnimMode mode) {
+        wxMenuItem* item = menu.AppendRadioItem(id, label);
+        item->Check(m_anim_mode == mode);
+    };
+
+    add_item(ID_ANIM_ALWAYS,      "Always (active + hover)", TabAnimMode::Always);
+    add_item(ID_ANIM_ACTIVE_ONLY, "Active tab only",         TabAnimMode::ActiveOnly);
+    add_item(ID_ANIM_HOVER_ONLY,  "Hover only",              TabAnimMode::HoverOnly);
+    add_item(ID_ANIM_NEVER,       "Never (static icons)",    TabAnimMode::Never);
+
+    Bind(wxEVT_MENU, &ButtonsListCtrl::OnContextMenuItem, this,
+         ID_ANIM_ALWAYS, ID_ANIM_NEVER);
+    PopupMenu(&menu);
+}
+
+void ButtonsListCtrl::OnContextMenuItem(wxCommandEvent& evt)
+{
+    TabAnimMode new_mode;
+    switch (evt.GetId()) {
+    case ID_ANIM_ALWAYS:      new_mode = TabAnimMode::Always;     break;
+    case ID_ANIM_ACTIVE_ONLY: new_mode = TabAnimMode::ActiveOnly; break;
+    case ID_ANIM_HOVER_ONLY:  new_mode = TabAnimMode::HoverOnly;  break;
+    case ID_ANIM_NEVER:       new_mode = TabAnimMode::Never;      break;
+    default: return;
+    }
+
+    if (new_mode == m_anim_mode) return;
+    m_anim_mode = new_mode;
+    TabAnimMode_Save(new_mode);   // persist to AppConfig
+    ApplyAnimMode();
+}
+
+// ── Notebook::Init ────────────────────────────────────────────────────────────
 
 void Notebook::Init()
 {
-    // We don't need any border as we don't have anything to separate the
-    // page contents from.
     SetInternalBorder(0);
-
-    // No effects by default.
     m_showEffect = m_hideEffect = wxSHOW_EFFECT_NONE;
-
     m_showTimeout = m_hideTimeout = 0;
-
-    /* On Linux, Gstreamer wxMediaCtrl does not seem to get along well with
-     * 32-bit X11 visuals (the overlay does not work).  Is this a wxWindows
-     * bug?  Is this a Gstreamer bug?  No idea, but it is our problem ... 
-     * and anyway, this transparency thing just isn't all that interesting,
-     * so we just don't do it on Linux. 
-     */
 #ifndef __WXGTK__
     SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
 #endif
 }
+
+// ── Compile-time check for ScalableBitmap API ────────────────────────────────
+// If MakeScalable fails to compile, find ScalableBitmap in wxExtensions.hpp
+// and use whichever of these alternatives matches your version:
+//
+//   Option A — if ScalableBitmap has a direct wxBitmap ctor:
+//     ScalableBitmap sb(bmp);
+//
+//   Option B — if bmp() returns a reference (most common):
+//     ScalableBitmap sb(parent, "", size); sb.bmp() = bmp;
+//
+//   Option C — if ScalableBitmap stores via sys_color_changed_action:
+//     Just use btn->SetIcon(bmp) if Button exposes it, or:
+//     wrap bmp in wxBitmapBundle: btn->SetBitmap(wxBitmapBundle::FromBitmap(bmp))
+//     if Button inherits from wxBitmapButton.
+//
+// The safest fallback if none of the above work — store the wxImage instead
+// of wxBitmap in TabAnim and use:
+//     ScalableBitmap sb(parent, "", h); sb.bmp() = wxBitmap(img);
