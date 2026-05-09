@@ -109,6 +109,8 @@ public:
     void create_sync_page();
     void create_shortcuts_page();
     wxBoxSizer* create_debug_page();
+    
+    wxBoxSizer* create_customization_page();
 
     void UpdateSidebarLayout();
 
