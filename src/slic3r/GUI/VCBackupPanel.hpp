@@ -47,7 +47,7 @@ private:
     void build_ui();
     void populate_list();
 
-    wxButton* make_button(wxWindow* parent, const wxString& label, BtnStyle style);
+    wxButton* make_button(wxWindow* parent, const wxString& label, HistoryBtnStyle style);
 
     // ── Thumbnail helpers (no separate class — inlined here) ──────────────
     /// Open VCBackup_path as a ZIP, find the largest Metadata/plate_N.png,

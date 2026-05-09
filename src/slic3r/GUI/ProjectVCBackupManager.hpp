@@ -30,7 +30,10 @@
 
 namespace Slic3r { namespace GUI {
 
-enum class BtnStyle { Primary, Secondary, Danger };
+// ---------------------------------------------------------------------------
+// Button style
+// ---------------------------------------------------------------------------
+enum class HistoryBtnStyle { Primary, Secondary, Danger };
 
 // ---------------------------------------------------------------------------
 // One VCBackup on disk
@@ -156,7 +159,7 @@ private:
     size_t      m_max_VCBackups;
     
     // Shared button factory with explicit colour styling
-    wxButton* make_button(wxWindow* parent, const wxString& label, BtnStyle style);
+    wxButton* make_button(wxWindow* parent, const wxString& label, HistoryBtnStyle style);
 };
 
 }} // namespace Slic3r::GUI

@@ -213,22 +213,22 @@ VCBackupPanel::VCBackupPanel(wxWindow* parent, ProjectVCBackupManager* manager, 
 //  UI construction
 // ============================================================
 
-wxButton* VCBackupPanel::make_button(wxWindow* parent, const wxString& label, BtnStyle style)
+wxButton* VCBackupPanel::make_button(wxWindow* parent, const wxString& label, HistoryBtnStyle style)
 {
     auto* btn = new wxButton(parent, wxID_ANY, label, wxDefaultPosition, wxSize(-1, 28));
     btn->SetWindowStyle(wxBORDER_NONE);
 
     wxColour bg, fg;
     switch (style) {
-    case BtnStyle::Primary:
+    case HistoryBtnStyle::Primary:
         bg = wxColour(26, 161, 121); // OrcaSlicer teal accent
         fg = wxColour(255, 255, 255);
         break;
-    case BtnStyle::Danger:
+    case HistoryBtnStyle::Danger:
         bg = wxColour(61, 26, 26);    // dark red surface
         fg = wxColour(240, 149, 149); // soft red text
         break;
-    case BtnStyle::Secondary:
+    case HistoryBtnStyle::Secondary:
     default:
         bg = wxColour(55, 55, 55);    // dark neutral surface
         fg = wxColour(210, 210, 210); // light text
@@ -285,9 +285,9 @@ void VCBackupPanel::build_ui()
     // ── Button row ───────────────────────────────────────────
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
 
-    m_btn_restore    = make_button(this, _L("Restore this VCBackup"), BtnStyle::Primary);
-    m_btn_delete     = make_button(this, _L("Delete VCBackup"), BtnStyle::Secondary);
-    m_btn_delete_all = make_button(this, _L("Delete all VCBackups"), BtnStyle::Danger);
+    m_btn_restore    = make_button(this, _L("Restore this VCBackup"), HistoryBtnStyle::Primary);
+    m_btn_delete     = make_button(this, _L("Delete VCBackup"), HistoryBtnStyle::Secondary);
+    m_btn_delete_all = make_button(this, _L("Delete all VCBackups"), HistoryBtnStyle::Danger);
 
     btn_row->Add(m_btn_restore, 0, wxRIGHT, 6);
     btn_row->Add(m_btn_delete, 0, wxRIGHT, 6);

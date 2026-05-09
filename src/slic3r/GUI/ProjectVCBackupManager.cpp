@@ -382,22 +382,22 @@ size_t ProjectVCBackupManager::count_backup_files(const std::string& root)
     return n;
 }
 
-wxButton* ProjectVCBackupManager::make_button(wxWindow* parent, const wxString& label, BtnStyle style)
+wxButton* ProjectVCBackupManager::make_button(wxWindow* parent, const wxString& label, HistoryBtnStyle style)
 {
     auto* btn = new wxButton(parent, wxID_ANY, label, wxDefaultPosition, wxSize(-1, 28));
     btn->SetWindowStyle(wxBORDER_NONE);
 
     wxColour bg, fg;
     switch (style) {
-    case BtnStyle::Primary:
+    case HistoryBtnStyle::Primary:
         bg = wxColour(26, 161, 121); // OrcaSlicer teal accent
         fg = wxColour(255, 255, 255);
         break;
-    case BtnStyle::Danger:
+    case HistoryBtnStyle::Danger:
         bg = wxColour(61, 26, 26);    // dark red surface
         fg = wxColour(240, 149, 149); // soft red text
         break;
-    case BtnStyle::Secondary:
+    case HistoryBtnStyle::Secondary:
     default:
         bg = wxColour(55, 55, 55);    // dark neutral surface
         fg = wxColour(210, 210, 210); // light text
