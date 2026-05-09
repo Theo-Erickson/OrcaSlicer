@@ -391,7 +391,7 @@ wxString ButtonsListCtrl::GetPageText(size_t n) const
 
 // ── Animation mode helpers ─────────────────────────────────────────────────────
 
-void ButtonsListCtrl::ApplyAnimMode()
+void ButtonsListCtrl::RefreshAnimMode()
 {
     // Stop all animations first, restore static icons
     for (int n = 0; n < (int)m_anims.size(); n++)
@@ -454,7 +454,7 @@ void ButtonsListCtrl::OnContextMenuItem(wxCommandEvent& evt)
     if (new_mode == m_anim_mode) return;
     m_anim_mode = new_mode;
     TabAnimMode_Save(new_mode);   // persist to AppConfig
-    ApplyAnimMode();
+    RefreshAnimMode();
 }
 
 // ── Notebook::Init ────────────────────────────────────────────────────────────

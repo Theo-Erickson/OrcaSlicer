@@ -84,6 +84,9 @@ public:
     wxString GetPageText(size_t n) const;
     wxFlexGridSizer* GetBtnsSizer() { return m_buttons_sizer; }
 
+    // Re-evaluate all running animations after a mode change.
+    void RefreshAnimMode();
+    
 private:
     // Load TabAnim frames from embedded RGBA data for the given icon name.
     // Returns an empty TabAnim if no data is registered.
@@ -98,9 +101,6 @@ private:
     // Right-click context menu on the tab bar.
     void OnRightClick(wxMouseEvent& evt);
     void OnContextMenuItem(wxCommandEvent& evt);
-
-    // Re-evaluate all running animations after a mode change.
-    void ApplyAnimMode();
 
     wxFlexGridSizer*          m_buttons_sizer;
     wxBoxSizer*               m_sizer;
