@@ -48,7 +48,21 @@ class GLGizmoScale3D : public GLGizmoBase
         Vec3d old_v1{ Vec3d::Zero() };
         Vec3d old_v2{ Vec3d::Zero() };
     };
+    // 7 original connections + 4 border edges per plane handle × 3 planes = 19
+    // We keep the original 7 and add 3 structs for the plane borders separately.
     std::array<GrabberConnection, 7> m_grabber_connections;
+
+    // ORCA: plane handle geometry (filled quad + border), one per plane
+    // Index: 0 = YZ (locks X), 1 = XZ (locks Y), 2 = XY (locks Z)
+    struct PlaneHandle
+    {
+        GLModel quad_model;
+        GLModel border_model;
+    };
+    std::array<PlaneHandle, 3> m_plane_handles;
+
+    // ORCA: plane normal captured at drag start, used throughout the drag
+    Vec3d m_plane_drag_normal{ Vec3d::Zero() };
 
     //BBS: add size adjust related
     GizmoObjectManipulation* m_object_manipulation;
@@ -96,10 +110,17 @@ private:
 
     void do_scale_along_axis(Axis axis, const UpdateData& data);
     void do_scale_uniform(const UpdateData& data);
+    // ORCA: scale two axes together, leaving the third unchanged
+    void do_scale_on_plane(Axis locked_axis, const UpdateData& data);
 
     double calc_ratio(const UpdateData& data) const;
     void   update_grabbers_data();
-    void   change_cs_by_selection(); // cs mean Coordinate System
+    void   change_cs_by_selection();
+
+    // ORCA: plane handle helpers
+    void rebuild_plane_quads();
+    void render_plane_handles(const Transform3d& base_matrix);
+
 private:
     int m_last_selected_obejct_idx, m_last_selected_volume_idx;
 };

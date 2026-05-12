@@ -23,6 +23,14 @@ class GLGizmoMove3D : public GLGizmoBase
     Vec3d m_starting_box_center{ Vec3d::Zero() };
     Vec3d m_starting_box_bottom_center{ Vec3d::Zero() };
 
+    // ORCA: plane handles — store the plane normal used at drag start
+    Vec3d m_plane_drag_normal{ Vec3d::Zero() };
+    // ORCA: actual mouse-ray hit point on the plane at drag start
+    Vec3d m_plane_drag_start_hit{ Vec3d::Zero() };
+    // ORCA: displacement from the previous frame, used to compute per-frame
+    // incremental deltas for plane drags (avoids Selection cache baseline issue)
+    Vec3d m_prev_plane_displacement{ Vec3d::Zero() };
+
     struct GrabberConnection
     {
         GLModel model;
@@ -30,12 +38,19 @@ class GLGizmoMove3D : public GLGizmoBase
     };
     std::array<GrabberConnection, 3> m_grabber_connections;
 
+    // ORCA: plane handle quad geometry, one per plane (YZ=0, XZ=1, XY=2)
+    struct PlaneHandle
+    {
+        GLModel quad_model;
+        GLModel border_model;
+    };
+    std::array<PlaneHandle, 3> m_plane_handles;
+
     //BBS: add size adjust related
     GizmoObjectManipulation* m_object_manipulation;
 
 public:
     //BBS: add obj manipulation logic
-    //GLGizmoMove3D(GLCanvas3D& parent, const std::string& icon_filename, unsigned int sprite_id);
     GLGizmoMove3D(GLCanvas3D& parent, const std::string& icon_filename, unsigned int sprite_id, GizmoObjectManipulation* obj_manipulation);
     virtual ~GLGizmoMove3D() = default;
 
@@ -44,17 +59,10 @@ public:
 
     std::string get_tooltip() const override;
 
-    /// <summary>
-    /// Postpone to Grabber for move
-    /// </summary>
-    /// <param name="mouse_event">Keep information about mouse click</param>
-    /// <returns>Return True when use the information otherwise False.</returns>
     bool on_mouse(const wxMouseEvent &mouse_event) override;
 
-    /// <summary>
-    /// Detect reduction of move for wipetover on selection change
-    /// </summary>
     void data_changed(bool is_serializing) override;
+
 protected:
     bool on_init() override;
     std::string on_get_name() const override;
@@ -66,12 +74,17 @@ protected:
     void on_render() override;
     void on_register_raycasters_for_picking() override;
     void on_unregister_raycasters_for_picking() override;
-    //BBS: GUI refactor: add object manipulation
     virtual void on_render_input_window(float x, float y, float bottom_limit);
 
 private:
     double calc_projection(const UpdateData& data) const;
-    void   change_cs_by_selection(); //cs mean Coordinate System
+    // ORCA: plane-constrained drag — projects mouse ray onto a plane and
+    // returns the 2D displacement in the plane's local axes
+    Vec3d  calc_plane_projection(const UpdateData& data, const Vec3d& plane_normal) const;
+    void   rebuild_plane_quads();
+    void   render_plane_handles(const Transform3d& base_matrix);
+    void   change_cs_by_selection();
+
 private:
     int m_last_selected_obejct_idx, m_last_selected_volume_idx;
 };
