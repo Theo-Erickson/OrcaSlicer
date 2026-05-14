@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Folder body -->
+  <path d="M1,5.5v7a1,1,0,0,0,1,1H14a1,1,0,0,0,1-1V5.5a1,1,0,0,0-1-1H8.5L7,3H2A1,1,0,0,0,1,4V5.5Z"
+        style="fill:none;stroke:#949494;stroke-linecap:round;stroke-linejoin:round"/>
+  <!-- Person head (teal circle) -->
+  <circle cx="8" cy="7.5" r="1.2" style="fill:#009688"/>
+  <!-- Person body (teal arc) -->
+  <path d="M5.5,12a2.5,2.5,0,0,1,5,0" style="fill:#009688"/>
+</svg>
