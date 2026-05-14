@@ -8,6 +8,7 @@
 #include <wx/bitmap.h>
 
 #include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/Model.hpp"
 #include "wxExtensions.hpp"
 
 class wxMenu;
@@ -52,6 +53,7 @@ public:
 	static std::vector<wxBitmap> get_svg_volume_bitmaps();
 
     MenuFactory();
+    void init_user_models_submenu(wxMenu* parent_menu, ModelVolumeType type);
     ~MenuFactory() = default;
 
     void    init(wxWindow* parent);
@@ -80,6 +82,13 @@ public:
 
     wxMenu *filament_action_menu(int active_filament_menu_id);
 
+    // Cross-platform folder open
+    static void open_folder_in_explorer(const std::string& folder_str);
+
+    // wxFileDialog to pick model files, copies them into the folder
+    static void add_model_to_user_folder(const std::string& folder_str);
+    
+    
 private:
     enum MenuType {
         mtObjectFFF = 0,
@@ -103,12 +112,45 @@ private:
 
     wxMenu m_filament_action_menu;
    
+    wxMenu*  m_user_models_submenu_root { nullptr }; // the menu it's appended to
+    int      m_user_models_submenu_pos  { -1 };      // position in parent
+    std::vector<wxMenu*> m_user_models_submenus;
+    std::vector<wxMenu*> m_user_models_parent_menus;
+    ModelVolumeType m_user_models_type          { ModelVolumeType::INVALID };
+    bool m_user_models_init_complete { false };
+
 
     // Removed/Prepended Items according to the view mode
     std::array<wxMenuItem*, mtCount> items_increase;
     std::array<wxMenuItem*, mtCount> items_decrease;
     std::array<wxMenuItem*, mtCount> items_set_number_of_copies;
 
+    wxMenu*  build_user_models_submenu(wxMenu* parent, ModelVolumeType type);
+    wxMenu*  build_user_models_filter_submenu(wxMenu* parent);
+    wxBitmap get_user_model_icon(const boost::filesystem::path& file_path);
+    void     rebuild_user_models_submenu(wxMenu* parent_menu);
+    
+    
+    // Extracts thumbnail from 3MF zip, caches result as sidecar PNG
+    // Use mz_zip_reader (miniz, already in OrcaSlicer deps) to open the
+    // 3MF as a zip and extract "Metadata/plate_1.png" or "thumbnail/thumbnail.png"
+    wxBitmap extract_3mf_thumbnail(
+        const boost::filesystem::path& path, int size);
+
+    // Returns (or generates+caches) a 16x16 colored badge for a given extension.
+    // Store in a static std::map<std::string, wxBitmap> so each type is drawn once.
+    wxBitmap get_filetype_badge_icon(
+        const std::string& ext, int size);
+
+    std::set<std::string> get_user_models_all_extensions();
+    
+    // Parses "user_models_type_filter" from AppConfig into a set of extensions.
+    // Empty config = all extensions enabled (default-open behavior)
+    std::set<std::string> get_user_models_enabled_extensions();
+
+    // Toggles one extension in the AppConfig filter string and saves
+    void toggle_user_models_extension(const std::string& ext, bool enabled);
+    
     void        create_default_menu();
     void        create_common_object_menu(wxMenu *menu);
     void        create_object_menu();

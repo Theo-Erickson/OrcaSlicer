@@ -21,6 +21,7 @@
 #include "Notebook.hpp"
 #include "UnitConversion.hpp"
 #include "PrintStatusCustomizationPanel.hpp"
+#include "GUI_Factories.hpp"
 
 #ifdef __WINDOWS__
 #ifdef _MSW_DARK_MODE
@@ -40,6 +41,285 @@ public:
 
     bool ShouldScrollToChildOnFocus(wxWindow* child) override { return false; }
 };
+
+wxBoxSizer* PreferencesDialog::create_item_user_models_folder(wxString title, wxString tooltip)
+{
+    wxString saved_path = from_u8(app_config->get("user_models_folder"));
+    if (saved_path.IsEmpty())
+        saved_path = from_u8(
+            (boost::filesystem::path(Slic3r::data_dir()) / "user_models").string());
+
+    wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
+    sizer->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+
+    // Label — fixed width matching other rows
+    auto lbl = new wxStaticText(m_parent, wxID_ANY, title,
+        wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
+    lbl->SetForegroundColour(DESIGN_GRAY900_COLOR);
+    lbl->SetFont(::Label::Body_14);
+    lbl->SetToolTip(tooltip);
+    lbl->Wrap(DESIGN_TITLE_SIZE.x);
+
+    // Read-only text field showing the current path
+    m_user_models_folder_input = new ::TextInput(
+        m_parent, saved_path, wxEmptyString, wxEmptyString,
+        wxDefaultPosition, wxSize(FromDIP(200), -1), 0);
+    StateColor input_bg(
+        std::pair<wxColour, int>(wxColour("#F0F0F1"), StateColor::Disabled),
+        std::pair<wxColour, int>(*wxWHITE, StateColor::Enabled));
+    m_user_models_folder_input->SetBackgroundColor(input_bg);
+    m_user_models_folder_input->SetToolTip(tooltip);
+    m_user_models_folder_input->GetTextCtrl()->SetEditable(false);
+
+    auto browse_btn = new Button(m_parent, _L("Browse") + " " + dots);
+    browse_btn->SetStyle(ButtonStyle::Regular, ButtonType::Parameter);
+    browse_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        wxDirDialog dlg(this, _L("Choose Models Folder"), wxEmptyString, wxDD_NEW_DIR_BUTTON);
+        if (dlg.ShowModal() == wxID_OK) {
+            wxString path = dlg.GetPath();
+            m_user_models_folder_input->GetTextCtrl()->SetValue(path);
+            app_config->set("user_models_folder", into_u8(path));
+            app_config->save();
+        }
+    });
+
+    auto open_btn = new Button(m_parent, _L("Open"));
+    open_btn->SetStyle(ButtonStyle::Regular, ButtonType::Parameter);
+    open_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        wxString path = m_user_models_folder_input->GetTextCtrl()->GetValue();
+        if (path.IsEmpty()) return;
+        boost::system::error_code ec;
+        boost::filesystem::create_directories(into_u8(path), ec);
+#ifdef __WINDOWS__
+        wxExecute("explorer \"" + path + "\"");
+#elif defined(__APPLE__)
+        wxExecute("open \"" + path + "\"");
+#else
+        wxExecute("xdg-open \"" + path + "\"");
+#endif
+    });
+
+    // Order: spacer | label | path input | Browse | Open
+    sizer->Add(lbl,                        0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_user_models_folder_input, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
+    sizer->Add(browse_btn,                 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
+    sizer->Add(open_btn,                   0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(4));
+
+    return sizer;
+}
+
+wxBoxSizer* PreferencesDialog::create_item_user_models_extensions(wxString title, wxString tooltip)
+{
+    std::string saved = app_config->get("user_models_extensions");
+    if (saved.empty()) saved = ".stl .obj .3mf .step .stp .amf";
+
+    wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
+    sizer->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+
+    auto lbl = new wxStaticText(m_parent, wxID_ANY, title,
+        wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
+    lbl->SetForegroundColour(DESIGN_GRAY900_COLOR);
+    lbl->SetFont(::Label::Body_14);
+    lbl->SetToolTip(tooltip);
+    lbl->Wrap(DESIGN_TITLE_SIZE.x);
+
+    m_user_models_extensions = new ::TextInput(
+        m_parent, from_u8(saved), wxEmptyString, wxEmptyString,
+        wxDefaultPosition, wxSize(FromDIP(260), -1), wxTE_PROCESS_ENTER);
+    StateColor input_bg(
+        std::pair<wxColour, int>(wxColour("#F0F0F1"), StateColor::Disabled),
+        std::pair<wxColour, int>(*wxWHITE,            StateColor::Enabled));
+    m_user_models_extensions->SetBackgroundColor(input_bg);
+    m_user_models_extensions->SetToolTip(tooltip);
+
+    auto commit = [this]() {
+        wxString val = m_user_models_extensions->GetTextCtrl()->GetValue();
+        app_config->set("user_models_extensions", into_u8(val));
+        app_config->save();
+    };
+
+    m_user_models_extensions->GetTextCtrl()->Bind(wxEVT_TEXT_ENTER,
+        [commit](wxCommandEvent& e) { commit(); e.Skip(); });
+    m_user_models_extensions->GetTextCtrl()->Bind(wxEVT_KILL_FOCUS,
+        [commit](wxFocusEvent& e)   { commit(); e.Skip(); });
+
+    sizer->Add(lbl,                       0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_user_models_extensions,  0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
+
+    return sizer;
+}
+
+void PreferencesDialog::create_userQuickModels_tab(wxFlexGridSizer* g_sizer)
+{
+    // Seed default so stoi() doesn't throw on first run
+    if (app_config->get("user_models_max_items").empty())
+        app_config->set("user_models_max_items", "20");
+
+    g_sizer->Add(create_item_title(_L("Quick Add: User Model Menu")), 1, wxEXPAND);
+
+    // Row 1: folder picker
+    g_sizer->Add(create_item_user_models_folder(
+        _L("Add model to folder"),
+        _L("Models in this folder appear in the right-click \"Add User Models\" menu.")));
+
+    // Row 2: max items
+    g_sizer->Add(create_item_spinctrl(
+        _L("Max items in menu"), "", _L("models"),
+        _L("Maximum number of models shown before the overflow '... X more' entry appears."),
+        "user_models_max_items", 1, 100, nullptr));
+
+    // Row 3: add file button
+    g_sizer->Add(create_item_button(
+        _L("Add model to folder"), _L("Add file") + " " + dots,
+        _L("Copy a model file into the Quick Add folder."), "",
+        []() {
+            std::string folder = wxGetApp().app_config->get("user_models_folder");
+            if (folder.empty())
+                folder = (boost::filesystem::path(Slic3r::data_dir()) / "user_models").string();
+            MenuFactory::add_model_to_user_folder(folder);
+        }));
+
+    // Row 4: sort order
+    g_sizer->Add(create_item_combobox(
+        _L("Sort order"), _L("Order in which models appear in the menu."),
+        "user_models_sort_order",
+        { _L("Name A-Z"), _L("Name Z-A"), _L("Newest first"), _L("Oldest first") }));
+
+    // Row 5: file types
+    g_sizer->Add(create_item_user_models_extensions(
+        _L("File types:"),
+        _L("Space-separated extensions to show in the menu, e.g. .stl .obj .3mf")));
+
+    // Default filter checkboxes
+    {
+        wxBoxSizer* filter_row = new wxBoxSizer(wxHORIZONTAL);
+        filter_row->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+
+        auto filter_lbl = new wxStaticText(m_parent, wxID_ANY,
+            _L("Default visible types:"),
+            wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
+        filter_lbl->SetForegroundColour(DESIGN_GRAY900_COLOR);
+        filter_lbl->SetFont(::Label::Body_14);
+        filter_row->Add(filter_lbl, 0, wxALIGN_CENTER_VERTICAL);
+
+        static const std::vector<std::pair<std::string, wxString>> EXTS = {
+            {".stl","STL"}, {".3mf","3MF"}, {".obj","OBJ"},
+            {".step","STEP"}, {".amf","AMF"},
+        };
+
+        std::set<std::string> enabled;
+        {
+            std::string filter = app_config->get("user_models_type_filter");
+            if (filter.empty()) {
+                for (const auto& [e, l] : EXTS) enabled.insert(e);
+            } else {
+                std::istringstream iss(filter);
+                std::string tok;
+                while (std::getline(iss, tok, ',')) {
+                    tok.erase(0, tok.find_first_not_of(" \t"));
+                    tok.erase(tok.find_last_not_of(" \t") + 1);
+                    if (!tok.empty()) enabled.insert(tok);
+                }
+            }
+        }
+
+        for (const auto& [ext, label] : EXTS) {
+            auto cb = new ::CheckBox(m_parent);
+            cb->SetValue(enabled.count(ext) > 0);
+            auto cb_lbl = new wxStaticText(m_parent, wxID_ANY, label);
+            cb_lbl->SetForegroundColour(DESIGN_GRAY900_COLOR);
+            cb_lbl->SetFont(::Label::Body_14);
+
+            filter_row->Add(cb,     0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+            filter_row->Add(cb_lbl, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(3));
+
+            std::string ext_copy = ext;
+            cb->Bind(wxEVT_TOGGLEBUTTON, [this, ext_copy, cb](wxCommandEvent&) {
+                // Read current filter, toggle this ext, write back
+                std::string filter = app_config->get("user_models_type_filter");
+                std::set<std::string> current;
+                if (filter.empty()) {
+                    // All enabled: seed full set then remove this one
+                    for (const auto& [e, l] : EXTS) current.insert(e);
+                } else {
+                    std::istringstream iss(filter);
+                    std::string tok;
+                    while (std::getline(iss, tok, ',')) {
+                        tok.erase(0, tok.find_first_not_of(" \t"));
+                        tok.erase(tok.find_last_not_of(" \t") + 1);
+                        if (!tok.empty()) current.insert(tok);
+                    }
+                }
+                if (cb->GetValue()) current.insert(ext_copy);
+                else                current.erase(ext_copy);
+
+                // Check if all enabled — write empty string if so
+                bool all = true;
+                for (const auto& [e, l] : EXTS)
+                    if (!current.count(e)) { all = false; break; }
+
+                if (all) {
+                    app_config->set("user_models_type_filter", "");
+                } else {
+                    std::string result;
+                    for (const auto& e : current) {
+                        if (!result.empty()) result += ",";
+                        result += e;
+                    }
+                    app_config->set("user_models_type_filter", result);
+                }
+                app_config->save();
+            });
+        }
+        g_sizer->Add(filter_row);
+    }
+    
+    // Row 6: recursive checkbox
+    g_sizer->Add(create_item_checkbox(
+        _L("Include subfolders"),
+        _L("When enabled, subfolders become nested submenus in the Quick Add menu."),
+        "user_models_recursive"));
+
+    // Tip row
+    {
+        wxBoxSizer* tip_sizer = new wxBoxSizer(wxHORIZONTAL);
+        tip_sizer->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+        auto tip = new wxStaticText(m_parent, wxID_ANY,
+            _L("Tip: place a .png with the same name alongside a model file to use it "
+               "as the menu icon (e.g. my_part.stl and my_part.png)."),
+            wxDefaultPosition, wxSize(FromDIP(480), -1));
+        tip->SetForegroundColour(DESIGN_GRAY600_COLOR);
+        tip->SetFont(::Label::Body_14);
+        tip->Wrap(FromDIP(480));
+        tip_sizer->Add(tip, 0, wxALIGN_CENTER_VERTICAL);
+        g_sizer->Add(tip_sizer);
+    }
+}
+
+void PreferencesDialog::focus_setting(const std::string& config_key)
+{
+    if (config_key != "user_models_folder") return;
+
+    // Find the Customizations tab index by name and select it
+    for (size_t i = 0; i < m_pref_tabs->GetCount(); ++i) {
+        if (m_pref_tabs->GetItemText(i) == _L("Customizations")) {
+            // Replicate the same selection logic used in the EVT_TAB_SEL_CHANGED handler
+            Freeze();
+            m_pref_tabs->SelectItem(i);
+            m_pref_tabs->SetItemBold(i, true);
+            for (size_t j = 0; j < f_sizers.size(); ++j) {
+                if (j != i) m_pref_tabs->SetItemBold(j, false);
+                f_sizers[j]->Show(j == i);
+            }
+            Layout();
+            Thaw();
+            break;
+        }
+    }
+
+    if (m_user_models_folder_input)
+        m_user_models_folder_input->GetTextCtrl()->SetFocus();
+}
 
 wxBoxSizer *PreferencesDialog::create_item_title(wxString title)
 {
@@ -1248,6 +1528,75 @@ wxBoxSizer* PreferencesDialog::create_item_link_association( wxString url_prefix
 
     return v_sizer;
 }
+
+wxBoxSizer* PreferencesDialog::create_item_user_models_ext_filter(wxString title, wxString tooltip)
+{
+    wxBoxSizer* outer = new wxBoxSizer(wxHORIZONTAL);
+    outer->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+
+    auto lbl = new wxStaticText(m_parent, wxID_ANY, title,
+        wxDefaultPosition, DESIGN_TITLE_SIZE, wxST_NO_AUTORESIZE);
+    lbl->SetForegroundColour(DESIGN_GRAY900_COLOR);
+    lbl->SetFont(::Label::Body_14);
+    lbl->SetToolTip(tooltip);
+    lbl->Wrap(DESIGN_TITLE_SIZE.x);
+    outer->Add(lbl, 0, wxALIGN_CENTER_VERTICAL);
+
+    // Parse currently enabled extensions from config
+    std::string saved = app_config->get("user_models_extensions");
+    if (saved.empty()) saved = ".stl .obj .3mf .step .stp .amf";
+    std::set<std::string> enabled;
+    std::istringstream iss(saved);
+    std::string tok;
+    while (iss >> tok) enabled.insert(tok);
+
+    // Extension list: display label, config token, color hint for badge
+    const std::vector<std::pair<std::string, wxString>> EXTS = {
+        { ".stl",  "STL"  },
+        { ".obj",  "OBJ"  },
+        { ".3mf",  "3MF"  },
+        { ".step", "STEP" },
+        { ".stp",  "STP"  },
+        { ".amf",  "AMF"  },
+        { ".drc",  "DRC"  },
+    };
+
+    wxBoxSizer* checks = new wxBoxSizer(wxHORIZONTAL);
+
+    for (const auto& [ext, label] : EXTS) {
+        auto cb = new ::CheckBox(m_parent);
+        cb->SetValue(enabled.count(ext) > 0);
+        cb->SetToolTip(ext);
+        auto lbl2 = new wxStaticText(m_parent, wxID_ANY, label);
+        lbl2->SetFont(::Label::Body_14);
+        lbl2->SetForegroundColour(DESIGN_GRAY900_COLOR);
+
+        // Save on toggle
+        cb->Bind(wxEVT_TOGGLEBUTTON, [this, ext, cb](wxCommandEvent& e) {
+            // Rebuild the extensions string from all checkbox states
+            // by reading all sibling checkboxes via m_user_models_ext_checkboxes
+            std::string result;
+            for (const auto& [e2, cb2] : m_user_models_ext_checkboxes) {
+                if (cb2->GetValue())
+                    result += e2 + " ";
+            }
+            if (!result.empty()) result.pop_back();
+            app_config->set("user_models_extensions", result);
+            app_config->save();
+            e.Skip();
+        });
+
+        m_user_models_ext_checkboxes[ext] = cb;
+
+        checks->Add(cb,   0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
+        checks->Add(lbl2, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(2));
+        checks->AddSpacer(FromDIP(4));
+    }
+
+    outer->Add(checks, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(5));
+    return outer;
+}
+
 #endif // WIN32
 
 PreferencesDialog::PreferencesDialog(wxWindow *parent, wxWindowID id, const wxString &title, const wxPoint &pos, const wxSize &size, long style)
@@ -1929,6 +2278,9 @@ f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));
 g_sizer = f_sizers.back();                                                       
 g_sizer->AddGrowableCol(0, 1);                                                   
 
+    //// CUSTOMIZATION > UserQuickModels Menu                                                    
+create_userQuickModels_tab(g_sizer);
+    
 //// CUSTOMIZATION > Tab Icons                                                    
 g_sizer->Add(create_item_title(_L("Tab Icons")), 1, wxEXPAND);                  
 

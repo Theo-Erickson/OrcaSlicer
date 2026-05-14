@@ -23,6 +23,7 @@
 #include "slic3r/GUI/Tab.hpp"
 #include "ParamsPanel.hpp"
 #include "MsgDialog.hpp"
+#include "NotificationManager.hpp"
 #include "StackObjectsDialog.hpp"
 #include "StackObjectsHandler.hpp"
 #include "wx/utils.h"
@@ -648,6 +649,161 @@ wxMenu* MenuFactory::append_submenu_add_handy_model(wxMenu* menu, ModelVolumeTyp
 
     return sub_menu;
 }
+
+// Supported extensions for user model scanning
+static const std::vector<std::string> USER_MODEL_EXTENSIONS = 
+{
+    ".stl", ".obj", ".3mf", ".step", ".stp", ".amf", ".drc"
+};
+
+static bool is_supported_model_file(const boost::filesystem::path& p) 
+{
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    for (const auto& e : USER_MODEL_EXTENSIONS)
+        if (ext == e) return true;
+    return false;
+}
+
+// Helper: try to get a 16x16 menu bitmap for a model file.
+// For .3mf: extract /Metadata/thumbnail.png from the zip, scale to 16x16.
+// For others: fall back to sidecar .png, then to a colored type-label icon.
+static wxBitmap get_model_menu_icon(const boost::filesystem::path& file_path)
+{
+    std::string ext = file_path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+    // 1. Sidecar PNG (highest priority, user-supplied)
+    boost::filesystem::path sidecar = file_path;
+    sidecar.replace_extension(".png");
+    if (boost::filesystem::exists(sidecar)) {
+        wxImage img(from_u8(sidecar.string()), wxBITMAP_TYPE_PNG);
+        if (img.IsOk()) {
+            img.Rescale(16, 16, wxIMAGE_QUALITY_HIGH);
+            return wxBitmap(img);
+        }
+    }
+
+    // 2. 3MF embedded thumbnail (via wxZipInputStream, no miniz needed)
+    if (ext == ".3mf") {
+        wxFFileInputStream file_stream(from_u8(file_path.string()));
+        if (file_stream.IsOk()) {
+            wxZipInputStream zip_stream(file_stream);
+            if (zip_stream.IsOk()) {
+                // Priority-ordered thumbnail paths used by OrcaSlicer/BambuStudio
+                static const std::vector<std::string> THUMB_PATHS = {
+                    "Metadata/plate_1.png",
+                    "Metadata/thumbnail.png",
+                    "thumbnail/thumbnail.png",
+                    "Thumbnails/thumbnail.png",
+                };
+
+                // Collect all entry names first so we can priority-match
+                std::map<std::string, std::unique_ptr<wxZipEntry>> entries;
+                std::unique_ptr<wxZipEntry> entry;
+                while ((entry.reset(zip_stream.GetNextEntry())), entry != nullptr) {
+                    std::string name = into_u8(entry->GetName());
+                    // Normalize backslashes (Windows zip tools sometimes use them)
+                    std::replace(name.begin(), name.end(), '\\', '/');
+                    entries[name] = std::move(entry);
+                }
+
+                for (const auto& thumb_path : THUMB_PATHS) {
+                    auto it = entries.find(thumb_path);
+                    if (it == entries.end()) continue;
+
+                    if (!zip_stream.OpenEntry(*it->second)) continue;
+
+                    wxMemoryOutputStream mem_out;
+                    zip_stream.Read(mem_out);
+                    zip_stream.CloseEntry();
+
+                    wxStreamBuffer* buf = mem_out.GetOutputStreamBuffer();
+                    if (!buf || buf->GetBufferSize() == 0) continue;
+
+                    wxMemoryInputStream mem_in(
+                        buf->GetBufferStart(),
+                        buf->GetBufferSize());
+
+                    wxImage img;
+                    if (img.LoadFile(mem_in, wxBITMAP_TYPE_PNG) && img.IsOk()) {
+                        img.Rescale(16, 16, wxIMAGE_QUALITY_HIGH);
+                        return wxBitmap(img);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Colored type badge
+    static const std::map<std::string, wxColour> EXT_COLORS = {
+        { ".stl",  wxColour("#4CAF50") },  // green
+        { ".3mf",  wxColour("#2196F3") },  // blue
+        { ".obj",  wxColour("#FF9800") },  // orange
+        { ".step", wxColour("#9C27B0") },  // purple
+        { ".stp",  wxColour("#9C27B0") },
+        { ".amf",  wxColour("#F44336") },  // red
+        { ".drc",  wxColour("#607D8B") },  // grey-blue
+    };
+
+    wxColour color("#888888");
+    auto it = EXT_COLORS.find(ext);
+    if (it != EXT_COLORS.end())
+        color = it->second;
+
+    // Use wxImage instead of wxMemoryDC to avoid platform alpha issues
+    // with the wxBitmap(w, h, 32) constructor
+    wxImage img(16, 16);
+    img.InitAlpha();
+
+    // Fill background color
+    unsigned char r = color.Red(), g = color.Green(), b = color.Blue();
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            img.SetRGB(x, y, r, g, b);
+            img.SetAlpha(x, y, 255);
+        }
+    }
+
+    // Draw text via wxMemoryDC on top — wxImage has no text rendering,
+    // so we composite: draw text onto a temp bitmap, read pixels back
+    wxBitmap tmp(img);
+    {
+        wxMemoryDC dc(tmp);
+        dc.SetTextForeground(*wxWHITE);
+        dc.SetFont(wxFont(6, wxFONTFAMILY_DEFAULT,
+            wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD));
+
+        wxString tag = from_u8(ext.size() > 1 ? ext.substr(1) : ext);
+        tag = tag.Upper().Left(3);
+
+        wxSize ts = dc.GetTextExtent(tag);
+        dc.DrawText(tag, (16 - ts.x) / 2, (16 - ts.y) / 2);
+        dc.SelectObject(wxNullBitmap);
+    }
+
+    return tmp;
+}
+
+static std::string get_display_name(const boost::filesystem::path& file_path,
+                                     int max_chars = 40)
+{
+    // Check for sidecar .alias file
+    boost::filesystem::path alias_path = file_path;
+    alias_path.replace_extension(".alias");
+    if (boost::filesystem::exists(alias_path)) {
+        boost::nowide::ifstream f(alias_path.string());
+        std::string line;
+        if (std::getline(f, line) && !line.empty())
+            return line;
+    }
+
+    std::string name = file_path.stem().string();
+    if ((int)name.size() > max_chars)
+        name = name.substr(0, max_chars - 3) + "...";
+    return name;
+}
+
 static void append_menu_itemm_add_(const wxString& name, GLGizmosManager::EType gizmo_type, wxMenu *menu, ModelVolumeType type, bool is_submenu_item) {
     auto add_ = [type, gizmo_type](const wxCommandEvent & /*unnamed*/) {
         const GLCanvas3D *canvas = plater()->canvas3D();
@@ -1383,6 +1539,544 @@ MenuFactory::MenuFactory()
     }
 }
 
+// Called once during create_default_menu() / create_plate_menu()
+// Inserts the submenu and binds the rebuild event
+void MenuFactory::init_user_models_submenu(wxMenu* parent_menu, ModelVolumeType type)
+{
+    wxMenu* sub = build_user_models_submenu(parent_menu, type);
+
+    m_user_models_submenus.push_back(sub);
+    m_user_models_parent_menus.push_back(parent_menu);
+
+#ifdef __WINDOWS__
+    append_submenu(parent_menu, sub, wxID_ANY, _L("Add User Models"), "",
+        "menu_user_folder", []() { return true; }, m_parent); 
+#else
+    append_submenu(parent_menu, sub, wxID_ANY, _L("Add User Models"), "", "",
+        []() { return true; }, m_parent);
+#endif
+
+    // Force bitmap onto the item directly after append
+    for (wxMenuItem* item : parent_menu->GetMenuItems()) {
+        if (item->GetSubMenu() == sub) {
+            item->SetBitmap(create_scaled_bitmap("menu_user_folder"));  
+            break;
+        }
+    }
+
+    // Bind to the SUBMENU opening, not the parent menu opening.
+    // This fires only when the user hovers over "Add User Models",
+    // which is the right time to refresh the file list.
+    m_parent->Bind(wxEVT_MENU_OPEN, [this, parent_menu](wxMenuEvent& e) {
+        // Find the current submenu for this parent (may have been rebuilt)
+        for (int i = 0; i < (int)m_user_models_parent_menus.size(); i++) {
+            if (m_user_models_parent_menus[i] == parent_menu) {
+                if (e.GetMenu() == m_user_models_submenus[i]) {
+                    rebuild_user_models_submenu(parent_menu);
+                }
+                break;
+            }
+        }
+        e.Skip();
+    });
+}
+
+wxMenu* MenuFactory::build_user_models_submenu(wxMenu* parent, ModelVolumeType type)
+{
+    auto sub_menu = new wxMenu;
+
+    // --- Config reads ---
+    std::string folder_str = wxGetApp().app_config->get("user_models_folder");
+    if (folder_str.empty())
+        folder_str = (boost::filesystem::path(Slic3r::data_dir()) / "user_models").string();
+
+    int max_items = 20; // fallback
+    std::string max_str = wxGetApp().app_config->get("user_models_max_items");
+    if (!max_str.empty()) max_items = std::stoi(max_str);
+
+    // Parse enabled extensions from filter config
+    std::set<std::string> enabled_exts = get_user_models_enabled_extensions();
+
+    boost::filesystem::path folder(folder_str);
+    if (!boost::filesystem::exists(folder)) {
+        boost::system::error_code ec;
+        boost::filesystem::create_directories(folder, ec);
+    }
+
+    // --- Scan ---
+    std::vector<boost::filesystem::path> entries;
+    if (boost::filesystem::exists(folder) && boost::filesystem::is_directory(folder)) {
+        for (const auto& entry : boost::filesystem::directory_iterator(folder)) {
+            if (!boost::filesystem::is_regular_file(entry.path())) continue;
+            std::string ext = entry.path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            if (enabled_exts.count(ext))
+                entries.push_back(entry.path());
+        }
+        std::sort(entries.begin(), entries.end());
+    }
+
+    // --- Populate up to max_items ---
+    int shown = 0;
+    for (const auto& file_path : entries) {
+        if (shown >= max_items) break;
+
+        // Name sanitization: replace underscores/hyphens, truncate at 40 chars
+        std::string raw_name = file_path.stem().string();
+        std::replace(raw_name.begin(), raw_name.end(), '_', ' ');
+        std::replace(raw_name.begin(), raw_name.end(), '-', ' ');
+        if (raw_name.size() > 40)
+            raw_name = raw_name.substr(0, 37) + "...";
+        wxString wx_name = from_u8(raw_name);
+
+        wxMenuItem* item = new wxMenuItem(sub_menu, wxID_ANY, wx_name);
+
+        // Icon: sidecar PNG > 3MF thumbnail > filetype badge
+        wxBitmap icon = get_user_model_icon(file_path);
+
+        if (!icon.IsOk()) 
+        {
+            const std::string ext = file_path.extension().string();
+            icon = get_filetype_badge_icon(ext, 16);  // guaranteed fallback
+        }
+        item->SetBitmap(icon);
+
+        sub_menu->Append(item);
+        sub_menu->Bind(wxEVT_MENU, [file_path](wxCommandEvent&) {
+            std::vector<boost::filesystem::path> input_files = { file_path };
+            plater()->load_files(input_files, LoadStrategy::LoadModel);
+        }, item->GetId());
+
+        shown++;
+    }
+
+    // Overflow indicator
+    int overflow = (int)entries.size() - shown;
+    if (overflow > 0) {
+        wxMenuItem* more = sub_menu->Append(wxID_ANY,
+            wxString::Format(_L("... %d more (open folder)"), overflow));
+        sub_menu->Bind(wxEVT_MENU, [folder_str](wxCommandEvent&) {
+            open_folder_in_explorer(folder_str);
+        }, more->GetId());
+    }
+
+    if (entries.empty()) {
+        wxMenuItem* empty = sub_menu->Append(wxID_ANY, _L("(No models found)"));
+        empty->Enable(false);
+    }
+
+    sub_menu->AppendSeparator();
+
+    // --- Filter submenu (inline, checkable) ---
+    wxMenu* filter_sub = build_user_models_filter_submenu(sub_menu);
+    sub_menu->AppendSubMenu(filter_sub, _L("Filter by type"));
+
+    sub_menu->AppendSeparator();
+
+    // Add Model to Folder
+    append_menu_item(sub_menu, wxID_ANY, _L("Add Model to Folder..."), "",
+        [folder_str](wxCommandEvent&) {
+            MenuFactory::add_model_to_user_folder(folder_str);
+        }, "menu_add_user_model", parent);   
+
+    // Open Models Folder
+    append_menu_item(sub_menu, wxID_ANY, _L("Open Models Folder..."), "",
+        [folder_str](wxCommandEvent&) {
+            open_folder_in_explorer(folder_str);
+        }, "menu_open_folder", parent);      
+
+    // Settings
+    append_menu_item(sub_menu, wxID_ANY, _L("Settings..."), "",
+        [](wxCommandEvent&) {
+            wxGetApp().open_preferences(0, "user_models_folder");
+        }, "menu_user_models_settings", parent);  
+
+    return sub_menu;
+}
+
+wxMenu* MenuFactory::build_user_models_filter_submenu(wxMenu* parent)
+{
+    auto filter_menu = new wxMenu;
+
+    static const std::vector<std::pair<std::string, wxString>> ALL_EXTS = {
+        { ".stl",  "STL"  },
+        { ".3mf",  "3MF"  },
+        { ".obj",  "OBJ"  },
+        { ".step", "STEP" },
+        { ".amf",  "AMF"  },
+    };
+
+    std::set<std::string> enabled = get_user_models_enabled_extensions();
+
+    for (const auto& [ext, label] : ALL_EXTS) {
+        wxMenuItem* fitem = filter_menu->AppendCheckItem(wxID_ANY, label);
+        fitem->Check(enabled.count(ext) > 0);
+
+        int item_id = fitem->GetId();
+        filter_menu->Bind(wxEVT_MENU, [this, item_id, ext, filter_menu](wxCommandEvent& e) {
+            // Read state directly from the item, not the event
+            wxMenuItem* mi = filter_menu->FindItem(item_id);
+            bool now_checked = mi ? mi->IsChecked() : e.IsChecked();
+            
+            // Save the new filter state
+            toggle_user_models_extension(ext, now_checked);
+
+            // Defer the rebuild until after the menu has fully closed.
+            // CallAfter posts to the event loop so wx finishes dismissing
+            // the menu before we touch the submenu pointers.
+            wxGetApp().CallAfter([this]() {
+                for (wxMenu* parent_menu : m_user_models_parent_menus)
+                    rebuild_user_models_submenu(parent_menu);
+            });
+        }, item_id);
+    }
+
+    return filter_menu;
+}
+
+wxBitmap MenuFactory::get_user_model_icon(const boost::filesystem::path& file_path)
+{
+    const int iconSize = 16;
+
+    // Tier 1: sidecar PNG
+    boost::filesystem::path png_path = file_path;
+    png_path.replace_extension(".png");
+    if (boost::filesystem::exists(png_path)) {
+        wxImage img(from_u8(png_path.string()), wxBITMAP_TYPE_PNG);
+        if (img.IsOk()) {
+            img.Rescale(iconSize, iconSize, wxIMAGE_QUALITY_HIGH);
+            return wxBitmap(img);
+        }
+    }
+
+    // Tier 2: 3MF embedded thumbnail (extract once, cache as sidecar PNG)
+    std::string ext = file_path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    if (ext == ".3mf") {
+        wxBitmap thumb = extract_3mf_thumbnail(file_path, iconSize);
+        if (thumb.IsOk()) return thumb;
+    }
+
+    // Tier 3: filetype badge (colored rectangle + extension text, drawn once per type)
+    return get_filetype_badge_icon(ext, iconSize);
+}
+
+void MenuFactory::rebuild_user_models_submenu(wxMenu* parent_menu)
+{
+    wxMenu* current_sub = nullptr;
+    int idx = -1;
+    for (int i = 0; i < (int)m_user_models_parent_menus.size(); i++) {
+        if (m_user_models_parent_menus[i] == parent_menu) {
+            current_sub = m_user_models_submenus[i];
+            idx = i;
+            break;
+        }
+    }
+    if (!current_sub || idx < 0) return;
+
+    wxMenuItemList& items = parent_menu->GetMenuItems();
+    for (wxMenuItem* item : items) {
+        if (item->GetSubMenu() == current_sub) {
+            wxMenu* fresh = build_user_models_submenu(parent_menu, ModelVolumeType::INVALID);
+
+            item->SetSubMenu(fresh);
+
+#ifdef __WINDOWS__
+            item->SetBitmap(create_scaled_bitmap("menu_add_part"));
+#endif
+            // Delete old submenu only after the swap is complete
+            wxMenu* old_sub = current_sub;
+            m_user_models_submenus[idx] = fresh;
+
+            // Unbind the old open event — m_parent->Unbind is tricky without
+            // the original functor, so instead we guard in the handler (idx check).
+            // The EVT_MENU_OPEN handler checks e.GetMenu() == sub, and sub is
+            // now stale, so it will never match fresh. We need to rebind.
+            // Simplest: use a shared_ptr flag to invalidate old handlers.
+            wxGetApp().CallAfter([old_sub]() {
+                delete old_sub;
+            });
+
+            break;
+        }
+    }
+}
+
+wxBitmap MenuFactory::extract_3mf_thumbnail(
+    const boost::filesystem::path& path, int size)
+{
+    // Check sidecar cache first
+    boost::filesystem::path cache_path = path;
+    cache_path.replace_extension(".orca_thumb.png");
+    if (boost::filesystem::exists(cache_path)) {
+        wxImage img(from_u8(cache_path.string()), wxBITMAP_TYPE_PNG);
+        if (img.IsOk()) {
+            img.Rescale(size, size, wxIMAGE_QUALITY_HIGH);
+            return wxBitmap(img);
+        }
+    }
+
+    wxFFileInputStream file_stream(from_u8(path.string()));
+    if (!file_stream.IsOk()) return wxNullBitmap;
+
+    wxZipInputStream zip_stream(file_stream);
+    if (!zip_stream.IsOk()) return wxNullBitmap;
+
+    static const std::vector<std::string> THUMB_PATHS = {
+        "Metadata/plate_1.png",
+        "Metadata/thumbnail.png",
+        "thumbnail/thumbnail.png",
+        "Thumbnails/thumbnail.png",
+    };
+
+    // Single forward pass — check each entry as we encounter it
+    std::unique_ptr<wxZipEntry> entry;
+    while ((entry.reset(zip_stream.GetNextEntry())), entry != nullptr) {
+        std::string entry_name = into_u8(entry->GetName());
+        std::replace(entry_name.begin(), entry_name.end(), '\\', '/');
+
+        bool is_target = false;
+        for (const auto& thumb_path : THUMB_PATHS) {
+            if (entry_name == thumb_path) {
+                is_target = true;
+                break;
+            }
+        }
+
+        if (!is_target) {
+            zip_stream.CloseEntry();
+            continue;
+        }
+
+        // Read this entry directly — stream is positioned here
+        wxMemoryOutputStream mem_out;
+        zip_stream.Read(mem_out);
+        zip_stream.CloseEntry();
+
+        wxStreamBuffer* buf = mem_out.GetOutputStreamBuffer();
+        if (!buf || buf->GetBufferSize() == 0) continue;
+
+        wxMemoryInputStream mem_in(buf->GetBufferStart(), buf->GetBufferSize());
+
+        wxImage img;
+        if (img.LoadFile(mem_in, wxBITMAP_TYPE_PNG) && img.IsOk()) {
+            // Cache to sidecar
+            img.SaveFile(from_u8(cache_path.string()), wxBITMAP_TYPE_PNG);
+            img.Rescale(size, size, wxIMAGE_QUALITY_HIGH);
+            return wxBitmap(img);
+        }
+    }
+
+    return wxNullBitmap;
+}
+
+wxBitmap MenuFactory::get_filetype_badge_icon(const std::string& ext, int size)
+{
+    static std::map<std::string, wxBitmap> s_cache;
+    std::string cache_key = ext + "_" + std::to_string(size);
+    auto it = s_cache.find(cache_key);
+    if (it != s_cache.end())
+        return it->second;
+
+    static const std::map<std::string, wxColour> EXT_COLORS = {
+        { ".stl",  wxColour(70,  130, 180) },
+        { ".3mf",  wxColour(46,  160,  67) },
+        { ".obj",  wxColour(210, 105,  30) },
+        { ".step", wxColour(148,  0,  211) },
+        { ".stp",  wxColour(148,  0,  211) },
+        { ".amf",  wxColour(220, 120,   0) },
+    };
+
+    wxColour color(120, 120, 120);
+    auto col_it = EXT_COLORS.find(ext);
+    if (col_it != EXT_COLORS.end())
+        color = col_it->second;
+
+    std::string label = ext.size() > 1 ? ext.substr(1) : ext;
+    std::transform(label.begin(), label.end(), label.begin(), ::toupper);
+    if (label.size() > 3) label = label.substr(0, 3);
+
+    // Build via wxImage to avoid 32bpp bitmap issues on Windows
+    wxImage img(size, size);
+    img.InitAlpha();
+    unsigned char r = color.Red(), g = color.Green(), b = color.Blue();
+    for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++) {
+            // Rounded corners: mark corner pixels transparent
+            bool corner = (x == 0 || x == size-1) && (y == 0 || y == size-1);
+            img.SetRGB(x, y, r, g, b);
+            img.SetAlpha(x, y, corner ? 0 : 255);
+        }
+
+    wxBitmap bmp(img);
+
+    // Draw text on top via MemoryDC
+    {
+        wxMemoryDC dc(bmp);
+        dc.SetTextForeground(*wxWHITE);
+        dc.SetFont(wxFont(size <= 16 ? 6 : 7, wxFONTFAMILY_SWISS,
+                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD));
+        wxString tag = from_u8(label);
+        wxSize ts = dc.GetTextExtent(tag);
+        dc.DrawText(tag, (size - ts.x) / 2, (size - ts.y) / 2);
+        dc.SelectObject(wxNullBitmap);
+    }
+
+    s_cache[cache_key] = bmp;
+    return bmp;
+}
+
+std::set<std::string> MenuFactory::get_user_models_all_extensions()
+{
+    // Parse the prefs-level master list (set in Preferences > Customizations)
+    std::string prefs = wxGetApp().app_config->get("user_models_extensions");
+    if (prefs.empty())
+        prefs = ".stl .obj .3mf .step .stp .amf";
+
+    std::set<std::string> result;
+    std::istringstream iss(prefs);
+    std::string token;
+    while (iss >> token) {
+        std::transform(token.begin(), token.end(), token.begin(), ::tolower);
+        result.insert(token);
+    }
+    return result;
+}
+
+std::set<std::string> MenuFactory::get_user_models_enabled_extensions()
+{
+    std::string filter = wxGetApp().app_config->get("user_models_type_filter");
+
+    // Empty = no filter applied = all extensions from master list are enabled
+    if (filter.empty())
+        return get_user_models_all_extensions();
+
+    std::set<std::string> result;
+    std::istringstream iss(filter);
+    std::string token;
+    while (std::getline(iss, token, ',')) {
+        // trim whitespace
+        token.erase(0, token.find_first_not_of(" \t"));
+        token.erase(token.find_last_not_of(" \t") + 1);
+        std::transform(token.begin(), token.end(), token.begin(), ::tolower);
+        if (!token.empty())
+            result.insert(token);
+    }
+    return result;
+}
+
+void MenuFactory::toggle_user_models_extension(const std::string& ext, bool enabled)
+{
+    // Read current filter; empty means "all enabled", so seed from master list first
+    std::set<std::string> current = get_user_models_enabled_extensions();
+
+    if (enabled)
+        current.insert(ext);
+    else
+        current.erase(ext);
+
+    // If current now equals the full master list, write empty string
+    // (preserves the "empty = all enabled" invariant)
+    std::set<std::string> all = get_user_models_all_extensions();
+    if (current == all) {
+        wxGetApp().app_config->set("user_models_type_filter", "");
+    } else {
+        std::string result;
+        for (const auto& e : current) {
+            if (!result.empty()) result += ",";
+            result += e;
+        }
+        wxGetApp().app_config->set("user_models_type_filter", result);
+    }
+    wxGetApp().app_config->save();
+}
+
+void MenuFactory::open_folder_in_explorer(const std::string& folder_str)
+{
+    if (folder_str.empty()) return;
+    wxString path = from_u8(folder_str);
+
+    // Ensure the folder exists before trying to open it
+    boost::system::error_code ec;
+    boost::filesystem::create_directories(folder_str, ec);
+
+#ifdef __WINDOWS__
+    wxExecute("explorer \"" + path + "\"");
+#elif defined(__APPLE__)
+    wxExecute("open \"" + path + "\"");
+#else
+    wxExecute("xdg-open \"" + path + "\"");
+#endif
+}
+
+void MenuFactory::add_model_to_user_folder(const std::string& folder_str)
+{
+    // Ensure destination exists
+    boost::system::error_code ec;
+    boost::filesystem::create_directories(folder_str, ec);
+
+    wxFileDialog dlg(
+        wxGetApp().plater_,
+        _L("Add models to Quick Add folder"),
+        wxEmptyString,
+        wxEmptyString,
+        "Model files (*.stl;*.obj;*.3mf;*.step;*.stp;*.amf)|"
+        "*.stl;*.obj;*.3mf;*.step;*.stp;*.amf|"
+        "All files (*.*)|*.*",
+        wxFD_OPEN | wxFD_FILE_MUST_EXIST | wxFD_MULTIPLE
+    );
+
+    if (dlg.ShowModal() != wxID_OK)
+        return;
+
+    wxArrayString selected_paths;
+    dlg.GetPaths(selected_paths);
+
+    int copied  = 0;
+    int skipped = 0;
+
+    for (const wxString& src_wx : selected_paths) {
+        boost::filesystem::path src(into_u8(src_wx));
+        boost::filesystem::path dst =
+            boost::filesystem::path(folder_str) / src.filename();
+
+        if (boost::filesystem::exists(dst)) {
+            // Ask once per conflict
+            wxString msg = wxString::Format(
+                _L("%s already exists in the folder. Overwrite?"),
+                from_u8(src.filename().string()));
+            int choice = wxMessageBox(msg, _L("File exists"),
+                wxYES_NO | wxICON_QUESTION, wxGetApp().plater_);
+            if (choice != wxYES) {
+                skipped++;
+                continue;
+            }
+        }
+
+        boost::system::error_code copy_ec;
+        boost::filesystem::copy_file(
+            src, dst,
+            boost::filesystem::copy_option::overwrite_if_exists,
+            copy_ec);
+
+        if (!copy_ec)
+            copied++;
+        else
+            wxLogError(_L("Failed to copy %s: %s"),
+                from_u8(src.filename().string()),
+                copy_ec.message());
+    }
+
+    if (copied > 0) {
+        // Brief confirmation — not a blocking dialog
+        wxGetApp().plater()->get_notification_manager()->push_notification(
+            NotificationType::CustomNotification,
+            NotificationManager::NotificationLevel::RegularNotificationLevel,
+            into_u8(wxString::Format(_L("Added %d model(s) to Quick Add folder."), copied))
+        );
+    }
+}
+
 void MenuFactory::create_default_menu()
 {
     wxMenu* sub_menu_primitives = append_submenu_add_generic(&m_default_menu, ModelVolumeType::INVALID);
@@ -1405,6 +2099,8 @@ void MenuFactory::create_default_menu()
         []() {return wxGetApp().plater()->can_add_model(); }, m_parent);
 #endif
 
+    init_user_models_submenu(&m_default_menu, ModelVolumeType::INVALID);
+    
     m_default_menu.AppendSeparator();
 
     append_menu_check_item(&m_default_menu, wxID_ANY, _L("Show Labels"), "",
@@ -1880,6 +2576,7 @@ void MenuFactory::create_plate_menu()
         []() {return true; }, m_parent);
     append_submenu(menu, sub_menu_handy, wxID_ANY, _L("Add Handy models"), "", "menu_add_part",
         []() {return true; }, m_parent);
+    init_user_models_submenu(menu, ModelVolumeType::INVALID);
     append_menu_item(menu, wxID_ANY, _L("Add Models"), "", // ORCA: Add Models
         [](wxCommandEvent&) { plater()->add_file(); }, "menu_add_part", menu,
         []() {return wxGetApp().plater()->can_add_model(); }, m_parent);
@@ -1888,6 +2585,7 @@ void MenuFactory::create_plate_menu()
         []() {return true; }, m_parent);
     append_submenu(menu, sub_menu_handy, wxID_ANY, _L("Add Handy models"), "", "",
         []() {return true; }, m_parent);
+    init_user_models_submenu(menu, ModelVolumeType::INVALID);
     append_menu_item(menu, wxID_ANY, _L("Add Models"), "", // ORCA: Add Models
         [](wxCommandEvent&) { plater()->add_file(); }, "", menu,
         []() {return wxGetApp().plater()->can_add_model(); }, m_parent);
@@ -2501,11 +3199,23 @@ void MenuFactory::update_object_menu()
 
 void MenuFactory::update_default_menu()
 {
-    for (auto& name : { _L("Add Primitive") , _L("Add Handy models"), _L("Show Labels") }) {
+    m_user_models_init_complete = false;
+
+    for (auto& name : { _L("Add Primitive") , _L("Add Handy models"),_L("Add User Models"), _L("Show Labels") }) {
         const auto menu_item_id = m_default_menu.FindItem(name);
         if (menu_item_id != wxNOT_FOUND)
             m_default_menu.Destroy(menu_item_id);
     }
+    
+    // Remove the default menu entry from our tracking vectors
+    auto it = std::find(m_user_models_parent_menus.begin(),
+                        m_user_models_parent_menus.end(), &m_default_menu);
+    if (it != m_user_models_parent_menus.end()) {
+        int idx = it - m_user_models_parent_menus.begin();
+        m_user_models_parent_menus.erase(it);
+        m_user_models_submenus.erase(m_user_models_submenus.begin() + idx);
+    }
+    
     create_default_menu();
 }
 

@@ -1,0 +1,3 @@
+Feature intended to allow you to put quick access models to place in
+
+Current issue is the filtering code doesn't refresh right, and the settings menu has checkboxes for file extensions and text entry. 

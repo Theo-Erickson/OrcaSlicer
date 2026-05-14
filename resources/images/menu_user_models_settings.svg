@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Three horizontal lines (slider tracks) in grey -->
+  <line x1="1" y1="4" x2="15" y2="4" style="fill:none;stroke:#949494;stroke-linecap:round"/>
+  <line x1="1" y1="8" x2="15" y2="8" style="fill:none;stroke:#949494;stroke-linecap:round"/>
+  <line x1="1" y1="12" x2="15" y2="12" style="fill:none;stroke:#949494;stroke-linecap:round"/>
+  <!-- Slider knobs in teal -->
+  <circle cx="5"  cy="4"  r="2" style="fill:#009688"/>
+  <circle cx="11" cy="8"  r="2" style="fill:#009688"/>
+  <circle cx="5"  cy="12" r="2" style="fill:#009688"/>
+</svg>

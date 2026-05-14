@@ -83,6 +83,18 @@ public:
     wxString m_backup_interval_def;
     wxString m_iot_environment_def;
 
+    // --- Customizations tab ---
+    ::TextInput* m_user_models_folder_input { nullptr };
+    ::TextInput* m_user_models_extensions       { nullptr };
+    ::CheckBox*  m_user_models_recursive    { nullptr };
+    std::map<std::string, ::CheckBox*> m_user_models_ext_checkboxes;
+ 
+    wxBoxSizer* create_item_user_models_folder(wxString title, wxString tooltip);
+    wxBoxSizer* create_item_user_models_extensions(wxString title, wxString tooltip);
+    void create_userQuickModels_tab(wxFlexGridSizer* g_sizer);
+    void        create_customizations_tab(wxFlexGridSizer* g_sizer);
+    void        focus_setting(const std::string& config_key);
+    
     std::vector<wxFlexGridSizer*> f_sizers;
 
     wxBoxSizer *create_item_title(wxString title);
@@ -106,6 +118,8 @@ public:
 #ifdef WIN32
     wxBoxSizer *create_item_link_association(wxString url_prefix, wxString website_name);
 #endif // WIN32
+    wxBoxSizer* create_item_user_models_ext_filter(wxString title, wxString tooltip);
+
 
     void create_items();
     void create_sync_page();
