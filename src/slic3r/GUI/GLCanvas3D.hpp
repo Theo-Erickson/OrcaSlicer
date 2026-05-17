@@ -25,6 +25,8 @@
 
 #include <wx/timer.h>
 
+#include "PathPreviewPlayer.hpp"
+
 class wxSizeEvent;
 class wxIdleEvent;
 class wxKeyEvent;
@@ -530,6 +532,7 @@ private:
     bool m_in_render;
     wxTimer m_timer;
     wxTimer m_timer_set_color;
+    wxTimer m_preview_anim_timer;
     LayersEditing m_layers_editing;
     Mouse m_mouse;
     GLGizmosManager m_gizmos;
@@ -557,6 +560,8 @@ private:
 
     GLVolumeCollection m_volumes;
     GCodeViewer m_gcode_viewer;
+    
+    PathPreviewPlayer  m_path_player;
 
     RenderTimer m_render_timer;
 

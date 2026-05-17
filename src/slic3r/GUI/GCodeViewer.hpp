@@ -40,6 +40,15 @@ class GCodeViewer
 {
 public:
     enum class EViewType : unsigned char;
+    
+    struct PlaybackState {
+        bool        playing         = false;
+        int         current_layer   = 0;
+        float       move_progress   = 0.0f;   // 0.0–1.0 within current layer
+        float       speed_multiplier = 1.0f;
+        enum class Mode { XYPath, Layers } mode = Mode::XYPath;
+    };
+    
     struct SequentialView
     {
 #if ENABLE_ACTUAL_SPEED_DEBUG
