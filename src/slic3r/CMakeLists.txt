@@ -487,6 +487,9 @@ set(SLIC3R_GUI_SOURCES
     GUI/SliceHistoryPanel.hpp
     GUI/StatusPanel.cpp
     GUI/StatusPanel.hpp
+    GUI/StackObjectsDialog.hpp
+    GUI/StackObjectsHandler.hpp
+    GUI/StackObjectsHandler.cpp
     GUI/StepMeshDialog.cpp
     GUI/StepMeshDialog.hpp
     GUI/SurfaceDrag.cpp

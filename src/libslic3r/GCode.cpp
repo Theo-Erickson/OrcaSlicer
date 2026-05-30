@@ -1774,7 +1774,9 @@ std::vector<GCode::LayerToPrint> GCode::collect_layers_to_print(const PrintObjec
         // first layer may result in skirt/brim in the air and maybe other issues.
         if (layers_to_print.size() == 1u) {
             if (!has_extrusions)
-                throw Slic3r::SlicingError(_(L("One object has an empty first layer and can't be printed. Please Cut the bottom or enable supports.")), object.id().id);
+                // BBS: floating stacked objects may have empty first layer — skip instead of throw
+                BOOST_LOG_TRIVIAL(warning) << "Stack tool: object " << object.id().id << " has empty first layer (intentionally floating). Skipping error.";
+                continue;
         }
 
         // In case there are extrusions on this layer, check there is a layer to lay it on.

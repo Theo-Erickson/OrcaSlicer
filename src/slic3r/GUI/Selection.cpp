@@ -27,6 +27,8 @@
 #include <CGAL/Min_sphere_of_spheres_d.h>
 #include <CGAL/Min_sphere_of_points_d_traits_3.h>
 
+#include "StackObjectsHandler.hpp"
+
 static const Slic3r::ColorRGBA UNIFORM_SCALE_COLOR     = Slic3r::ColorRGBA::ORANGE();
 static const Slic3r::ColorRGBA SOLID_PLANE_COLOR       = {0.0f, 174.0f / 255.0f, 66.0f / 255.0f, 1.0f};
 static const Slic3r::ColorRGBA TRANSPARENT_PLANE_COLOR = { 0.8f, 0.8f, 0.8f, 0.5f };
@@ -1679,6 +1681,15 @@ void Selection::scale_and_translate(const Vec3d &scale, const Vec3d &world_trans
     set_bounding_boxes_dirty();
     if (wxGetApp().plater()->canvas3D()->get_canvas_type() != GLCanvas3D::ECanvasType::CanvasAssembleView) {
         wxGetApp().plater()->canvas3D()->requires_check_outside_state();
+    }
+    
+    // After scale is applied to selection
+    if (auto* plater = wxGetApp().plater()) {
+        const Selection& selection = plater->get_selection();
+        if (selection.is_single_full_object()) {
+            int obj_idx = selection.get_object_idx();
+            recalculate_stack_geometry(plater, obj_idx, relative_scale);
+        }
     }
 }
 

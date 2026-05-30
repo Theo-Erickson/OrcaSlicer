@@ -23,6 +23,8 @@
 #include "slic3r/GUI/Tab.hpp"
 #include "ParamsPanel.hpp"
 #include "MsgDialog.hpp"
+#include "StackObjectsDialog.hpp"
+#include "StackObjectsHandler.hpp"
 #include "wx/utils.h"
 
 namespace Slic3r
@@ -1463,6 +1465,98 @@ void MenuFactory::create_extra_object_menu()
     //append_menu_item_fill_bed(&m_object_menu);
     // Object Clone
     append_menu_item_clone(&m_object_menu);
+    (&m_object_menu)->AppendSeparator();
+    
+    append_menu_item(&m_object_menu, wxID_ANY,
+        _L("Stack Objects (Constants)") + dots,
+        _L("Stack copies of this object vertically with breakaway separators"),
+        [](wxCommandEvent&) {
+            // Get source object for smart defaults
+            const ModelObject* src_obj = nullptr;
+            int obj_idx = plater()->get_selected_object_idx();
+            if (obj_idx >= 0 &&
+                obj_idx < (int)plater()->model().objects.size())
+                src_obj = plater()->model().objects[obj_idx];
+
+            ///StackObjectsDialog dlg(plater(), src_obj);
+            ///if (dlg.ShowModal() == wxID_OK) {
+                stack_objects(
+                    plater(),
+                    2, //dlg.get_copies(),
+                    1, //dlg.get_interface_layers(),
+                    2,
+                    1.1, //(float)dlg.get_separator_to_object_size_ratio(),
+                    1.5, //(float)dlg.get_first_separator_size_ratio(),
+                    true,
+                    false, //dlg.get_support_objects(),
+                    SeparatorType::OBJECT_SILHOUETTE //dlg.get_separator_type()
+                );
+            ///}
+        }
+        , "", nullptr,
+        []() {
+            return plater()->get_selection().is_single_full_object() ||
+                   plater()->get_selection().is_single_full_instance();
+        }, m_parent);
+    
+    append_menu_item(&m_object_menu, wxID_ANY,
+        _L("Stack Objects (defaults)") + dots,
+        _L("Stack copies of this object vertically with breakaway separators"),
+        [](wxCommandEvent&) {
+            // Get source object for smart defaults
+            const ModelObject* src_obj = nullptr;
+            int obj_idx = plater()->get_selected_object_idx();
+            if (obj_idx >= 0 &&
+                obj_idx < (int)plater()->model().objects.size())
+                src_obj = plater()->model().objects[obj_idx];
+
+            ///StackObjectsDialog dlg(plater(), src_obj);
+            ///if (dlg.ShowModal() == wxID_OK) {
+                stack_objects(
+                        plater(),
+                    2 //dlg.get_copies(),
+                );
+            ///}
+        }
+        , "", nullptr,
+        []() {
+            return plater()->get_selection().is_single_full_object() ||
+                   plater()->get_selection().is_single_full_instance();
+        }, m_parent);
+    
+    append_menu_item(&m_object_menu, wxID_ANY,
+        _L("Stack Objects (dialog)") + dots,
+        _L("Stack copies of this object vertically with breakaway separators"),
+        [](wxCommandEvent&) {
+            // Get source object for smart defaults
+            const ModelObject* src_obj = nullptr;
+            int obj_idx = plater()->get_selected_object_idx();
+            if (obj_idx >= 0 &&
+                obj_idx < (int)plater()->model().objects.size())
+                src_obj = plater()->model().objects[obj_idx];
+
+            StackObjectsDialog dlg(plater(), src_obj);
+            if (dlg.ShowModal() == wxID_OK) {
+                stack_objects(
+                    plater(),
+                    dlg.get_copies(),
+                    dlg.get_separator_layers(),
+                    dlg.get_gap_layers(),
+                    dlg.get_separator_to_object_size_ratio(),
+                    dlg.get_first_separator_size_ratio(),
+                    dlg.get_support_objects(),
+                    dlg.get_use_base_separator(),
+                    dlg.get_separator_type()
+                );
+            }
+        }
+        , "", nullptr,
+        []() {
+            return plater()->get_selection().is_single_full_object() ||
+                   plater()->get_selection().is_single_full_instance();
+        }, m_parent);
+    (&m_object_menu)->AppendSeparator();
+
     // Object Repair
     append_menu_item_fix_through_cgal(&m_object_menu);
     // Object Simplify
