@@ -1,0 +1,824 @@
+{
+  "meta": {
+    "schema_version": "1.0.0",
+    "content_type": "slicer_warnings",
+    "source": "OrcaSlicer source (Print.cpp, GCode.cpp, PrintObject.cpp, GUI validation layer)",
+    "source_urls": [
+      "https://github.com/SoftFever/OrcaSlicer",
+      "https://github.com/OrcaSlicer/OrcaSlicer"
+    ],
+    "orcaslicer_version_ref": "2.3.x",
+    "last_updated": "2026-05-01",
+    "entry_count": 55,
+    "notes": "Seed database of OrcaSlicer slicing warnings, errors, and suggestions for the Printer Help System. Message text matches or closely paraphrases the actual strings emitted by the slicer. Some messages include dynamic values (shown as {value}); match against the static prefix."
+  },
+  "categories": [
+    { "id": "geometry",     "label": "Model / Geometry",   "color": "#7c55cc" },
+    { "id": "settings",     "label": "Print Settings",     "color": "#3aaa6e" },
+    { "id": "gcode",        "label": "G-code / Custom",    "color": "#e05a2b" },
+    { "id": "filament",     "label": "Filament",           "color": "#5b8dd9" },
+    { "id": "support",      "label": "Supports",           "color": "#c9a227" },
+    { "id": "multimat",     "label": "Multi-material",     "color": "#2b9ea0" },
+    { "id": "performance",  "label": "Performance",        "color": "#888888" },
+    { "id": "compatibility","label": "Compatibility",      "color": "#d63030" }
+  ],
+  "severity_levels": {
+    "error":      "Slicing failed or G-code was not generated. Must be fixed before printing.",
+    "warning":    "Slicing succeeded but something may cause a print quality issue. Review before printing.",
+    "suggestion": "Informational tip. The slicer noticed a setting that could be improved."
+  },
+  "warnings": [
+
+    {
+      "id": "line-width-too-small",
+      "message_pattern": "Line width is too small",
+      "alt_patterns": ["line width too small", "Line width too small for object"],
+      "name": "Line width too small",
+      "description": "One or more configured line widths (outer wall, inner wall, support, etc.) are smaller than the minimum OrcaSlicer can reliably generate for the selected nozzle size.",
+      "severity": "warning",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Line width set as a very small percentage (e.g. below 60%) of nozzle diameter.",
+        "Nozzle size changed after a preset was saved, making old absolute mm values too small.",
+        "Support line width set too thin in Quality settings."
+      ],
+      "fix_steps": [
+        "Go to Process > Quality and find the line width settings (Outer wall, Inner wall, Support, etc.).",
+        "As a rule of thumb, line widths should be between 75% and 150% of your nozzle diameter.",
+        "For a 0.4mm nozzle, safe values are typically 0.30mm to 0.60mm.",
+        "Reset individual line width settings to default if unsure which one is the problem.",
+        "Click the warning in the slice panel to jump directly to the offending setting."
+      ],
+      "related_settings": ["outer_wall_line_width", "inner_wall_line_width", "support_line_width", "top_surface_line_width"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["line width", "nozzle", "wall", "quality"]
+    },
+
+    {
+      "id": "layer-height-too-large",
+      "message_pattern": "Layer height {value} is larger than nozzle diameter",
+      "alt_patterns": ["layer height is larger than nozzle", "layer height too large"],
+      "name": "Layer height exceeds nozzle diameter",
+      "description": "The configured layer height is greater than the nozzle diameter, which the printer physically cannot achieve reliably.",
+      "severity": "error",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Layer height set in mm to a value larger than the nozzle (e.g. 0.5mm layer with a 0.4mm nozzle).",
+        "Nozzle size changed to a smaller diameter without adjusting layer height."
+      ],
+      "fix_steps": [
+        "Go to Process > Quality > Layer height.",
+        "Set layer height to no more than 75-80% of your nozzle diameter for best results.",
+        "For a 0.4mm nozzle the practical maximum is around 0.32mm.",
+        "Adaptive layer height can also help automatically keep values in range."
+      ],
+      "related_settings": ["layer_height", "initial_layer_print_height"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["layer height", "nozzle", "quality", "settings"]
+    },
+
+    {
+      "id": "small-perimeter-speed-warning",
+      "message_pattern": "Small perimeter speed is too fast",
+      "alt_patterns": ["small perimeter speed"],
+      "name": "Small perimeter speed may be too high",
+      "description": "The small perimeter speed setting is set high enough that it may cause quality issues on small circles, holes, and details.",
+      "severity": "suggestion",
+      "categories": ["settings", "performance"],
+      "likely_causes": [
+        "Small perimeter speed set to 100% of outer wall speed rather than a reduced percentage.",
+        "Outer wall speed is very high and small perimeter is not independently capped."
+      ],
+      "fix_steps": [
+        "Go to Process > Speed > Small perimeter speed.",
+        "Reduce to 25-50% of your outer wall speed, or set an absolute cap of 30-50mm/s.",
+        "Small perimeters (holes, bosses) need lower speed for dimensional accuracy."
+      ],
+      "related_settings": ["small_perimeter_speed", "outer_wall_speed"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Speed-settings",
+      "tags": ["speed", "perimeter", "small features", "quality"]
+    },
+
+    {
+      "id": "gcode-parse-error-variable",
+      "message_pattern": "Failed to generate G-code for invalid custom G-code",
+      "alt_patterns": [
+        "Parsing error at line",
+        "Variable does not exist",
+        "Referencing a vector variable with a negative index",
+        "Not a variable name",
+        "Trying to reference an undefined (nil) element"
+      ],
+      "name": "Custom G-code parsing error",
+      "description": "OrcaSlicer failed to process a custom G-code block because of a variable reference error, syntax mistake, or use of a variable name that no longer exists in the current version.",
+      "severity": "error",
+      "categories": ["gcode"],
+      "likely_causes": [
+        "A variable name from an older OrcaSlicer or BambuStudio version is used (e.g. [output_filename_format] instead of {output_filename_format}).",
+        "A vector variable is accessed without an index, e.g. [first_layer_temperature] instead of [first_layer_temperature_0] or {first_layer_temperature[0]}.",
+        "A variable was renamed or removed in a recent OrcaSlicer update.",
+        "Square bracket syntax used instead of curly brace syntax (OrcaSlicer uses {variable} not [variable]).",
+        "Custom start/end G-code copied from PrusaSlicer or Cura uses incompatible placeholder syntax."
+      ],
+      "fix_steps": [
+        "Read the full error message carefully. It will name the G-code section (e.g. machine_start_gcode) and the line number.",
+        "Open that G-code section in Printer Settings > Machine G-code.",
+        "Check the highlighted line for variable names. OrcaSlicer uses {variable_name} syntax with curly braces.",
+        "For vector variables (filament temperatures, retraction, etc.) add an index: {first_layer_temperature[0]}.",
+        "Compare your G-code against the default profile G-code for your printer to find changed variable names.",
+        "See the OrcaSlicer placeholder reference: https://github.com/SoftFever/OrcaSlicer/wiki/Placeholders"
+      ],
+      "related_settings": ["machine_start_gcode", "machine_end_gcode", "change_filament_gcode", "layer_change_gcode"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Placeholders",
+      "tags": ["gcode", "variable", "parsing", "syntax", "custom gcode", "start gcode", "end gcode"]
+    },
+
+    {
+      "id": "gcode-vector-index",
+      "message_pattern": "Referencing a vector variable with a negative index",
+      "alt_patterns": ["negative index", "vector variable"],
+      "name": "G-code vector variable accessed with negative index",
+      "description": "A vector (array) variable in custom G-code was accessed with an invalid negative index.",
+      "severity": "error",
+      "categories": ["gcode"],
+      "likely_causes": [
+        "Using {variable[-1]} syntax which is not supported in OrcaSlicer's templating system.",
+        "A conditional expression evaluates to a negative number and is used as an index."
+      ],
+      "fix_steps": [
+        "Replace any negative index access with a valid non-negative index (e.g. [0] for the first extruder).",
+        "If you need the last element, you must know the count explicitly rather than using -1.",
+        "Check the offending line number shown in the error message."
+      ],
+      "related_settings": ["machine_start_gcode", "change_filament_gcode"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Placeholders",
+      "tags": ["gcode", "vector", "index", "syntax error"]
+    },
+
+    {
+      "id": "non-manifold-mesh",
+      "message_pattern": "The model has non-manifold edges",
+      "alt_patterns": ["non-manifold", "non manifold edges", "mesh has holes"],
+      "name": "Non-manifold mesh geometry",
+      "description": "The imported model has geometry errors such as holes, reversed normals, self-intersecting faces, or edges shared by more than two faces. This can cause missing walls, incorrect infill, or failed slicing.",
+      "severity": "warning",
+      "categories": ["geometry"],
+      "likely_causes": [
+        "Model exported from CAD software with loose tolerances or overlapping bodies.",
+        "Boolean operations in the modeling software left duplicate faces.",
+        "Downloaded model file is corrupt or was exported incorrectly.",
+        "Mesh was heavily subdivided or decimated by a tool that introduced errors."
+      ],
+      "fix_steps": [
+        "Use the built-in OrcaSlicer mesh repair: right-click the model > Fix model.",
+        "For more control, open the model in Microsoft 3D Builder and save it (auto-repairs on export).",
+        "Use Meshmixer (Analysis > Inspector) or PrusaSlicer's netfabb repair to fix the mesh.",
+        "In your CAD tool, check for overlapping bodies and use proper boolean union before exporting.",
+        "Try importing as STL rather than 3MF if the file format may have introduced errors."
+      ],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Preparing-models",
+      "tags": ["non-manifold", "mesh", "geometry", "repair", "STL", "holes"]
+    },
+
+    {
+      "id": "object-outside-printable-area",
+      "message_pattern": "An object is outside the print volume",
+      "alt_patterns": ["outside print volume", "object outside printable area", "exceeds build volume"],
+      "name": "Object is outside the print volume",
+      "description": "One or more objects (or parts of objects after orientation) extend beyond the printer's printable area.",
+      "severity": "error",
+      "categories": ["geometry"],
+      "likely_causes": [
+        "Model is too large for the selected printer.",
+        "Model was placed or rotated so that it overhangs the bed boundary.",
+        "Wrong printer profile selected for the model being sliced.",
+        "Model scale was increased beyond the bed size."
+      ],
+      "fix_steps": [
+        "Use Arrange (keyboard shortcut A) to automatically place all objects within the build volume.",
+        "Scale the model down if it is too large for the printer.",
+        "Split the model into parts that each fit the bed and print separately.",
+        "Verify the correct printer profile is selected in the top-left dropdown."
+      ],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Preparing-models",
+      "tags": ["print volume", "build plate", "size", "placement", "bed"]
+    },
+
+    {
+      "id": "wipe-tower-too-large",
+      "message_pattern": "Wipe tower is too large",
+      "alt_patterns": ["wipe tower size", "wipe tower exceeds"],
+      "name": "Wipe tower is too large for the build plate",
+      "description": "The configured wipe tower size combined with the models cannot fit within the print volume.",
+      "severity": "warning",
+      "categories": ["multimat", "settings"],
+      "likely_causes": [
+        "Wipe tower width set very large in multi-material settings.",
+        "Models are large and leave insufficient room for the wipe tower.",
+        "Wipe tower position manually set to a location that conflicts with a model."
+      ],
+      "fix_steps": [
+        "Go to Process > Multi-material and reduce the wipe tower width.",
+        "Move the wipe tower to a free corner using the drag handle in the 3D view.",
+        "Reduce the number of filament changes if possible to reduce wipe tower volume requirements.",
+        "Arrange models with Arrange (A) after resizing the tower to let OrcaSlicer find a valid layout."
+      ],
+      "related_settings": ["wipe_tower_width", "wipe_tower_x", "wipe_tower_y"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Multi-material",
+      "tags": ["wipe tower", "multi-material", "AMS", "build plate", "placement"]
+    },
+
+    {
+      "id": "support-threshold-too-steep",
+      "message_pattern": "Support is needed for overhang angle",
+      "alt_patterns": ["overhangs require support", "enable support structures"],
+      "name": "Model has overhangs that need support",
+      "description": "The model has surfaces that exceed the configured overhang threshold angle and will not print reliably without support structures.",
+      "severity": "suggestion",
+      "categories": ["support"],
+      "likely_causes": [
+        "Supports are disabled but the model has steep overhangs.",
+        "Support threshold angle is set too conservatively (too high), missing some overhangs.",
+        "Model orientation creates unnecessary overhangs that could be avoided by rotating."
+      ],
+      "fix_steps": [
+        "Enable support structures in Process > Support.",
+        "Use the Overhang preview in the Preview tab to visualize which surfaces need support.",
+        "Try rotating the model (right-click > Rotate) to minimize overhangs before enabling supports.",
+        "Use Paint-on support (right-click model > Add support enforcers) for targeted support only where needed.",
+        "Tree supports can reduce material use on organic shapes compared to normal supports."
+      ],
+      "related_settings": ["enable_support", "support_threshold_angle", "support_type"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Support-settings",
+      "tags": ["support", "overhang", "overhangs", "print failure", "bridge"]
+    },
+
+    {
+      "id": "bridge-flow-mismatch",
+      "message_pattern": "Bridge flow ratio is too high",
+      "alt_patterns": ["bridge flow"],
+      "name": "Bridge flow ratio may cause sagging",
+      "description": "The bridge flow ratio is set high enough that bridges may sag due to excess extrusion.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Bridge flow set above 1.0 when bridging at high speed.",
+        "Filament profile has incorrect flow ratio and the bridge flow multiplies it further."
+      ],
+      "fix_steps": [
+        "Go to Process > Quality > Bridge flow ratio.",
+        "Set to 0.85-0.95 for most materials. Lowering flow reduces sagging on bridges.",
+        "Ensure bridge speed is also appropriate (typically 20-40mm/s for good bridging).",
+        "Fan speed during bridging should be at maximum to quickly solidify the strands."
+      ],
+      "related_settings": ["bridge_flow", "bridge_speed", "bridge_fan_speed"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["bridge", "flow", "overhang", "sagging", "quality"]
+    },
+
+    {
+      "id": "too-many-walls",
+      "message_pattern": "Too many walls for this object size",
+      "alt_patterns": ["walls overlap", "wall count exceeds model size"],
+      "name": "Wall count too high for the model's dimensions",
+      "description": "The configured number of perimeter walls is so high that they would overlap each other given the model's wall thickness at that section.",
+      "severity": "warning",
+      "categories": ["settings", "geometry"],
+      "likely_causes": [
+        "Model has very thin sections (thin walls, thin pillars) but wall count is high.",
+        "Wall count set to 4+ for a model with internal features thinner than 4x the line width."
+      ],
+      "fix_steps": [
+        "Reduce wall count in Process > Strength, or enable 'Detect thin walls' to let the slicer handle this automatically.",
+        "Enable 'Thin wall detection' so OrcaSlicer automatically reduces walls in tight areas.",
+        "Review the model in the Prepare view: walls shown in different colors indicate detected overlaps."
+      ],
+      "related_settings": ["wall_loops", "detect_thin_wall"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Strength-settings",
+      "tags": ["walls", "perimeters", "thin wall", "overlap", "geometry"]
+    },
+
+    {
+      "id": "infill-overlap-too-high",
+      "message_pattern": "Infill overlap is too large",
+      "alt_patterns": ["infill overlap"],
+      "name": "Infill overlap setting is too high",
+      "description": "The infill overlap percentage is set high enough to cause visual artifacts on the outer surfaces where infill extrusions push through.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Infill overlap set above 30-35% to try to improve adhesion but causing surface bleed-through."
+      ],
+      "fix_steps": [
+        "Go to Process > Strength > Infill overlap.",
+        "Reduce to 10-25% for most materials and infill patterns.",
+        "If adhesion between infill and walls is the goal, try increasing wall count instead."
+      ],
+      "related_settings": ["infill_anchor", "infill_overlap"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Strength-settings",
+      "tags": ["infill", "overlap", "surface quality", "settings"]
+    },
+
+    {
+      "id": "temperature-too-low-for-material",
+      "message_pattern": "Nozzle temperature is set lower than recommended for this filament",
+      "alt_patterns": ["temperature too low", "filament requires higher temperature"],
+      "name": "Nozzle temperature may be too low for filament type",
+      "description": "The configured nozzle temperature is below the recommended minimum for the selected filament material type, which can cause under-extrusion, poor layer adhesion, or clogs.",
+      "severity": "warning",
+      "categories": ["filament", "settings"],
+      "likely_causes": [
+        "Filament profile was duplicated from a lower-temp material (e.g. PLA settings used for PETG).",
+        "Temperature manually reduced too far while trying to reduce stringing.",
+        "Filament vendor spec requires higher temp than the profile default."
+      ],
+      "fix_steps": [
+        "Check the filament packaging or vendor data sheet for the recommended temperature range.",
+        "Go to Filament settings and set nozzle temperature to the recommended range.",
+        "For PLA: 190-220°C, PETG: 230-250°C, ABS: 230-260°C, ASA: 240-260°C, PA: 260-280°C.",
+        "Print a temperature tower to find the optimal temperature for your specific filament roll."
+      ],
+      "related_settings": ["nozzle_temperature", "nozzle_temperature_initial_layer"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Filament-settings",
+      "tags": ["temperature", "nozzle", "filament", "under-extrusion", "adhesion"]
+    },
+
+    {
+      "id": "bed-temperature-mismatch",
+      "message_pattern": "Bed temperature mismatch between filaments",
+      "alt_patterns": ["bed temperature conflict", "filament bed temperature differs"],
+      "name": "Bed temperature conflict between filaments",
+      "description": "In a multi-material print, two or more filaments have significantly different bed temperature requirements, which cannot both be satisfied simultaneously.",
+      "severity": "warning",
+      "categories": ["filament", "multimat"],
+      "likely_causes": [
+        "Printing PLA (60°C bed) with PETG (80-85°C bed) in the same print.",
+        "First layer bed temperature in one filament profile is very different from others."
+      ],
+      "fix_steps": [
+        "Use materials with compatible bed temperatures when combining filaments.",
+        "PLA and PETG can sometimes co-print at ~70°C as a compromise, but test first.",
+        "Set a consistent bed temperature in the filament profiles being combined.",
+        "Consider separating incompatible materials into separate print runs."
+      ],
+      "related_settings": ["bed_temperature", "first_layer_bed_temperature"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Filament-settings",
+      "tags": ["bed temperature", "multi-material", "filament", "compatibility"]
+    },
+
+    {
+      "id": "retraction-too-high",
+      "message_pattern": "Retraction distance is too large",
+      "alt_patterns": ["retraction distance too high", "retraction too long"],
+      "name": "Retraction distance may be too large",
+      "description": "The retraction distance is set higher than recommended for the printer type, which can cause filament grinding, clogs in the hotend, or stringing paradoxically worsening.",
+      "severity": "suggestion",
+      "categories": ["settings", "filament"],
+      "likely_causes": [
+        "Bowden retraction settings applied to a direct drive printer.",
+        "Retraction distance set very high trying to eliminate stringing.",
+        "Settings copied from a printer with a very different extruder design."
+      ],
+      "fix_steps": [
+        "For direct drive extruders (Bambu, Prusa MK4, Voron): keep retraction to 0.4-1.0mm.",
+        "For Bowden extruders (Ender 3, etc.): 3-7mm is typical.",
+        "Excessive retraction causes filament grinding and heat creep in the cold zone.",
+        "Run a retraction calibration tower to find the minimum retraction that eliminates stringing."
+      ],
+      "related_settings": ["retract_length", "retract_speed"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Filament-settings",
+      "tags": ["retraction", "stringing", "clog", "direct drive", "Bowden"]
+    },
+
+    {
+      "id": "first-layer-height-warning",
+      "message_pattern": "First layer height should not be set smaller than the layer height",
+      "alt_patterns": ["first layer height", "initial layer height"],
+      "name": "First layer height is smaller than layer height",
+      "description": "The initial layer height is configured to be thinner than the regular layer height, which is unusual and can cause adhesion problems.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "First layer height accidentally set to a small absolute value rather than a percentage.",
+        "Profile edited without realizing layer height and first layer height are linked."
+      ],
+      "fix_steps": [
+        "Go to Process > Quality > Initial layer height.",
+        "A common good value is 0.2mm or 100-200% of your layer height.",
+        "A slightly thicker first layer (0.2-0.3mm) improves bed adhesion regardless of the rest of the print's layer height."
+      ],
+      "related_settings": ["initial_layer_print_height", "layer_height"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["first layer", "layer height", "bed adhesion", "settings"]
+    },
+
+    {
+      "id": "flow-ratio-out-of-range",
+      "message_pattern": "Flow ratio is outside the recommended range",
+      "alt_patterns": ["flow ratio too high", "flow ratio too low", "extrusion multiplier"],
+      "name": "Flow ratio (extrusion multiplier) is out of recommended range",
+      "description": "The flow ratio is set outside the range of 0.8-1.2, which indicates either the filament profile needs calibration or a setting was changed incorrectly.",
+      "severity": "warning",
+      "categories": ["filament", "settings"],
+      "likely_causes": [
+        "Flow calibration was run but produced an extreme result due to a clog or measurement error.",
+        "Flow ratio set very high trying to fix under-extrusion caused by another problem (clog, temperature).",
+        "Profile copied from another material type with different density characteristics."
+      ],
+      "fix_steps": [
+        "Investigate the root cause of under- or over-extrusion rather than compensating with extreme flow ratios.",
+        "Check for a partial clog: heat the nozzle and manually push filament through to feel resistance.",
+        "Re-run OrcaSlicer's built-in flow calibration from the Calibration menu.",
+        "Flow ratio should be close to 1.0 for a healthy, calibrated printer. Values outside 0.9-1.1 warrant investigation."
+      ],
+      "related_settings": ["filament_flow_ratio"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Calibration",
+      "tags": ["flow", "extrusion multiplier", "calibration", "under-extrusion", "over-extrusion"]
+    },
+
+    {
+      "id": "seam-placement-conflict",
+      "message_pattern": "Seam position could not be placed at the specified location",
+      "alt_patterns": ["seam placement", "could not find seam position"],
+      "name": "Seam position cannot be placed as specified",
+      "description": "The seam placement rule (rear, nearest, sharpest corner, etc.) could not be satisfied for one or more perimeters, often because of model geometry.",
+      "severity": "suggestion",
+      "categories": ["settings", "geometry"],
+      "likely_causes": [
+        "Model geometry has no sharp corners when 'Sharpest corner' is selected.",
+        "Seam painting conflicts with a geometry constraint.",
+        "Very complex model shapes making seam placement unpredictable."
+      ],
+      "fix_steps": [
+        "Switch seam position to 'Aligned' or 'Nearest' for complex organic models.",
+        "Use the seam painting tool (right-click model > Paint-on seam) to manually specify seam zones.",
+        "For visual models, 'Rear' places the seam away from the viewer.",
+        "Accept that on complex models the seam may not always land exactly where specified."
+      ],
+      "related_settings": ["seam_position"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["seam", "quality", "perimeter", "aesthetics"]
+    },
+
+    {
+      "id": "support-too-close-to-model",
+      "message_pattern": "Support interface too close to model",
+      "alt_patterns": ["support touching model", "support interface gap"],
+      "name": "Support interface gap may be too small",
+      "description": "The support-to-model gap (Z distance) is set so small that supports may fuse to the model, making them difficult to remove.",
+      "severity": "suggestion",
+      "categories": ["support", "settings"],
+      "likely_causes": [
+        "Support Z distance set to 0 or a very small value.",
+        "Interface layer settings overriding the Z distance for better surface quality but causing fusion."
+      ],
+      "fix_steps": [
+        "Go to Process > Support > Top Z distance.",
+        "Set to at least 0.1-0.2mm (or 0.5-1x layer height) for easy removal.",
+        "For soluble supports (PVA/HIPS), Z distance can be 0 since they dissolve away.",
+        "Use support interface layers with the interface material set to soluble for easier removal if your setup allows it."
+      ],
+      "related_settings": ["support_top_z_distance", "support_bottom_z_distance", "support_interface_top_layers"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Support-settings",
+      "tags": ["support", "Z distance", "removal", "interface"]
+    },
+
+    {
+      "id": "print-speed-too-high",
+      "message_pattern": "Print speed exceeds the volumetric flow limit",
+      "alt_patterns": ["volumetric speed limit", "max volumetric speed", "flow rate limit exceeded"],
+      "name": "Print speed exceeds volumetric flow limit",
+      "description": "The configured print speed for one or more features would require a volumetric flow rate higher than the hotend can deliver, causing under-extrusion.",
+      "severity": "warning",
+      "categories": ["settings", "performance"],
+      "likely_causes": [
+        "Speed settings increased without accounting for the hotend's maximum volumetric flow rate.",
+        "Max volumetric speed in the filament profile set too high for the hotend type.",
+        "Printing a high-flow material (PA, PC) at high speed with a standard brass nozzle."
+      ],
+      "fix_steps": [
+        "Run OrcaSlicer's Max Flow Rate calibration from the Calibration menu to find your actual limit.",
+        "In the Filament profile, set Max volumetric speed to a tested value.",
+        "Reduce print speed, or upgrade to a high-flow hotend (CHT nozzle, Volcano, Rapido, etc.).",
+        "For Bambu printers, the P1S hot end typically maxes around 20-28mm³/s depending on material."
+      ],
+      "related_settings": ["filament_max_volumetric_speed", "print_speed", "outer_wall_speed", "infill_speed"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Calibration",
+      "tags": ["speed", "volumetric flow", "under-extrusion", "hotend", "calibration"]
+    },
+
+    {
+      "id": "z-hop-with-no-retraction",
+      "message_pattern": "Z-hop is enabled but retraction is disabled",
+      "alt_patterns": ["z hop without retraction", "lift z without retract"],
+      "name": "Z-hop enabled without retraction",
+      "description": "Z-hop is configured to lift the nozzle during travel moves, but retraction is disabled. Without retraction, the nozzle will still ooze and drag filament during the Z-lifted travel.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Retraction disabled to eliminate grinding on flexible filaments, but Z-hop left on.",
+        "Settings copied from a print mode that had retraction and Z-hop enabled together."
+      ],
+      "fix_steps": [
+        "Either enable retraction (recommended for most materials) to pair with Z-hop.",
+        "Or disable Z-hop if retraction is intentionally off (e.g. for flexible/TPU filaments).",
+        "Z-hop alone without retraction generally does not help with stringing."
+      ],
+      "related_settings": ["retract_lift", "retract_length"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Filament-settings",
+      "tags": ["Z-hop", "retraction", "stringing", "travel"]
+    },
+
+    {
+      "id": "ironing-on-non-top-layer",
+      "message_pattern": "Ironing is only applied to top surfaces",
+      "alt_patterns": ["ironing setting"],
+      "name": "Ironing applies to top surfaces only",
+      "description": "Ironing is enabled but the selected surface type or model geometry means few or no top surfaces will receive it.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Model is fully enclosed and has no flat top surface areas.",
+        "Ironing enabled for a vase mode print."
+      ],
+      "fix_steps": [
+        "Check that your model has flat or near-flat top surfaces that would benefit from ironing.",
+        "Ironing works best on horizontal flat surfaces like tabletops, name plates, or mechanical faces.",
+        "For organic shapes, ironing adds print time with minimal visible benefit."
+      ],
+      "related_settings": ["ironing_type", "ironing_speed", "ironing_flow"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["ironing", "top surface", "quality", "finish"]
+    },
+
+    {
+      "id": "sparse-infill-too-low",
+      "message_pattern": "Infill density is too low for the selected infill pattern",
+      "alt_patterns": ["infill density low", "infill percentage too low"],
+      "name": "Infill density may be too low for selected pattern",
+      "description": "Some infill patterns (gyroid, honeycomb, cubic) do not work well at very low densities and may produce sparse or disconnected infill.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Infill density set to 3-8% with a pattern like gyroid that needs higher density to be continuous.",
+        "Optimizing for minimal filament use with a complex infill pattern."
+      ],
+      "fix_steps": [
+        "For gyroid or honeycomb patterns, use at least 10-15% density.",
+        "For very low density (<8%), use rectilinear or grid patterns which stay connected at low densities.",
+        "Use Lightning infill for very low density prints that just need some internal structure."
+      ],
+      "related_settings": ["sparse_infill_density", "sparse_infill_pattern"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Strength-settings",
+      "tags": ["infill", "density", "pattern", "strength", "gyroid"]
+    },
+
+    {
+      "id": "fuzzy-skin-too-fine",
+      "message_pattern": "Fuzzy skin point distance is very small",
+      "alt_patterns": ["fuzzy skin distance", "fuzzy skin setting"],
+      "name": "Fuzzy skin point distance is very small",
+      "description": "The fuzzy skin point distance is set so small it will produce extremely fine noise that increases G-code file size and print time significantly without visible quality benefit.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Fuzzy skin point distance set below 0.3mm trying to maximize texture.",
+        "Default from an experimental preset left in place."
+      ],
+      "fix_steps": [
+        "Go to Process > Others > Fuzzy skin point distance.",
+        "0.4-0.8mm produces a good visible texture without excessive G-code bloat.",
+        "Values below 0.3mm are generally not visible and slow print time."
+      ],
+      "related_settings": ["fuzzy_skin", "fuzzy_skin_point_dist", "fuzzy_skin_thickness"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Others",
+      "tags": ["fuzzy skin", "texture", "quality", "settings"]
+    },
+
+    {
+      "id": "vase-mode-multi-wall",
+      "message_pattern": "Vase mode is enabled with more than one wall",
+      "alt_patterns": ["spiral vase", "vase mode walls"],
+      "name": "Vase mode (spiral) does not support multiple walls",
+      "description": "Spiral vase mode prints a single continuous wall. Setting wall count above 1 has no effect in vase mode.",
+      "severity": "suggestion",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Wall count set globally to 2+ and vase mode enabled separately.",
+        "User expecting a thicker vase wall by increasing wall count."
+      ],
+      "fix_steps": [
+        "To increase vase wall thickness, increase the line width or print speed instead.",
+        "Alternatively disable vase mode and print 2-3 walls normally (but you will see seam lines).",
+        "Vase mode is intentionally limited to one wall for the spiral movement to work correctly."
+      ],
+      "related_settings": ["spiral_mode", "wall_loops", "outer_wall_line_width"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Others",
+      "tags": ["vase mode", "spiral", "wall", "settings"]
+    },
+
+    {
+      "id": "adaptive-layer-height-conflict",
+      "message_pattern": "Adaptive layer height conflicts with variable layer height regions",
+      "alt_patterns": ["adaptive layer", "variable layer height"],
+      "name": "Adaptive layer height and manual variable layer height conflict",
+      "description": "Both adaptive layer height (automatic) and manually painted variable layer height regions are active, which can produce unexpected results.",
+      "severity": "warning",
+      "categories": ["settings"],
+      "likely_causes": [
+        "User manually painted layer height regions then later also enabled adaptive layer height.",
+        "Profile with adaptive layer height enabled imported over a project with manual layer painting."
+      ],
+      "fix_steps": [
+        "Choose one approach: either use adaptive layer height (automatic) OR manual variable layer height painting.",
+        "To clear manual regions, right-click the model > Reset variable layer height.",
+        "To disable adaptive, go to Process > Quality > Adaptive layer height and uncheck it."
+      ],
+      "related_settings": ["adaptive_layer_height", "variable_layer_height"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["adaptive layer height", "variable layer height", "quality", "settings"]
+    },
+
+    {
+      "id": "tree-support-too-large-angle",
+      "message_pattern": "Tree support maximum branch angle is too large",
+      "alt_patterns": ["tree support angle", "branch angle"],
+      "name": "Tree support branch angle is very large",
+      "description": "The maximum branch angle for tree supports is set so high that branches may not be structurally stable and can fall over during printing.",
+      "severity": "suggestion",
+      "categories": ["support", "settings"],
+      "likely_causes": [
+        "Maximum branch angle increased to try to reach difficult areas under the model.",
+        "Experimental settings used without adjusting all related parameters."
+      ],
+      "fix_steps": [
+        "Keep tree support maximum branch angle at or below 60°.",
+        "For reaching difficult geometry, increase the number of branches rather than the angle.",
+        "Use normal (grid) support for extreme overhangs that tree support cannot reach at safe angles."
+      ],
+      "related_settings": ["tree_support_branch_angle", "tree_support_branch_diameter"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Support-settings",
+      "tags": ["tree support", "branch", "angle", "support"]
+    },
+
+    {
+      "id": "no-top-layers",
+      "message_pattern": "Top solid layers is set to 0",
+      "alt_patterns": ["no top layers", "top layers disabled"],
+      "name": "No top solid layers configured",
+      "description": "Top solid layers is set to zero, meaning the print will have no closed top surface and infill will be visible from above.",
+      "severity": "warning",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Setting accidentally set to 0 while editing a profile.",
+        "Intentional for internal structural parts or open-top containers.",
+        "Vase-style open top intended."
+      ],
+      "fix_steps": [
+        "If the open top is unintentional, go to Process > Strength > Top shell layers and set to 3-5.",
+        "For most prints a minimum of 3 top layers is recommended for a closed surface.",
+        "If open top is intentional, this warning can be safely ignored."
+      ],
+      "related_settings": ["top_shell_layers", "top_shell_thickness"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Strength-settings",
+      "tags": ["top layers", "shell", "surface", "settings"]
+    },
+
+    {
+      "id": "extrusion-role-overlap",
+      "message_pattern": "Extrusion width causes role overlaps",
+      "alt_patterns": ["extrusion role overlap", "overlap between extrusion paths"],
+      "name": "Extrusion widths cause path overlaps",
+      "description": "One or more extrusion widths are set wide enough that adjacent paths overlap each other, which can cause over-extrusion and surface defects.",
+      "severity": "warning",
+      "categories": ["settings"],
+      "likely_causes": [
+        "Line widths set to 150%+ of nozzle diameter across multiple features.",
+        "Infill line width set very wide to save time but overlapping walls."
+      ],
+      "fix_steps": [
+        "Review line widths in Process > Quality. Values above 150% of nozzle diameter often cause issues.",
+        "Check infill overlap setting and reduce if infill is bleeding through outer walls.",
+        "For high-flow nozzles (CHT etc.) you can push line widths further, but test first."
+      ],
+      "related_settings": ["outer_wall_line_width", "inner_wall_line_width", "infill_line_width"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["line width", "overlap", "extrusion", "quality"]
+    },
+
+    {
+      "id": "flush-volume-too-low",
+      "message_pattern": "Flush volume is too low for the filament color change",
+      "alt_patterns": ["purge volume too low", "flush volume", "wipe volume"],
+      "name": "Flush/purge volume may be too low for clean color change",
+      "description": "The configured flush volume between filament changes is low enough that color contamination between filaments is likely.",
+      "severity": "suggestion",
+      "categories": ["multimat", "filament"],
+      "likely_causes": [
+        "Flush volume manually reduced too aggressively to save filament.",
+        "Using a dark-to-light color transition without increasing the flush volume."
+      ],
+      "fix_steps": [
+        "Go to Process > Multi-material > Flush volumes.",
+        "Dark to light color transitions require much more purge than light to dark.",
+        "Use OrcaSlicer's flush calibration print to find the minimum volumes for your specific color combinations.",
+        "A general starting point: 100-150mm³ for light-to-dark, 200-400mm³ for dark-to-light."
+      ],
+      "related_settings": ["flush_volumes_matrix", "flush_into_infill", "flush_into_objects"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Multi-material",
+      "tags": ["flush", "purge", "color change", "multi-material", "AMS", "contamination"]
+    },
+
+    {
+      "id": "object-too-thin-to-slice",
+      "message_pattern": "Object is too thin to slice with the current settings",
+      "alt_patterns": ["too thin to slice", "object thinner than nozzle", "cannot generate perimeters"],
+      "name": "Object is too thin to generate perimeters",
+      "description": "Part of the model is thinner than the configured line width, making it impossible to generate any perimeter paths in that region.",
+      "severity": "warning",
+      "categories": ["geometry", "settings"],
+      "likely_causes": [
+        "Model has thin walls or fin features narrower than the nozzle diameter.",
+        "Line width set wider than the model's thin sections.",
+        "Model designed for FDM at a larger nozzle size than currently configured."
+      ],
+      "fix_steps": [
+        "Enable 'Detect thin walls' in Process > Quality to handle thin features automatically.",
+        "Reduce line width to better match the model's thinnest features.",
+        "If possible, modify the model to thicken features to at least 1x the nozzle diameter.",
+        "Consider using a smaller nozzle if the model has many fine details."
+      ],
+      "related_settings": ["detect_thin_wall", "outer_wall_line_width"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Quality-settings",
+      "tags": ["thin wall", "geometry", "perimeter", "nozzle", "model"]
+    },
+
+    {
+      "id": "incompatible-filament-profile",
+      "message_pattern": "The selected filament profile is not compatible with the current printer",
+      "alt_patterns": ["filament not compatible", "filament profile mismatch", "profile not available for printer"],
+      "name": "Filament profile not compatible with selected printer",
+      "description": "The selected filament preset was created for a different printer and may have incompatible temperature ranges, retraction settings, or nozzle assumptions.",
+      "severity": "warning",
+      "categories": ["filament", "compatibility"],
+      "likely_causes": [
+        "Filament profile created for a printer with a different nozzle type (e.g. high-temp vs standard).",
+        "Profile from a community preset pack that targets a different printer family.",
+        "Switching between printer profiles without updating the filament selection."
+      ],
+      "fix_steps": [
+        "In the Filament dropdown, select a profile specifically made for your printer model.",
+        "If none exists, duplicate the closest generic profile and adjust temperatures and retraction for your printer.",
+        "Check the filament profile's 'Compatible printers' setting in Filament Settings > Advanced."
+      ],
+      "related_settings": ["compatible_printers"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Filament-settings",
+      "tags": ["filament", "compatibility", "profile", "printer"]
+    },
+
+    {
+      "id": "modifier-mesh-no-effect",
+      "message_pattern": "Modifier mesh has no effect on this object",
+      "alt_patterns": ["modifier has no effect", "height range modifier"],
+      "name": "Modifier mesh or height range modifier has no effect",
+      "description": "A modifier mesh or height range modifier is applied but does not intersect with any printed object, so it will have no effect on the output.",
+      "severity": "suggestion",
+      "categories": ["geometry"],
+      "likely_causes": [
+        "Modifier mesh positioned outside the model's geometry.",
+        "Height range modifier set to a Z range that the model does not occupy.",
+        "Model moved or rescaled after modifier was placed."
+      ],
+      "fix_steps": [
+        "Select the modifier in the object list and verify its position overlaps the model.",
+        "Use the 3D view to visually confirm the modifier (shown in transparent color) intersects the model.",
+        "Delete and recreate the modifier if the position is difficult to fix."
+      ],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Preparing-models",
+      "tags": ["modifier", "mesh modifier", "height range", "settings"]
+    },
+
+    {
+      "id": "brim-width-on-raft",
+      "message_pattern": "Brim is not compatible with raft",
+      "alt_patterns": ["brim with raft", "brim and raft conflict"],
+      "name": "Brim and raft are both enabled",
+      "description": "Brim and raft serve similar adhesion purposes and should not typically be used together. Using both wastes material and adds removal complexity.",
+      "severity": "suggestion",
+      "categories": ["settings", "support"],
+      "likely_causes": [
+        "Both settings enabled independently in separate sessions.",
+        "Profile has raft enabled and user also added brim thinking it would help."
+      ],
+      "fix_steps": [
+        "Choose either brim OR raft, not both.",
+        "Brim is generally preferred as it is easier to remove and wastes less material.",
+        "Use raft only for severely warping materials (ABS, ASA, Nylon) or very small footprint models."
+      ],
+      "related_settings": ["brim_type", "brim_width", "raft_layers"],
+      "wiki_url": "https://github.com/SoftFever/OrcaSlicer/wiki/Others",
+      "tags": ["brim", "raft", "adhesion", "bed adhesion", "settings"]
+    }
+
+  ]
+}

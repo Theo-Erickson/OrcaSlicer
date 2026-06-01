@@ -1,0 +1,455 @@
+{
+  "meta": {
+    "schema_version": "1.0.0",
+    "content_type": "maintenance",
+    "printer_family": "Bambu Lab P1 Series",
+    "printer_models": ["P1S", "P1P"],
+    "source": "Bambu Lab Wiki P1 Maintenance Recommendations + Bellingham Makerspace Guide",
+    "source_urls": [
+      "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "https://wiki.bambulab.com/en/filament-acc/acc/lubricant-grease-oil",
+      "https://wiki.bambulab.com/en/P1/maintenance/extruder-cleaning-guide",
+      "https://wiki.bellinghammakerspace.org/books/3d-printing/page/bambu-lab-p1-series-printer-maintenance-guide"
+    ],
+    "last_updated": "2026-05-01",
+    "entry_count": 18
+  },
+  "interval_units": ["per_spool", "monthly", "per_hours", "quarterly", "as_needed"],
+  "categories": [
+    { "id": "lubrication",  "label": "Lubrication",        "color": "#c9a227" },
+    { "id": "cleaning",     "label": "Cleaning",           "color": "#3aaa6e" },
+    { "id": "inspection",   "label": "Inspection",         "color": "#5b8dd9" },
+    { "id": "replacement",  "label": "Part Replacement",   "color": "#e05a2b" },
+    { "id": "calibration",  "label": "Calibration",        "color": "#7c55cc" }
+  ],
+  "tasks": [
+    {
+      "id": "x-axis-carbon-rod-clean",
+      "name": "Clean X-axis carbon rods",
+      "summary": "Wipe carbon rods with IPA to remove filament dust and debris.",
+      "category": "cleaning",
+      "interval": "monthly",
+      "interval_note": "Every 5 spools if printing ABS, ASA, or other volatile filaments",
+      "symptoms_if_skipped": ["Increased toolhead resistance on X-axis", "Unusual sounds during movement", "Possible layer shifts over time"],
+      "tools_needed": ["Isopropyl alcohol (IPA) 90%+", "Lint-free cloth or microfiber cloth", "Paper towels"],
+      "consumables": [],
+      "steps": [
+        "Power off the printer and let it cool completely.",
+        "Apply a generous amount of IPA to a clean lint-free cloth or paper towel.",
+        "Gently wipe along the full length of each X-axis carbon rod, removing dust and debris.",
+        "Use a dry cloth to wipe off any remaining IPA.",
+        "Do NOT apply any grease or oil to carbon rods. Grease causes additional buildup and premature wear.",
+        "After cleaning, power on and run a homing cycle to confirm smooth movement."
+      ],
+      "warnings": ["Never use grease or lubricating oil on carbon rods. Use IPA only."],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["carbon rod", "X axis", "cleaning", "IPA", "dust"]
+    },
+
+    {
+      "id": "z-axis-leadscrew-lube",
+      "name": "Lubricate Z-axis lead screws",
+      "summary": "Apply grease to the three Z-axis lead screws to ensure smooth vertical movement.",
+      "category": "lubrication",
+      "interval": "quarterly",
+      "interval_note": "Every 3 months under normal use; more frequently in a high-use environment",
+      "symptoms_if_skipped": ["Z-axis noise or grinding", "Uneven layer height", "Z banding artifacts on prints", "HMS motor errors on Z axis"],
+      "tools_needed": ["Lint-free cloth", "Small brush or cotton swab"],
+      "consumables": ["Lubricating grease (Super Lube 92003, Lucas Oil 10533, or Bambu Lab grease)"],
+      "steps": [
+        "Home the printer so the bed is at the top position.",
+        "Apply a thin coat of lubricating grease to all three lead screws.",
+        "Move the bed to its lowest position using the printer menu.",
+        "Apply another thin coat of grease to the exposed upper sections of the lead screws.",
+        "Home the printer again and repeat the up/down movement 3-5 times to distribute the grease evenly.",
+        "Wipe off any excess grease that builds up near the lead screw nuts with a lint-free cloth."
+      ],
+      "warnings": [
+        "Do not use grease on the belts. Grease on belts causes slipping and layer shifts.",
+        "Do not use grease on X-axis carbon rods."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["lead screw", "Z axis", "grease", "lubrication", "smooth movement"]
+    },
+
+    {
+      "id": "y-axis-rod-lube",
+      "name": "Lubricate Y-axis linear rods and bearings",
+      "summary": "Apply lubricating oil to the Y-axis 8mm linear rods and LMU8 bearings.",
+      "category": "lubrication",
+      "interval": "quarterly",
+      "interval_note": "Every 3 months, or sooner if you hear grinding or unusual noise from the bed movement",
+      "symptoms_if_skipped": ["Grinding or squeaking from bed during Y movement", "Increased resistance when moving bed by hand", "Y-axis motor stall HMS errors"],
+      "tools_needed": ["Lint-free cloth"],
+      "consumables": ["Lubricating oil (Super Lube 52004 or Bambu Lab lubricant oil)"],
+      "steps": [
+        "Power off the printer.",
+        "Apply 1-2 drops of lubricating oil every 5cm along both Y-axis linear rods.",
+        "Avoid over-applying: excess oil attracts dust and drips.",
+        "Move the bed back and forth manually several times to distribute oil into the bearings.",
+        "If you hear clicking or ball noise from a bearing, apply a small amount of grease to the bearing and work it in by sliding the bearing back and forth.",
+        "Wipe off any excess oil from the ends of the rods with a lint-free cloth."
+      ],
+      "warnings": ["Do not use grease on the linear rods if lubricant oil is recommended for your model. Check your specific printer's wiki."],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["Y axis", "linear rod", "bearing", "lubrication", "oil", "LMU8"]
+    },
+
+    {
+      "id": "idler-pulley-lube",
+      "name": "Lubricate idler pulleys",
+      "summary": "Apply a small amount of lubricating oil between the idler flange and plastic holder to prevent squeaking.",
+      "category": "lubrication",
+      "interval": "as_needed",
+      "interval_note": "Only when squeaking noises are present during print head movement. Do not lubricate proactively to avoid dust buildup.",
+      "symptoms_if_skipped": ["Squeaking or squealing during X/Y movement", "Resonance artifacts on print walls"],
+      "tools_needed": ["Cotton swab or small dropper"],
+      "consumables": ["Lubricating oil (Super Lube 52004)"],
+      "steps": [
+        "Identify which idler is making noise by listening carefully during a movement.",
+        "Apply a very small amount of lubricating oil between the idler flange and the plastic holder, both on top and bottom.",
+        "Do NOT apply oil to the belt surface itself.",
+        "Run a few movement cycles and listen to confirm the noise is gone.",
+        "Wipe any excess oil that may have spread to the belt."
+      ],
+      "warnings": [
+        "Only lubricate idlers when squeaking is present. Unnecessary lubrication attracts dust.",
+        "Never apply any lubricant directly to the timing belts."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["idler", "pulley", "squeak", "belt", "lubrication", "noise"]
+    },
+
+    {
+      "id": "extruder-gear-clean",
+      "name": "Clean extruder gear (yellow gear)",
+      "summary": "Remove filament dust from the extruder drive gear to prevent feed issues.",
+      "category": "cleaning",
+      "interval": "per_spool",
+      "interval_note": "Every 5 spools for standard filaments (PLA, PETG). Every 2 spools when printing carbon fiber or abrasive filaments.",
+      "symptoms_if_skipped": ["Filament grinding", "Extruder clicking", "Under-extrusion", "AMS slip errors"],
+      "tools_needed": ["Compressed air can or compressor", "Small stiff brush (toothbrush works)", "Flashlight"],
+      "consumables": [],
+      "steps": [
+        "Heat the nozzle to printing temperature and unload filament completely.",
+        "Power off the printer.",
+        "Use compressed air to blow into the extruder area around the yellow gear to dislodge dust.",
+        "Alternatively, remove the hotend and blow compressed air from underneath the extruder.",
+        "Use a stiff brush to remove any remaining compacted filament dust from the gear teeth.",
+        "If visible dust persists after using compressed air, the extruder may need disassembly for deeper cleaning. See the Extruder Maintenance Guide.",
+        "Reload filament and confirm smooth feeding before printing."
+      ],
+      "warnings": ["Compressed air can push debris deeper if aimed incorrectly. Aim to blow debris outward."],
+      "wiki_url": "https://wiki.bambulab.com/en/P1/maintenance/extruder-cleaning-guide",
+      "tags": ["extruder", "gear", "cleaning", "filament dust", "compressed air", "carbon fiber"]
+    },
+
+    {
+      "id": "hotend-cold-pull",
+      "name": "Cold pull (hotend cleaning)",
+      "summary": "Perform a cold pull to clear residue and debris from inside the nozzle and hotend.",
+      "category": "cleaning",
+      "interval": "as_needed",
+      "interval_note": "When switching filament types (e.g. ABS to PLA), when under-extrusion is suspected, or after a clog",
+      "symptoms_if_skipped": ["Partial clog causing under-extrusion", "Color contamination when switching filaments", "Charred debris in extrusion"],
+      "tools_needed": ["Gloves (heat-resistant recommended)"],
+      "consumables": ["PLA filament (preferred for cold pulls due to its properties)"],
+      "steps": [
+        "Heat the nozzle to the printing temperature of the filament currently loaded (or 200-220°C for PLA).",
+        "Manually push filament through until fresh material comes out cleanly.",
+        "Reduce nozzle temperature to 90-100°C for PLA (or the cold-pull temperature for your filament).",
+        "While the nozzle cools, maintain gentle forward pressure on the filament.",
+        "When the target temperature is reached, firmly and steadily pull the filament straight out.",
+        "Inspect the tip: it should be shaped like the inside of the nozzle and show any debris pulled out.",
+        "Repeat 2-3 times until the pulled tip comes out clean.",
+        "Re-heat to printing temperature and load filament normally before printing."
+      ],
+      "warnings": ["Do not attempt to pull filament when the nozzle is fully cool. This can damage the nozzle or PTFE liner."],
+      "wiki_url": "https://wiki.bambulab.com/en/x1/maintenance/basic-maintenance",
+      "tags": ["cold pull", "nozzle", "clog", "cleaning", "hotend", "filament residue"]
+    },
+
+    {
+      "id": "nozzle-exterior-clean",
+      "name": "Clean nozzle exterior and heater block",
+      "summary": "Wipe filament buildup off the outside of the nozzle and heater block.",
+      "category": "cleaning",
+      "interval": "per_spool",
+      "interval_note": "Every 5 spools for standard filaments; every 2 spools for abrasive or high-temp materials",
+      "symptoms_if_skipped": ["Carbonized filament buildup causing thermal readings to drift", "Blobs at nozzle start", "Burning smell during printing"],
+      "tools_needed": ["Heat-resistant gloves", "Paper towel or brass wire brush"],
+      "consumables": [],
+      "steps": [
+        "Heat the nozzle to printing temperature (around 200-250°C depending on material).",
+        "Put on heat-resistant gloves.",
+        "Carefully wipe the outside of the nozzle and heater block with a paper towel or brass wire brush to remove accumulated burnt filament.",
+        "Check that the silicone sock is present and undamaged. Replace it if it is torn, missing, or heavily degraded.",
+        "Allow to cool before any further inspection."
+      ],
+      "warnings": [
+        "Nozzle temperature can exceed 250°C. Always wear gloves.",
+        "Do not use steel tools that could scratch the nozzle surface or damage the heater block coating."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["nozzle", "heater block", "cleaning", "silicone sock", "buildup"]
+    },
+
+    {
+      "id": "silicone-sock-replace",
+      "name": "Replace hotend silicone sock",
+      "summary": "Replace the silicone sock that insulates the heater block when worn or missing.",
+      "category": "replacement",
+      "interval": "as_needed",
+      "interval_note": "Replace when the sock is torn, missing, or has significant filament ingrained into it",
+      "symptoms_if_skipped": ["Temperature fluctuations at the nozzle", "Filament sticking to heater block", "Increased risk of heater block burns"],
+      "tools_needed": [],
+      "consumables": ["Bambu Lab P1S/P1P silicone sock (or compatible third-party replacement)"],
+      "steps": [
+        "Heat the nozzle to printing temperature to soften any adhered filament on the sock.",
+        "Allow to cool to room temperature.",
+        "Gently peel off the old silicone sock from the heater block.",
+        "Clean any residual filament from the heater block surface.",
+        "Slide the new silicone sock onto the heater block, ensuring all faces are covered.",
+        "Heat the nozzle to confirm the sock seats properly and does not fall off."
+      ],
+      "warnings": ["Remove the sock only when the heater block is at room temperature to avoid burns."],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["silicone sock", "hotend", "heater block", "replacement", "insulation"]
+    },
+
+    {
+      "id": "nozzle-replacement",
+      "name": "Replace nozzle",
+      "summary": "Replace a worn, clogged, or damaged nozzle with a fresh one.",
+      "category": "replacement",
+      "interval": "per_hours",
+      "interval_note": "Brass nozzles: every 3-6 months of regular printing, or sooner with abrasive filaments. Hardened steel: every 6-12 months.",
+      "symptoms_if_skipped": ["Persistent under-extrusion despite cleaning", "Nozzle orifice visibly enlarged or irregular", "Dimensional inaccuracy in prints"],
+      "tools_needed": ["Wrench or nozzle socket for P1S (refer to Bambu guide)", "Heat-resistant gloves"],
+      "consumables": ["Replacement nozzle (0.4mm brass or hardened steel as appropriate)"],
+      "steps": [
+        "Heat the nozzle to 250°C to soften any bonded filament.",
+        "Unload filament completely.",
+        "Put on heat-resistant gloves.",
+        "Use the correct wrench to remove the old nozzle while holding the heater block steady.",
+        "Thread the new nozzle in by hand first, then tighten with the wrench while the block is still hot.",
+        "Do not over-tighten: snug plus a small fraction of a turn is sufficient.",
+        "Allow to cool and perform a test print to verify no leaks around the nozzle."
+      ],
+      "warnings": [
+        "Always change nozzles at temperature to avoid stripping threads.",
+        "Hold the heater block with a second wrench or pliers to avoid twisting the heater wires."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["nozzle", "replacement", "clog", "wear", "abrasive", "hardened steel"]
+    },
+
+    {
+      "id": "ptfe-tube-inspect",
+      "name": "Inspect and replace PTFE tube couplers",
+      "summary": "Check pneumatic PTFE tube fittings for damage and replace if filament cannot seat securely.",
+      "category": "inspection",
+      "interval": "quarterly",
+      "interval_note": "Inspect every 3 months; replace immediately if filament cannot be secured or cannot pass through",
+      "symptoms_if_skipped": ["Filament not feeding smoothly into extruder", "PTFE tube pulling out during retraction", "Unexpected filament jams in the buffer"],
+      "tools_needed": ["Flashlight"],
+      "consumables": ["PTFE tube couplers (pneumatic connectors) for P1 series"],
+      "steps": [
+        "Unload filament and power off the printer.",
+        "Inspect the PTFE tube coupler at the extruder: insert and pull filament by hand to confirm it seats and releases properly.",
+        "Check the coupler at the AMS buffer for the same.",
+        "Look for cracks, deformation, or internal damage by shining a flashlight into the fitting.",
+        "If the tube cannot be secured or filament cannot pass cleanly, the coupler must be replaced.",
+        "Follow the Bambu wiki guide for your specific coupler replacement procedure."
+      ],
+      "warnings": [],
+      "wiki_url": "https://wiki.bambulab.com/en/x1/maintenance/basic-maintenance",
+      "tags": ["PTFE", "coupler", "pneumatic fitting", "tube", "filament feed"]
+    },
+
+    {
+      "id": "air-filter-replace",
+      "name": "Replace activated carbon air filter",
+      "summary": "Replace the internal air filter to maintain VOC and particle filtration (P1S enclosed printer).",
+      "category": "replacement",
+      "interval": "quarterly",
+      "interval_note": "Every 3 months at approximately 8 hours/day of printing; sooner when printing ABS, ASA, or other high-VOC materials",
+      "symptoms_if_skipped": ["Increased fumes during printing", "Reduced effectiveness of enclosure for ABS/ASA"],
+      "tools_needed": [],
+      "consumables": ["Bambu Lab activated carbon air filter for P1S"],
+      "steps": [
+        "Power off the printer.",
+        "Locate the air filter cover on the side of the P1S enclosure.",
+        "Open the cover using the release clip.",
+        "Remove the old filter by pulling it out using the top and bottom handles.",
+        "Insert the new filter and close the cover until it clicks.",
+        "Note the replacement date for future reference."
+      ],
+      "warnings": ["P1P does not have an enclosure air filter. This task applies to P1S only."],
+      "wiki_url": "https://wiki.bambulab.com/en/x1/maintenance/basic-maintenance",
+      "tags": ["air filter", "carbon filter", "VOC", "enclosure", "P1S", "ABS", "fumes"]
+    },
+
+    {
+      "id": "belt-tension-check",
+      "name": "Check and adjust belt tension",
+      "summary": "Verify X and Y belt tension is correct to prevent layer shifting and ringing artifacts.",
+      "category": "inspection",
+      "interval": "monthly",
+      "interval_note": "Check monthly; re-tension if layer shifts or ringing appear",
+      "symptoms_if_skipped": ["Layer shifting during fast movements", "Ringing/ghosting artifacts on print walls", "Belt slipping during acceleration"],
+      "tools_needed": [],
+      "consumables": [],
+      "steps": [
+        "Power off the printer.",
+        "Gently pluck each belt as you would a guitar string. They should emit a consistent, moderately high-pitched tone.",
+        "A belt that is too loose will sound low and feel slack; a belt that is too tight may feel stiff to move and can stress the motors.",
+        "If adjustment is needed, locate the belt tensioner for the axis and turn it clockwise to tighten.",
+        "After adjusting, run a vibration compensation calibration from the printer menu.",
+        "Print a ringing test object (available in OrcaSlicer calibrations) to verify the fix."
+      ],
+      "warnings": ["Do not over-tighten. Excessive belt tension stresses motor bearings and reduces motor lifespan."],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["belt", "tension", "X axis", "Y axis", "layer shift", "ringing", "ghosting"]
+    },
+
+    {
+      "id": "camera-lens-clean",
+      "name": "Clean internal camera lens",
+      "summary": "Wipe the internal camera lens to maintain first-layer inspection and timelapse clarity.",
+      "category": "cleaning",
+      "interval": "monthly",
+      "interval_note": "Monthly, or when camera feed appears blurry or cloudy",
+      "symptoms_if_skipped": ["Blurry or hazy camera feed", "First-layer inspection failures or timeouts", "Poor timelapse quality"],
+      "tools_needed": ["Microfiber cloth or lens cleaning wipe"],
+      "consumables": [],
+      "steps": [
+        "Power off the printer.",
+        "Locate the internal camera (top front of the enclosure on P1S).",
+        "Gently wipe the lens surface with a dry microfiber cloth or lens cleaning wipe.",
+        "Do not use liquids or abrasive cloths.",
+        "Power on and check the camera feed from Bambu Handy or OrcaSlicer to confirm clarity."
+      ],
+      "warnings": [],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["camera", "lens", "cleaning", "first layer inspection", "timelapse"]
+    },
+
+    {
+      "id": "full-calibration",
+      "name": "Full calibration run",
+      "summary": "Run a complete calibration sequence after maintenance or when print quality degrades.",
+      "category": "calibration",
+      "interval": "monthly",
+      "interval_note": "After any maintenance that touches motion components, or when print quality unexpectedly changes",
+      "symptoms_if_skipped": ["Inconsistent first layer", "Z offset drift", "Vibration/ringing artifacts"],
+      "tools_needed": [],
+      "consumables": ["Small amount of filament for calibration prints"],
+      "steps": [
+        "On the printer screen, navigate to Settings > Calibration.",
+        "Run 'Calibration All' which performs vibration compensation, motor noise cancellation, and auto bed leveling.",
+        "Alternatively run individual calibrations: Bed Leveling, then Vibration Compensation.",
+        "After calibration, print a small test object to confirm results.",
+        "If using OrcaSlicer's calibration tools, run flow rate and pressure advance calibration for any new filament spools."
+      ],
+      "warnings": [],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["calibration", "bed leveling", "vibration compensation", "flow", "pressure advance"]
+    },
+
+    {
+      "id": "ams-channel-clean",
+      "name": "Clean AMS filament channels",
+      "summary": "Remove filament fragments and dust from AMS slots and the buffer tube.",
+      "category": "cleaning",
+      "interval": "monthly",
+      "interval_note": "Monthly, or after any clog or broken filament event inside the AMS",
+      "symptoms_if_skipped": ["AMS load/unload failures", "Filament jams in the buffer", "RFID read failures"],
+      "tools_needed": ["Compressed air can", "Tweezers", "Flashlight"],
+      "consumables": [],
+      "steps": [
+        "Remove all spools from the AMS.",
+        "Shine a flashlight into each slot to look for filament fragments.",
+        "Use tweezers to remove any visible pieces.",
+        "Use compressed air to blow through each channel from the spool end outward.",
+        "Inspect the buffer tube for any debris.",
+        "Reload spools and test loading/unloading each slot before printing."
+      ],
+      "warnings": ["Do not use metal objects that could scratch the RFID sensors or filament guides."],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["AMS", "cleaning", "filament channel", "buffer", "fragments", "RFID"]
+    },
+
+    {
+      "id": "ams-cutter-inspect",
+      "name": "Inspect AMS filament cutter",
+      "summary": "Check the AMS cutter blade for dullness or debris that could cause cut failures.",
+      "category": "inspection",
+      "interval": "quarterly",
+      "interval_note": "Every 3 months, or when cutter HMS errors appear",
+      "symptoms_if_skipped": ["HMS 0701-8001 and 0701-8002 cutter errors", "Filament not cutting cleanly during tool changes", "Tool change failures"],
+      "tools_needed": ["Flashlight"],
+      "consumables": ["AMS cutter blade replacement (when worn)"],
+      "steps": [
+        "Power off the printer.",
+        "Open the AMS side cover following the AMS maintenance guide.",
+        "Visually inspect the cutter blade for debris, filament chips, or visible dullness.",
+        "Clear any debris carefully with tweezers.",
+        "Manually actuate the cutter handle to confirm it moves freely through its full range.",
+        "If the blade is visibly worn or the cutter consistently fails, order a replacement blade assembly.",
+        "Close the cover and run a test print with a tool change to verify operation."
+      ],
+      "warnings": ["The cutter blade is sharp. Handle with care and follow AMS safety notes."],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["AMS", "cutter", "blade", "tool change", "inspection"]
+    },
+
+    {
+      "id": "fans-dust-clear",
+      "name": "Clear dust from toolhead fans",
+      "summary": "Remove dust accumulation from part cooling and hotend fans to maintain airflow.",
+      "category": "cleaning",
+      "interval": "quarterly",
+      "interval_note": "Every 3 months, or when fan noise changes or HMS fan speed warnings appear",
+      "symptoms_if_skipped": ["HMS 0300-0300-0001-0001 (cooling fan slow)", "HMS 0300-0400-0002-0001 (hotend fan slow)", "Overheating during printing", "Audible fan imbalance"],
+      "tools_needed": ["Compressed air can", "Tweezers", "Flashlight"],
+      "consumables": [],
+      "steps": [
+        "Power off the printer and disconnect power.",
+        "Use compressed air to blow through the fan grille of the part cooling fan and hotend fan.",
+        "Use tweezers to carefully remove any large filament strands caught in the fan blades.",
+        "Spin each fan blade by hand to confirm it rotates freely.",
+        "Power on, heat the nozzle briefly, and listen to confirm both fans spin without noise or wobble."
+      ],
+      "warnings": ["Disconnect power before working near the fans. Fan blades can cause cuts if spinning."],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["fan", "cooling", "dust", "toolhead", "hotend fan", "part cooling fan"]
+    },
+
+    {
+      "id": "print-surface-clean",
+      "name": "Clean build plate surface",
+      "summary": "Clean the PEI or textured plate with IPA to restore adhesion.",
+      "category": "cleaning",
+      "interval": "per_spool",
+      "interval_note": "Before every few prints, or whenever adhesion unexpectedly decreases",
+      "symptoms_if_skipped": ["Parts not sticking to the bed", "Inconsistent first layer adhesion", "Partial detachment during printing"],
+      "tools_needed": ["Clean paper towels or lint-free cloth"],
+      "consumables": ["Isopropyl alcohol (IPA) 90%+"],
+      "steps": [
+        "Allow the bed to cool to room temperature.",
+        "Spray or pour a small amount of IPA onto the build plate.",
+        "Wipe with a clean paper towel in one direction to lift oils and residue.",
+        "Repeat with a fresh paper towel until no residue is visible.",
+        "Allow the IPA to fully evaporate before printing.",
+        "Do not touch the cleaned surface with bare hands; oils from skin will reduce adhesion."
+      ],
+      "warnings": [
+        "Do not use acetone on PEI plates. Acetone damages the PEI coating.",
+        "For stubborn residue (glue stick, hairspray), warm water and a small amount of dish soap can be used, followed by an IPA wipe."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/p1/maintenance/p1p-maintenance",
+      "tags": ["build plate", "PEI", "cleaning", "IPA", "adhesion", "bed surface"]
+    }
+  ]
+}

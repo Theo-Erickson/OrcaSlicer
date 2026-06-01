@@ -1,0 +1,633 @@
+{
+  "meta": {
+    "schema_version": "1.0.0",
+    "content_type": "general_troubleshooting",
+    "scope": "FDM 3D printing, printer-agnostic",
+    "source": "OrcaSlicer wiki, Obico calibration guide, general FDM troubleshooting community knowledge",
+    "source_urls": [
+      "https://github.com/SoftFever/OrcaSlicer/wiki",
+      "https://www.obico.io/blog/3d-print-troubleshooting-guide/",
+      "https://www.obico.io/blog/orcaslicer-comprehensive-calibration-guide/"
+    ],
+    "last_updated": "2026-05-01",
+    "entry_count": 22,
+    "notes": "Printer-agnostic general troubleshooting guide. Covers common print quality issues, filament issues, and OrcaSlicer-specific tips. Intended to complement the printer-specific HMS and maintenance databases."
+  },
+  "categories": [
+    { "id": "adhesion",      "label": "Bed Adhesion",       "color": "#e05a2b" },
+    { "id": "extrusion",     "label": "Extrusion",          "color": "#5b8dd9" },
+    { "id": "quality",       "label": "Print Quality",      "color": "#7c55cc" },
+    { "id": "filament",      "label": "Filament",           "color": "#c9a227" },
+    { "id": "mechanical",    "label": "Mechanical",         "color": "#888888" },
+    { "id": "calibration",   "label": "Calibration",        "color": "#3aaa6e" },
+    { "id": "software",      "label": "Software / Slicer",  "color": "#2b9ea0" }
+  ],
+  "issues": [
+    {
+      "id": "stringing",
+      "name": "Stringing / hairy prints",
+      "summary": "Thin threads of filament between separate parts of the print.",
+      "categories": ["quality", "extrusion"],
+      "symptoms": [
+        "Hair-like threads between pillars or separate sections",
+        "Cobweb appearance on prints with multiple towers",
+        "Blobs where the nozzle restarts after a travel move"
+      ],
+      "likely_causes": [
+        "Nozzle temperature too high, lowering filament viscosity and encouraging ooze",
+        "Retraction distance or speed insufficient for the extruder type",
+        "Travel speed too slow, allowing more time for ooze",
+        "Combing/avoid-crossing-perimeters disabled",
+        "Wet or degraded filament"
+      ],
+      "fix_steps": [
+        "Reduce nozzle temperature by 5°C increments and test. Start at the lower end of the filament's recommended range.",
+        "For direct drive printers (Bambu, Voron): retraction 0.4-1.0mm at 30-45mm/s.",
+        "For Bowden printers (Ender 3, etc.): retraction 4-7mm at 40-60mm/s.",
+        "Enable 'Combing' or 'Avoid crossing perimeters' in Process > Travel to minimize open-air travels.",
+        "Increase travel speed so the nozzle crosses gaps faster.",
+        "Dry your filament if stringing is sudden or much worse than before.",
+        "Enable Z-hop paired with retraction to lift the nozzle above printed areas during travel.",
+        "Run OrcaSlicer's retraction calibration from the Calibration menu."
+      ],
+      "orca_settings": ["retract_length", "retract_speed", "travel_speed", "temperature", "enable_travel_jerk"],
+      "tags": ["stringing", "hairy", "ooze", "retraction", "travel", "temperature"]
+    },
+
+    {
+      "id": "bed-adhesion-failure",
+      "name": "Print not sticking to the bed",
+      "summary": "First layer does not adhere, or print detaches during printing.",
+      "categories": ["adhesion"],
+      "symptoms": [
+        "First layer peels up or slides while printing",
+        "Print detaches mid-print",
+        "First layer visually appears to not be pressed onto the bed",
+        "Corners lift during printing"
+      ],
+      "likely_causes": [
+        "Dirty build plate with oils or residue reducing adhesion",
+        "Z offset too high, leaving a gap between nozzle and bed",
+        "Bed temperature too low for the material",
+        "Incorrect build plate type for the material",
+        "First layer speed too fast"
+      ],
+      "fix_steps": [
+        "Clean the build plate thoroughly with IPA (isopropyl alcohol 90%+) and a clean paper towel.",
+        "Do not touch the cleaned surface with bare hands.",
+        "Check and adjust Z offset: the first layer should be slightly squished, not floating.",
+        "Increase bed temperature: PLA 55-65°C, PETG 70-85°C, ABS/ASA 90-110°C.",
+        "Reduce first layer print speed to 20-30mm/s.",
+        "Use the correct plate for the material: smooth PEI for PLA, textured PEI for PETG, engineering plate for ABS/Nylon.",
+        "Add a brim in OrcaSlicer for models with small footprints.",
+        "Run a bed leveling/mesh calibration."
+      ],
+      "orca_settings": ["initial_layer_print_height", "initial_layer_speed", "bed_temperature", "brim_type", "brim_width"],
+      "tags": ["bed adhesion", "first layer", "Z offset", "build plate", "cleaning", "brim"]
+    },
+
+    {
+      "id": "warping",
+      "name": "Warping / corners lifting",
+      "summary": "Print corners or edges curl up off the bed during or after printing.",
+      "categories": ["adhesion", "quality"],
+      "symptoms": [
+        "Corners of the print visibly lifting off the bed",
+        "Print detaches during printing specifically at edges",
+        "Completed print is curved or bowed on the bottom"
+      ],
+      "likely_causes": [
+        "Material-specific thermal contraction (especially ABS, ASA, Nylon, PC)",
+        "Insufficient bed temperature",
+        "Ambient temperature too cold or drafts cooling the print",
+        "No enclosure for high-warp materials",
+        "Cooling fan too aggressive on early layers"
+      ],
+      "fix_steps": [
+        "Use an enclosure (or close the P1S door) for ABS, ASA, Nylon, and PC.",
+        "Increase bed temperature to the upper end of the material's range.",
+        "Turn off or reduce the part cooling fan for the first 3-5 layers.",
+        "Add a brim of 5-10mm width to anchor the perimeter to the bed.",
+        "Apply a thin layer of PVA glue stick to the build plate for additional grip.",
+        "Avoid placing very large flat prints near the edges of the bed.",
+        "Reduce print speed for perimeters to allow better layer bonding."
+      ],
+      "orca_settings": ["brim_type", "brim_width", "bed_temperature", "fan_cooling_enabled", "slow_down_layers"],
+      "tags": ["warping", "corners", "ABS", "ASA", "enclosure", "bed temperature", "brim"]
+    },
+
+    {
+      "id": "under-extrusion",
+      "name": "Under-extrusion / gaps in walls",
+      "summary": "Printer is not extruding enough filament, causing gaps, weak layers, or missing sections.",
+      "categories": ["extrusion"],
+      "symptoms": [
+        "Gaps between perimeter walls or infill",
+        "Layers look thin or incomplete",
+        "Extruder motor makes clicking sounds",
+        "Weak or brittle prints that break easily"
+      ],
+      "likely_causes": [
+        "Partial or full nozzle clog",
+        "Nozzle temperature too low for the filament",
+        "Print speed exceeding the hotend's maximum volumetric flow rate",
+        "Filament grinding from extruder gear (filament surface stripped)",
+        "Filament diameter inconsistency or wet filament",
+        "Flow ratio calibrated too low"
+      ],
+      "fix_steps": [
+        "Check for a clog: heat the nozzle and manually push filament through. Resistance or no flow indicates a clog.",
+        "Perform a cold pull to clear partial blockage.",
+        "Increase nozzle temperature by 5-10°C.",
+        "Reduce print speed, starting with infill and perimeter speeds.",
+        "Clean the extruder gear of filament dust buildup.",
+        "Run OrcaSlicer's Max Volumetric Speed calibration to find your actual limit.",
+        "Run flow calibration and adjust flow ratio in the filament profile.",
+        "Dry the filament if all else fails."
+      ],
+      "orca_settings": ["filament_flow_ratio", "nozzle_temperature", "print_speed", "filament_max_volumetric_speed"],
+      "tags": ["under-extrusion", "clog", "gaps", "flow", "temperature", "extruder", "clicking"]
+    },
+
+    {
+      "id": "over-extrusion",
+      "name": "Over-extrusion / blobs and rough surfaces",
+      "summary": "Printer is extruding too much filament, causing blobs, rough surfaces, and dimensional inaccuracy.",
+      "categories": ["extrusion"],
+      "symptoms": [
+        "Rough or bumpy outer surface",
+        "Blobs or zits on the surface",
+        "Parts are dimensionally larger than expected",
+        "Layers not bonding properly due to excessive material"
+      ],
+      "likely_causes": [
+        "Flow ratio set too high",
+        "Nozzle temperature too high causing excessive ooze",
+        "E-steps or rotation distance miscalibrated in firmware",
+        "Filament diameter in profile does not match actual filament"
+      ],
+      "fix_steps": [
+        "Run OrcaSlicer's flow calibration from the Calibration menu.",
+        "Reduce flow ratio in the filament profile by 2-5% increments and test.",
+        "Reduce nozzle temperature slightly.",
+        "Measure your filament diameter with calipers at several points and update the filament profile if it differs from 1.75mm.",
+        "Check that pressure advance (PA) is calibrated; uncalibrated PA can cause corner blobs."
+      ],
+      "orca_settings": ["filament_flow_ratio", "nozzle_temperature", "filament_diameter"],
+      "tags": ["over-extrusion", "blobs", "zits", "flow", "temperature", "pressure advance"]
+    },
+
+    {
+      "id": "layer-shifting",
+      "name": "Layer shifting",
+      "summary": "Layers are offset from each other, causing a staircase or leaning appearance.",
+      "categories": ["mechanical"],
+      "symptoms": [
+        "Print suddenly shifts to one side partway up",
+        "Staircase pattern on print walls",
+        "Print looks like it leaned during printing"
+      ],
+      "likely_causes": [
+        "Belt too loose on X or Y axis",
+        "Print speed or acceleration too high",
+        "Obstruction in the motion path (fallen parts, clips, cable snag)",
+        "Stepper motor driver overheating",
+        "External vibration from the surface the printer is on"
+      ],
+      "fix_steps": [
+        "Check belt tension on both X and Y axes. Pluck the belt; it should have a consistent, firm tone.",
+        "Check for any physical obstruction: fallen parts, cable snag, clips on the motion path.",
+        "Reduce print speed and acceleration in Process > Speed.",
+        "Run vibration compensation calibration on the printer.",
+        "Place the printer on a stable, level surface away from vibration sources.",
+        "Check that the printer has adequate cooling and ventilation around the electronics."
+      ],
+      "orca_settings": ["print_speed", "travel_speed"],
+      "tags": ["layer shift", "belt", "acceleration", "obstruction", "mechanical"]
+    },
+
+    {
+      "id": "layer-delamination",
+      "name": "Layer delamination / poor layer adhesion",
+      "summary": "Layers separate or crack apart, especially on tall or stressed prints.",
+      "categories": ["quality", "extrusion"],
+      "symptoms": [
+        "Layers visibly separating on the finished print",
+        "Print cracks easily along layer lines when bent",
+        "Horizontal cracks visible on tall prints"
+      ],
+      "likely_causes": [
+        "Nozzle temperature too low for adequate layer bonding",
+        "Layer height too large relative to the line width",
+        "Print speed too fast, not allowing proper bonding time",
+        "Cooling too aggressive, cooling layers before the next layer bonds",
+        "Wet or degraded filament"
+      ],
+      "fix_steps": [
+        "Increase nozzle temperature by 5-10°C.",
+        "Reduce layer height (as a rule, no more than 75% of nozzle diameter).",
+        "Reduce print speed, especially for perimeters.",
+        "Reduce cooling fan speed or add minimum layer time to slow cooling.",
+        "Dry the filament before printing.",
+        "For PETG specifically: reduce cooling fan below 50% to improve layer bonding."
+      ],
+      "orca_settings": ["nozzle_temperature", "layer_height", "print_speed", "fan_cooling_enabled"],
+      "tags": ["layer adhesion", "delamination", "cracking", "temperature", "cooling", "speed"]
+    },
+
+    {
+      "id": "ringing-ghosting",
+      "name": "Ringing / ghosting on print walls",
+      "summary": "Ripple or wave patterns on print walls, especially after corners or sharp direction changes.",
+      "categories": ["quality", "mechanical"],
+      "symptoms": [
+        "Wavy ripple pattern on outer walls near corners",
+        "Ghosting of sharp features appearing downstream on the wall"
+      ],
+      "likely_causes": [
+        "Print speed or acceleration too high causing resonance",
+        "Belt tension too low",
+        "Printer placed on an unstable or vibrating surface",
+        "Loose toolhead or mechanical play"
+      ],
+      "fix_steps": [
+        "Run vibration compensation (resonance) calibration on the printer.",
+        "Reduce outer wall print speed.",
+        "Check belt tension on X and Y axes.",
+        "Place the printer on a stable, rigid surface. Anti-vibration feet can help.",
+        "In OrcaSlicer, enable or tune Pressure Advance to reduce corner blobs that can amplify ringing.",
+        "If using Klipper: tune input shaping with an ADXL345 accelerometer."
+      ],
+      "orca_settings": ["outer_wall_speed", "travel_speed"],
+      "tags": ["ringing", "ghosting", "resonance", "belt", "vibration", "acceleration", "input shaping"]
+    },
+
+    {
+      "id": "elephant-foot",
+      "name": "Elephant's foot (first layer too wide)",
+      "summary": "The first few layers are wider than the rest of the print, creating a flared base.",
+      "categories": ["quality", "adhesion"],
+      "symptoms": [
+        "Base of print is wider than the model",
+        "First layers visibly bulge outward",
+        "Tight-tolerance parts do not fit because the base is oversized"
+      ],
+      "likely_causes": [
+        "Z offset too low, squishing the first layer excessively",
+        "First layer flow ratio too high",
+        "Bed temperature too high for the material (especially PLA)"
+      ],
+      "fix_steps": [
+        "Increase Z offset slightly (raise the nozzle) so the first layer is less squished.",
+        "Reduce first layer flow ratio in Process > Quality (try 95%).",
+        "Reduce bed temperature by 5°C.",
+        "The first layer should be slightly squished for adhesion but not flattened excessively.",
+        "Use OrcaSlicer's Elephant Foot Compensation setting in Process > Others."
+      ],
+      "orca_settings": ["initial_layer_print_height", "elefant_foot_compensation", "bed_temperature"],
+      "tags": ["elephant foot", "first layer", "Z offset", "base", "dimensional accuracy"]
+    },
+
+    {
+      "id": "wet-filament",
+      "name": "Wet / moisture-absorbed filament",
+      "summary": "Filament has absorbed moisture from the air, causing print quality issues.",
+      "categories": ["filament"],
+      "symptoms": [
+        "Popping, crackling, or hissing sounds during printing",
+        "Rough, bubbly, or foamy surface texture",
+        "Stringing suddenly much worse than usual",
+        "Steam or vapor visible from the nozzle area",
+        "Inconsistent extrusion and flow"
+      ],
+      "likely_causes": [
+        "Filament stored in open air without a sealed container or desiccant",
+        "High humidity environment",
+        "Spool opened and used over many months"
+      ],
+      "fix_steps": [
+        "Dry the filament in a filament dryer or food dehydrator at the appropriate temperature.",
+        "PLA: 45-55°C for 4-6 hours. PETG: 65°C for 4-6 hours. ABS/ASA: 70°C for 4-6 hours. Nylon: 80°C for 8-12 hours.",
+        "Do not use a standard kitchen oven unless it can hold low temperatures accurately.",
+        "Store filament in a sealed bag or container with fresh silica gel desiccant when not in use.",
+        "Consider a dry box or active dry storage solution for hygroscopic materials (Nylon, TPU, PVA)."
+      ],
+      "orca_settings": [],
+      "tags": ["wet filament", "moisture", "crackling", "drying", "storage", "humidity", "Nylon", "PETG"]
+    },
+
+    {
+      "id": "clog-full",
+      "name": "Full nozzle clog",
+      "summary": "No filament exits the nozzle despite the extruder running.",
+      "categories": ["extrusion", "mechanical"],
+      "symptoms": [
+        "No filament comes out during printing",
+        "Extruder motor clicks or skips consistently",
+        "Filament grinds away at the extruder gear",
+        "Manually pushing filament at temperature meets solid resistance"
+      ],
+      "likely_causes": [
+        "Carbonized filament blocking the nozzle orifice",
+        "Foreign debris in the hotend",
+        "Printing too cold allowing filament to solidify in the melt zone",
+        "Heat creep: filament softening and jamming in the cold zone above the heatbreak"
+      ],
+      "fix_steps": [
+        "Heat the nozzle to 20-30°C above the normal printing temperature and try to push filament through manually.",
+        "Perform multiple cold pulls with PLA to draw out the blockage.",
+        "Use an acupuncture needle or nozzle cleaning needle (0.3mm) to clear the orifice while at temperature.",
+        "If the clog is in the cold zone (heat creep): ensure the hotend fan is running and check for obstructions.",
+        "If cold pulls and needle cleaning fail, replace the nozzle.",
+        "After clearing, check the hotend fan is running during warm-up to prevent heat creep recurrence."
+      ],
+      "orca_settings": [],
+      "tags": ["clog", "nozzle", "blockage", "cold pull", "heat creep", "extruder clicking"]
+    },
+
+    {
+      "id": "inconsistent-extrusion",
+      "name": "Inconsistent extrusion / variable line width",
+      "summary": "Extrusion varies in width or thickness along a single perimeter or layer.",
+      "categories": ["extrusion", "filament"],
+      "symptoms": [
+        "Wall lines that vary in width or look bumpy",
+        "Inconsistent surface texture that changes mid-print",
+        "Pressure advance calibration patterns that vary between segments"
+      ],
+      "likely_causes": [
+        "Filament diameter inconsistency (measure with calipers at multiple points)",
+        "Partial clog creating intermittent resistance",
+        "Extruder gear slip or wear",
+        "PTFE tube damage causing friction in the filament path"
+      ],
+      "fix_steps": [
+        "Measure filament diameter at 5+ points with calipers. More than 0.05mm variation is significant.",
+        "Check the extruder gear for wear or packed filament dust.",
+        "Inspect the PTFE tube from extruder to nozzle for kinks or internal damage.",
+        "Perform a cold pull to check for partial blockage.",
+        "Try a different spool to rule out filament quality as the cause."
+      ],
+      "orca_settings": ["filament_diameter"],
+      "tags": ["inconsistent extrusion", "filament diameter", "PTFE", "extruder", "variable width"]
+    },
+
+    {
+      "id": "top-surface-quality",
+      "name": "Poor top surface quality",
+      "summary": "Top surfaces have ridges, gaps, bumps, or an uneven texture.",
+      "categories": ["quality"],
+      "symptoms": [
+        "Ridges or lines visible on flat top surfaces",
+        "Gaps between top layer lines",
+        "Pillowing: raised bumps or dimples on the top surface"
+      ],
+      "likely_causes": [
+        "Too few top solid layers (pillowing due to infill showing through)",
+        "Top surface speed too fast",
+        "Insufficient cooling causing top layers to sag",
+        "Under-extrusion on top layers",
+        "Ironing not enabled for surfaces that need it"
+      ],
+      "fix_steps": [
+        "Increase top solid layers to at least 4-5.",
+        "Reduce top surface speed in Process > Speed.",
+        "Increase cooling fan speed for top layers.",
+        "Enable ironing in Process > Quality for flat top surfaces.",
+        "If pillowing: increase infill density or add more top layers so infill does not show through.",
+        "Ensure flow is calibrated correctly."
+      ],
+      "orca_settings": ["top_shell_layers", "top_surface_speed", "ironing_type", "sparse_infill_density"],
+      "tags": ["top surface", "pillowing", "ironing", "quality", "top layers", "finish"]
+    },
+
+    {
+      "id": "support-removal-hard",
+      "name": "Supports hard to remove / fusing to model",
+      "summary": "Support structures are difficult to remove without damaging the model.",
+      "categories": ["quality"],
+      "symptoms": [
+        "Support breaks the model surface during removal",
+        "Support is bonded to the model and cannot be pulled away",
+        "Surface under the support is rough or marked after removal"
+      ],
+      "likely_causes": [
+        "Support Z distance too small or set to 0",
+        "No support interface layers configured",
+        "Support interface material same as model material (both bonding strongly)"
+      ],
+      "fix_steps": [
+        "Increase support top Z distance to 0.15-0.25mm in Process > Support.",
+        "Enable support interface layers (2-3 layers) to create a cleaner break surface.",
+        "Reduce support interface flow ratio to 90% for easier removal.",
+        "Use a different interface material if your printer supports multi-material (soluble PVA or HIPS).",
+        "For tree supports, they typically remove more easily than grid supports on organic shapes.",
+        "Score the support junction with a craft knife before pulling to reduce tearing."
+      ],
+      "orca_settings": ["support_top_z_distance", "support_interface_top_layers", "support_type"],
+      "tags": ["support", "removal", "Z distance", "interface", "surface quality"]
+    },
+
+    {
+      "id": "print-stuck-to-bed",
+      "name": "Print stuck to bed / won't release",
+      "summary": "Finished print is extremely difficult to remove from the build plate without damage.",
+      "categories": ["adhesion"],
+      "symptoms": [
+        "Print cannot be removed by normal flex and peel of the plate",
+        "Print surface is damaged when forcing removal",
+        "Build plate coating is damaged over time from stuck prints"
+      ],
+      "likely_causes": [
+        "Z offset too low causing excessive first layer squish and too much contact area",
+        "Bed temperature too high creating strong bond",
+        "Wrong plate for the material (PLA on textured PEI can over-stick)",
+        "Glue stick applied when not needed"
+      ],
+      "fix_steps": [
+        "Allow the bed to cool to below 35°C. Many materials release naturally as they contract on cooling.",
+        "Flex the flexible build plate away from the magnetic base to pop the print free.",
+        "Use a stiff plastic spatula at the edge to lever the print up; avoid metal scrapers that damage PEI.",
+        "Raise Z offset slightly for future prints to reduce squish.",
+        "For PLA on textured PEI: try letting the bed cool to room temperature before removal.",
+        "Do not apply glue stick to textured PEI for PLA unless specifically needed."
+      ],
+      "orca_settings": ["initial_layer_print_height"],
+      "tags": ["stuck print", "removal", "Z offset", "build plate", "adhesion", "release"]
+    },
+
+    {
+      "id": "pressure-advance-calibration",
+      "name": "How to calibrate Pressure Advance (PA)",
+      "summary": "Pressure Advance (also known as Linear Advance in Marlin) compensates for filament pressure lag, improving corner sharpness.",
+      "categories": ["calibration"],
+      "symptoms": [
+        "Blobs or zits at corners and seams",
+        "Underextrusion at the start of lines after a travel",
+        "Over-extrusion at the end of lines before a travel or corner"
+      ],
+      "likely_causes": [
+        "Pressure advance not calibrated for the current filament and temperature",
+        "PA value from a different filament type applied incorrectly"
+      ],
+      "fix_steps": [
+        "In OrcaSlicer, go to Calibration > Pressure Advance.",
+        "Select your printer and filament and run the calibration print.",
+        "Inspect the resulting pattern: find the line where corners are sharpest without blobs.",
+        "Note the PA value shown on the pattern at that point.",
+        "Enter that value in Filament Settings > Filament > Pressure Advance.",
+        "PA is filament and temperature specific: recalibrate when changing materials or temperatures significantly."
+      ],
+      "orca_settings": ["pressure_advance", "pressure_advance_smooth_time"],
+      "tags": ["pressure advance", "linear advance", "calibration", "corners", "blobs", "PA"]
+    },
+
+    {
+      "id": "flow-rate-calibration",
+      "name": "How to calibrate flow rate (extrusion multiplier)",
+      "summary": "Flow rate calibration ensures the slicer commands match the actual amount of filament being extruded.",
+      "categories": ["calibration"],
+      "symptoms": [
+        "Prints consistently over- or under-sized",
+        "Surface quality poor despite other settings being correct",
+        "Gaps in top layers or overfilled infill"
+      ],
+      "likely_causes": [
+        "New filament spool with slightly different characteristics",
+        "Nozzle wear changing effective orifice size",
+        "Flow ratio never calibrated for this filament"
+      ],
+      "fix_steps": [
+        "In OrcaSlicer, go to Calibration > Flow Rate.",
+        "Print the calibration object and identify the segment with the smoothest surface.",
+        "Apply the recommended flow ratio change from that segment.",
+        "Confirm by printing a second calibration pass if the first result is not centered.",
+        "Save the corrected flow ratio in your filament profile.",
+        "Calibrate temperature first before flow rate, as temperature affects optimal flow."
+      ],
+      "orca_settings": ["filament_flow_ratio"],
+      "tags": ["flow rate", "extrusion multiplier", "calibration", "surface quality", "dimensional accuracy"]
+    },
+
+    {
+      "id": "temperature-calibration",
+      "name": "How to calibrate printing temperature",
+      "summary": "Find the optimal nozzle temperature for a specific filament using a temperature tower.",
+      "categories": ["calibration", "filament"],
+      "symptoms": [
+        "Stringing that cannot be fixed by retraction alone",
+        "Poor layer adhesion or delamination",
+        "Overhangs melting or drooping",
+        "Matte or glossy surface finish inconsistencies"
+      ],
+      "likely_causes": [
+        "Using a temperature outside the optimal range for the specific filament brand and color",
+        "Temperature set to defaults without accounting for this filament"
+      ],
+      "fix_steps": [
+        "In OrcaSlicer, go to Calibration > Temperature.",
+        "Set a temperature range covering the filament's recommended range (e.g. 195-225°C for PLA).",
+        "Print the temperature tower.",
+        "Inspect each zone: look for the best combination of layer adhesion, surface finish, overhang quality, and minimal stringing.",
+        "Update the nozzle temperature in your filament profile to the optimal value found.",
+        "Temperature is filament-specific: different brands and even colors of the same brand can vary by 5-15°C."
+      ],
+      "orca_settings": ["nozzle_temperature", "nozzle_temperature_initial_layer"],
+      "tags": ["temperature", "calibration", "temperature tower", "stringing", "layer adhesion"]
+    },
+
+    {
+      "id": "first-layer-calibration",
+      "name": "How to calibrate Z offset and first layer",
+      "summary": "Set the correct Z offset so the first layer is properly squished for adhesion without being too flat.",
+      "categories": ["calibration", "adhesion"],
+      "symptoms": [
+        "First layer not sticking",
+        "Elephant's foot (first layer too wide)",
+        "Gaps in first layer where the nozzle is too far from the bed",
+        "Nozzle dragging through first layer"
+      ],
+      "likely_causes": [
+        "Z offset not calibrated after changing build plates",
+        "Bed leveling not run recently",
+        "Different plate thickness than what calibration was done with"
+      ],
+      "fix_steps": [
+        "Run bed leveling calibration from the printer settings.",
+        "Print a first layer calibration square or line.",
+        "The first layer should be slightly squished and fill in completely with no gaps, but not so squished that the lines are indistinguishable.",
+        "Adjust Z offset in small increments (0.05mm) and re-test.",
+        "On Bambu printers, Z offset is adjusted from the printer screen during or after the first layer.",
+        "Recalibrate after changing build plates, as different plates have different thicknesses."
+      ],
+      "orca_settings": ["initial_layer_print_height"],
+      "tags": ["Z offset", "first layer", "calibration", "bed leveling", "adhesion"]
+    },
+
+    {
+      "id": "max-flow-calibration",
+      "name": "How to find maximum volumetric flow rate",
+      "summary": "Determine the maximum flow rate your hotend can sustain without under-extrusion.",
+      "categories": ["calibration"],
+      "symptoms": [
+        "Under-extrusion at high speeds",
+        "Print quality degrades when using fast speed profiles",
+        "Unsure what the safe maximum speed is for your hotend and filament"
+      ],
+      "likely_causes": [
+        "Printing faster than the hotend can melt filament",
+        "No calibrated volumetric speed limit set in the filament profile"
+      ],
+      "fix_steps": [
+        "In OrcaSlicer, go to Calibration > Max Volumetric Speed.",
+        "Print the calibration object, which gradually increases flow rate.",
+        "Find the point where quality degrades (under-extrusion, layer gaps).",
+        "Set the Max Volumetric Speed in your filament profile to 80% of that found limit for a safety margin.",
+        "Typical values: Standard brass nozzle PLA 15-22mm³/s, PETG 10-18mm³/s. CHT high-flow nozzle: 25-40mm³/s.",
+        "For Bambu P1S: the stock hotend typically supports 18-24mm³/s depending on material."
+      ],
+      "orca_settings": ["filament_max_volumetric_speed"],
+      "tags": ["volumetric flow", "max flow", "calibration", "speed", "under-extrusion", "hotend"]
+    },
+
+    {
+      "id": "abrasive-filament-guide",
+      "name": "Printing abrasive filaments (CF, GF, Glow, Grit)",
+      "summary": "Tips for printing carbon fiber, glass fiber, glow-in-the-dark, and other abrasive materials.",
+      "categories": ["filament"],
+      "symptoms": [],
+      "likely_causes": [],
+      "fix_steps": [
+        "Use a hardened steel nozzle. Brass nozzles will wear out significantly faster with abrasive materials.",
+        "Keep nozzle temperature at the higher end of the recommended range for the base material (PLA-CF: 220-240°C).",
+        "Reduce print speed compared to standard PLA by 20-30%.",
+        "Clean the extruder gear more frequently: every 1-2 spools instead of every 5.",
+        "Use a build plate that works with the base material (PLA-CF uses same plates as PLA).",
+        "Carbon fiber filaments are brittle: avoid sharp bends in the filament path and use a high-quality PTFE tube.",
+        "Dry carbon fiber filaments before use; they absorb moisture similarly to their base material."
+      ],
+      "orca_settings": ["nozzle_temperature", "print_speed"],
+      "tags": ["carbon fiber", "CF", "glass fiber", "abrasive", "hardened steel", "nozzle", "wear"]
+    },
+
+    {
+      "id": "orca-profile-setup",
+      "name": "Setting up OrcaSlicer for a new printer",
+      "summary": "First steps for configuring OrcaSlicer correctly when adding a new printer.",
+      "categories": ["software", "calibration"],
+      "symptoms": [],
+      "likely_causes": [],
+      "fix_steps": [
+        "Add your printer from the built-in profile list in File > Printer Management where possible.",
+        "Verify the bed size and shape match your physical printer in Printer Settings.",
+        "Check machine start and end G-code against what your printer firmware expects.",
+        "Run calibrations in order: Temperature first, then Flow Rate, then Pressure Advance, then Max Volumetric Speed.",
+        "Save calibrated results into named filament profiles for each filament you use.",
+        "Back up your profiles by exporting them from File > Export Configs.",
+        "For Klipper printers: add [exclude_object] and [gcode_arcs] to printer.cfg before using OrcaSlicer features that require them."
+      ],
+      "orca_settings": [],
+      "tags": ["setup", "new printer", "profile", "calibration", "Klipper", "configuration"]
+    }
+  ]
+}

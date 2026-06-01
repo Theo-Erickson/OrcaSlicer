@@ -1,0 +1,850 @@
+{
+  "meta": {
+    "schema_version": "1.0.0",
+    "printer_family": "Bambu Lab P1 Series",
+    "printer_models": ["P1S", "P1P"],
+    "content_type": "hms_errors",
+    "source": "Bambu Lab Wiki + CRASH Space Makerspace Reference",
+    "source_urls": [
+      "https://wiki.bambulab.com/en/hms/home",
+      "https://blog.crashspace.org/bambu-printers-common-error-codes-troubleshooting/"
+    ],
+    "last_updated": "2026-05-01",
+    "entry_count": 60,
+    "notes": "Seed database for OrcaSlicer Printer Help System. Covers P1S/P1P HMS codes. Community contributions welcome."
+  },
+  "categories": [
+    { "id": "temperature",  "label": "Temperature",     "color": "#e05a2b" },
+    { "id": "ams",          "label": "AMS / Filament",  "color": "#5b8dd9" },
+    { "id": "motion",       "label": "Motion / Axes",   "color": "#7c55cc" },
+    { "id": "calibration",  "label": "Calibration",     "color": "#3aaa6e" },
+    { "id": "sensor",       "label": "Sensors",         "color": "#c9a227" },
+    { "id": "electrical",   "label": "Electrical",      "color": "#d63030" },
+    { "id": "mechanical",   "label": "Mechanical",      "color": "#888888" },
+    { "id": "software",     "label": "Software / FW",   "color": "#2b9ea0" },
+    { "id": "informational","label": "Informational",   "color": "#aaaaaa" }
+  ],
+  "severity_levels": {
+    "fatal":   "Print stopped. Immediate action required. Power off if instructed.",
+    "warning": "Print may continue but issue should be addressed soon.",
+    "info":    "Informational. No immediate action required."
+  },
+  "errors": [
+
+    {
+      "code": "0300-0100-0001-0001",
+      "alt_codes": ["030001000010001"],
+      "name": "Heatbed temperature abnormal: heater short circuit",
+      "description": "The heatbed temperature is abnormal. The heater may have a short circuit.",
+      "severity": "fatal",
+      "categories": ["temperature", "electrical"],
+      "fix_steps": [
+        "Stop the print immediately and power off the printer.",
+        "Allow the bed to fully cool before inspecting.",
+        "Check the bed heater cable and connector under the bed and at the base for damage or loose connections.",
+        "Inspect for scorch marks, burns, or melted insulation on the cable.",
+        "Do not resume use if visual damage is present. Contact Bambu Lab support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0100-0001-0001",
+      "tags": ["heatbed", "heater", "short circuit", "temperature"]
+    },
+
+    {
+      "code": "0300-0100-0001-0006",
+      "alt_codes": ["030001000010006"],
+      "name": "Heatbed temperature abnormal: sensor short circuit",
+      "description": "The heatbed temperature is abnormal. The thermistor sensor may have a short circuit.",
+      "severity": "fatal",
+      "categories": ["temperature", "sensor"],
+      "fix_steps": [
+        "Pause the print and let the bed cool to room temperature.",
+        "Power off the printer.",
+        "Check the bed thermistor cable connector under the bed for a loose or partially unplugged connection.",
+        "Inspect the cable for cuts, pinches, or burns.",
+        "If the error returns after reseating, the thermistor or cable likely needs replacement. Contact support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0100-0001-0006",
+      "tags": ["heatbed", "thermistor", "sensor", "short circuit"]
+    },
+
+    {
+      "code": "0300-0100-0001-0007",
+      "alt_codes": ["030001000010007"],
+      "name": "Heatbed temperature abnormal: sensor open circuit",
+      "description": "The heatbed temperature is abnormal. The thermistor sensor may have an open circuit (broken wire).",
+      "severity": "fatal",
+      "categories": ["temperature", "sensor"],
+      "fix_steps": [
+        "Stop the print and allow the bed to cool.",
+        "Power off the printer.",
+        "Reseat the bed thermistor connector on both ends.",
+        "Check the cable for a break or complete disconnection.",
+        "If the issue persists, the thermistor or wiring harness requires replacement."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0100-0001-0007",
+      "tags": ["heatbed", "thermistor", "sensor", "open circuit"]
+    },
+
+    {
+      "code": "0300-0100-0001-0003",
+      "alt_codes": ["030001000010003"],
+      "name": "Heatbed over temperature",
+      "description": "The heatbed temperature is abnormal. The heater is over temperature.",
+      "severity": "fatal",
+      "categories": ["temperature"],
+      "fix_steps": [
+        "Power off the printer immediately.",
+        "Allow the bed to cool completely.",
+        "Check that the correct build plate type and material profile are selected in Bambu Studio.",
+        "Verify the target temperature set in the print profile is within normal range for the material.",
+        "If the bed repeatedly overheats at normal target temperatures, the AC board or thermal management may be faulty. Contact support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0100-0001-0003",
+      "tags": ["heatbed", "over temperature", "overheating"]
+    },
+
+    {
+      "code": "0300-0100-0001-0008",
+      "alt_codes": ["030001000010008"],
+      "name": "Heatbed heating anomaly: heating module may be broken",
+      "description": "An abnormality occurred during the heating process of the heatbed. The heating modules may be broken.",
+      "severity": "fatal",
+      "categories": ["temperature", "electrical"],
+      "fix_steps": [
+        "Power off the printer and disconnect from power.",
+        "Allow full cooling before any inspection.",
+        "Check that nothing conductive is under the plate or on the contacts.",
+        "Reseat the build plate and verify it is the correct plate type.",
+        "Do not continue printing until the bed and wiring have been inspected. Contact Bambu support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0100-0001-0008",
+      "tags": ["heatbed", "heating module", "electrical"]
+    },
+
+    {
+      "code": "0300-0200-0001-0001",
+      "alt_codes": ["030002000010001"],
+      "name": "Nozzle temperature abnormal: heater short circuit",
+      "description": "The nozzle temperature is abnormal. The heater may have a short circuit.",
+      "severity": "fatal",
+      "categories": ["temperature", "electrical"],
+      "fix_steps": [
+        "Stop the print immediately. Do not touch the nozzle.",
+        "Power off the printer and disconnect from power.",
+        "After cooling, open the toolhead front cover.",
+        "Reseat the hotend heater cable connection.",
+        "Check the ceramic heater resistance with a multimeter (should be ~10Ω at room temperature).",
+        "If damaged or reading is incorrect, replace the hotend assembly. Contact support for guidance."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0200-0001-0001",
+      "tags": ["nozzle", "heater", "short circuit", "hotend", "temperature"]
+    },
+
+    {
+      "code": "0300-0200-0001-0002",
+      "alt_codes": ["030002000010002"],
+      "name": "Nozzle temperature abnormal: heater open circuit",
+      "description": "The nozzle temperature is abnormal. The heater may have an open circuit.",
+      "severity": "fatal",
+      "categories": ["temperature", "electrical"],
+      "fix_steps": [
+        "Stop the print and allow the hotend to cool.",
+        "Open the toolhead front cover and reseat the heater cable connector.",
+        "If the connector looks undamaged, measure heater resistance (~10Ω expected at room temp).",
+        "A reading of infinity indicates an open/broken heater wire.",
+        "Replace the hotend assembly or contact support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0200-0001-0002",
+      "tags": ["nozzle", "heater", "open circuit", "hotend"]
+    },
+
+    {
+      "code": "0300-0200-0001-0003",
+      "alt_codes": ["030002000010003"],
+      "name": "Nozzle over temperature",
+      "description": "The nozzle temperature is abnormal. The heater is over temperature.",
+      "severity": "fatal",
+      "categories": ["temperature"],
+      "fix_steps": [
+        "Stop the print immediately. The nozzle is very hot, do not touch it.",
+        "Power off the printer.",
+        "After cooling, reseat the NTC sensor cable on the toolhead.",
+        "Check that the silicone sock is present and intact. Replace it if missing or damaged.",
+        "The quickest diagnostic is to try a known-good replacement hotend.",
+        "If the issue persists with a new hotend, the toolhead board may need replacement."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0200-0001-0003",
+      "tags": ["nozzle", "over temperature", "hotend", "heater"]
+    },
+
+    {
+      "code": "0300-0200-0001-0006",
+      "alt_codes": ["030002000010006"],
+      "name": "Nozzle temperature abnormal: NTC sensor short circuit",
+      "description": "The nozzle temperature is abnormal. The thermistor (NTC) sensor may have a short circuit.",
+      "severity": "fatal",
+      "categories": ["temperature", "sensor"],
+      "fix_steps": [
+        "Stop the print and power off the printer.",
+        "After cooling, open the toolhead front cover.",
+        "Reseat the NTC cable connector.",
+        "Measure NTC resistance with a multimeter (~100 kΩ at room temperature).",
+        "A reading near zero indicates a short; replace the hotend assembly."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0200-0001-0006",
+      "tags": ["nozzle", "NTC", "thermistor", "sensor", "short circuit"]
+    },
+
+    {
+      "code": "0300-0200-0001-0007",
+      "alt_codes": ["030002000010007"],
+      "name": "Nozzle temperature abnormal: NTC sensor open circuit",
+      "description": "The nozzle temperature is abnormal. The thermistor (NTC) sensor may have an open circuit.",
+      "severity": "fatal",
+      "categories": ["temperature", "sensor"],
+      "fix_steps": [
+        "Stop the print and power off the printer.",
+        "After cooling, open the toolhead front cover and reseat the NTC cable. Sometimes reseating multiple times is needed.",
+        "Check for a broken wire or damaged connector on the NTC.",
+        "Measure NTC resistance (~100 kΩ expected at room temp); infinity reading indicates an open circuit.",
+        "Check that the silicone sock is intact.",
+        "Replace the hotend assembly if the sensor or wire is broken."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0200-0001-0007",
+      "tags": ["nozzle", "NTC", "thermistor", "sensor", "open circuit"]
+    },
+
+    {
+      "code": "0300-0300-0001-0001",
+      "alt_codes": ["030003000010001"],
+      "name": "Part cooling fan too slow or stopped",
+      "description": "The speed of the part cooling fan is too slow or it has stopped.",
+      "severity": "warning",
+      "categories": ["mechanical", "electrical"],
+      "fix_steps": [
+        "Pause the print and visually check the part cooling fan on the toolhead for obstructions.",
+        "Remove any filament strands or debris caught in the fan blades.",
+        "With the printer off, spin the fan blades by hand; they should spin freely.",
+        "Check the fan cable connector on the toolhead board.",
+        "If the fan does not spin at all during printing, it likely needs replacement."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0300-0001-0001",
+      "tags": ["cooling fan", "part cooling", "fan speed"]
+    },
+
+    {
+      "code": "0300-0400-0002-0001",
+      "alt_codes": ["030004000020001"],
+      "name": "Hotend fan too slow or stopped",
+      "description": "The speed of the hotend cooling fan is too slow or has stopped. This can lead to heat creep and clogs.",
+      "severity": "fatal",
+      "categories": ["mechanical", "temperature"],
+      "fix_steps": [
+        "Stop the print immediately. A stopped hotend fan can cause heat creep and a serious clog.",
+        "Power off the printer and let everything cool.",
+        "Check the hotend fan for debris or filament wrapped around the blades.",
+        "Spin the fan by hand to check for binding.",
+        "Check the fan cable connection on the toolhead board.",
+        "Replace the hotend fan if it does not spin freely or fails to start."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0400-0002-0001",
+      "tags": ["hotend fan", "cooling", "fan speed", "heat creep"]
+    },
+
+    {
+      "code": "0300-0600-0001-0001",
+      "alt_codes": ["030006000010001"],
+      "name": "Motor-A open circuit",
+      "description": "Motor-A has an open circuit. There may be a loose connection or the motor may have failed.",
+      "severity": "fatal",
+      "categories": ["motion", "electrical"],
+      "fix_steps": [
+        "Power off the printer.",
+        "Check the motor cable connector for the affected axis (Motor-A is typically the X-axis extruder motor on P1 series).",
+        "Reseat the connector firmly on both the motor and the board.",
+        "Inspect the cable for visible damage.",
+        "If the error persists after reseating, the motor or its driver may have failed. Contact support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0600-0001-0001",
+      "tags": ["motor", "open circuit", "axis", "motion"]
+    },
+
+    {
+      "code": "0300-0600-0001-0002",
+      "alt_codes": ["030006000010002"],
+      "name": "Motor-A short circuit",
+      "description": "Motor-A has a short circuit. The motor may have failed.",
+      "severity": "fatal",
+      "categories": ["motion", "electrical"],
+      "fix_steps": [
+        "Power off the printer immediately.",
+        "Do not attempt to run the motor again until inspected.",
+        "Check the motor cable for damage, melting, or pinching.",
+        "Measure motor coil resistance if you have a multimeter.",
+        "Contact Bambu Lab support. Motor replacement will likely be needed."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0600-0001-0002",
+      "tags": ["motor", "short circuit", "axis", "motion"]
+    },
+
+    {
+      "code": "0300-0600-0001-0003",
+      "alt_codes": ["030006000010003"],
+      "name": "Motor-A resistance abnormal",
+      "description": "The resistance of Motor-A is abnormal. The motor may have failed.",
+      "severity": "warning",
+      "categories": ["motion", "electrical"],
+      "fix_steps": [
+        "Power off the printer.",
+        "Reseat the motor cable connector on both ends.",
+        "Check for bent or pushed-back pins on the connector.",
+        "If the connector looks good and the error returns, the motor likely needs replacement.",
+        "Submit a support ticket and include printer logs."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0600-0001-0003",
+      "tags": ["motor", "resistance", "axis", "motion"]
+    },
+
+    {
+      "code": "0300-0D00-0001-0003",
+      "alt_codes": ["0300-0D00-0001-0003"],
+      "name": "Build plate not properly placed",
+      "description": "The build plate may not be properly placed. The nozzle could not detect the plate correctly during probing.",
+      "severity": "warning",
+      "categories": ["calibration", "mechanical"],
+      "fix_steps": [
+        "Remove the build plate and clean both the plate and the magnetic bed surface.",
+        "Reinstall the plate ensuring all corners are flat and it is not crooked.",
+        "Make sure you are using a Bambu-compatible plate; third-party plates with different structures can trigger this error.",
+        "Run a bed leveling calibration before the next print.",
+        "If using a textured or smooth PEI sheet, confirm the plate type is set correctly in the slicer."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0D00-0001-0003",
+      "tags": ["build plate", "bed leveling", "calibration", "homing"]
+    },
+
+    {
+      "code": "0300-0D00-0002-0001",
+      "alt_codes": ["030000D000020001"],
+      "name": "Heatbed homing abnormal: possible bed bulge",
+      "description": "Heatbed homing is abnormal. There may be a bulge or obstruction on the bed surface.",
+      "severity": "warning",
+      "categories": ["calibration", "mechanical"],
+      "fix_steps": [
+        "Remove the build plate and inspect the magnetic bed and plate for warping or debris.",
+        "Check for any dried filament blobs on the nozzle that could cause false contact.",
+        "Clean the nozzle tip and the bed surface.",
+        "Reinstall the plate and run a full calibration.",
+        "If the plate is visibly warped, try a replacement plate."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0D00-0002-0001",
+      "tags": ["heatbed", "homing", "calibration", "bed warp"]
+    },
+
+    {
+      "code": "0300-0F00-0001-0001",
+      "alt_codes": ["03000F000010001"],
+      "name": "Accelerometer data unavailable",
+      "description": "The accelerometer data is unavailable. This affects vibration compensation and resonance calibration.",
+      "severity": "warning",
+      "categories": ["sensor", "calibration"],
+      "fix_steps": [
+        "Restart the printer and attempt calibration again.",
+        "Check for firmware updates; this can be a known firmware issue in some versions.",
+        "If the error persists, the IMU/accelerometer on the toolhead board may be faulty.",
+        "Contact support if restarting and updating firmware does not resolve it."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0F00-0001-0001",
+      "tags": ["accelerometer", "IMU", "vibration compensation", "sensor"]
+    },
+
+    {
+      "code": "0300-1000-0002-0001",
+      "alt_codes": ["030010000020001"],
+      "name": "X-axis resonance mode low",
+      "description": "The 1st order mechanical resonance mode of the X-axis is lower than expected, indicating a mechanical issue.",
+      "severity": "warning",
+      "categories": ["motion", "calibration"],
+      "fix_steps": [
+        "Check X-axis belt tension; it should be firm but not excessively tight.",
+        "Inspect the X-axis rail and linear rod for debris, dried grease, or damage.",
+        "Clean and re-lubricate the linear rods with a small amount of appropriate lubricant.",
+        "Check that the toolhead moves smoothly by hand along the full X range.",
+        "Re-run vibration compensation calibration after addressing mechanical issues."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-1000-0002-0001",
+      "tags": ["X axis", "resonance", "belt", "vibration", "calibration"]
+    },
+
+    {
+      "code": "0300-1200-0002-0001",
+      "alt_codes": ["030012000020001"],
+      "name": "Toolhead front cover fell off",
+      "description": "The front cover of the toolhead has fallen off or is not properly attached.",
+      "severity": "warning",
+      "categories": ["mechanical"],
+      "fix_steps": [
+        "Pause or stop the print.",
+        "Locate the front cover and check it for cracks or broken clips.",
+        "Snap the cover back into place firmly; all four corners should click in.",
+        "Inspect the area for any loose parts that may have been hit during printing.",
+        "If the cover clips are broken, a replacement cover should be sourced before continuing unattended prints."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-1200-0002-0001",
+      "tags": ["toolhead", "cover", "mechanical", "enclosure"]
+    },
+
+    {
+      "code": "0300-4000-0002-0001",
+      "alt_codes": ["030040000020001"],
+      "name": "Serial port data transmission abnormal",
+      "description": "Data transmission over the serial port is abnormal. The software system may be faulty.",
+      "severity": "warning",
+      "categories": ["software"],
+      "fix_steps": [
+        "Restart the printer and try the print again.",
+        "Check for a firmware update; communication errors are sometimes resolved in newer firmware.",
+        "If the error recurs consistently, there may be a hardware issue with the main control board.",
+        "Contact support and provide your printer logs."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-4000-0002-0001",
+      "tags": ["serial port", "communication", "software", "firmware"]
+    },
+
+    {
+      "code": "0300-4100-0001-0001",
+      "alt_codes": ["030041000010001"],
+      "name": "System voltage unstable: power failure protection triggered",
+      "description": "The system voltage is unstable, triggering the power failure protection function.",
+      "severity": "fatal",
+      "categories": ["electrical"],
+      "fix_steps": [
+        "Check that the power cable is fully seated at both the printer and the wall outlet.",
+        "Try a different power outlet or power strip.",
+        "Check that the printer is not on an overloaded circuit shared with other high-draw devices.",
+        "Inspect the power cable for damage.",
+        "If the voltage issue persists on a known-good outlet, the power supply unit may be failing. Contact support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-4100-0001-0001",
+      "tags": ["power supply", "voltage", "electrical", "power failure"]
+    },
+
+    {
+      "code": "0300-0A00-0001-0001",
+      "alt_codes": ["03000A000010001"],
+      "name": "Heatbed force sensor sensitivity too high",
+      "description": "The sensitivity of heatbed force sensor 1/2/3 is too high, which may affect bed leveling accuracy.",
+      "severity": "warning",
+      "categories": ["sensor", "calibration"],
+      "fix_steps": [
+        "Remove everything from the build plate surface.",
+        "Make sure no cables or objects are pressing against the underside of the bed.",
+        "Run a full auto-calibration from the printer menu.",
+        "If the error persists, the force sensor or its mounting may need inspection by support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0A00-0001-0001",
+      "tags": ["force sensor", "bed leveling", "calibration", "sensor"]
+    },
+
+    {
+      "code": "0300-0A00-0001-0002",
+      "alt_codes": ["03000A000010002"],
+      "name": "Heatbed force sensor sensitivity too low",
+      "description": "The sensitivity of heatbed force sensor 1/2/3 is too low, which may cause bed leveling failures.",
+      "severity": "warning",
+      "categories": ["sensor", "calibration"],
+      "fix_steps": [
+        "Clean any debris from around the bed mounting points and sensor area.",
+        "Ensure the build plate is seated flat and not wedged on an edge.",
+        "Run a full auto-calibration.",
+        "If this occurs after a physical impact to the printer, inspect the sensor mounting.",
+        "Contact support if the error is persistent."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0300-0A00-0001-0002",
+      "tags": ["force sensor", "bed leveling", "calibration", "sensor"]
+    },
+
+    {
+      "code": "0700-0200-0001-0001",
+      "alt_codes": ["070002000010001"],
+      "name": "AMS filament speed and length error: odometry may be faulty",
+      "description": "AMS filament speed and length error. The filament odometry may be faulty.",
+      "severity": "warning",
+      "categories": ["ams"],
+      "fix_steps": [
+        "Check for tangles or heavy drag in the AMS path and buffer tube.",
+        "With the AMS door open, try feeding filament by hand to confirm it moves freely.",
+        "Power-cycle both the printer and AMS.",
+        "If the error repeats across multiple prints, the AMS hall-effect odometry sensor may be failing. Open a support ticket."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0700-0200-0001-0001",
+      "tags": ["AMS", "filament", "odometry", "speed", "length"]
+    },
+
+    {
+      "code": "0700-0200-0002-0001",
+      "alt_codes": ["070002000020001"],
+      "name": "AMS communication error",
+      "description": "Communication error between the printer and AMS hub.",
+      "severity": "warning",
+      "categories": ["ams", "software"],
+      "fix_steps": [
+        "Power off both the printer and AMS.",
+        "Reseat the AMS communication cable on both ends.",
+        "Avoid sharp bends or heavy objects on the cable route.",
+        "Turn the printer back on and wait for the AMS to fully initialize before starting a print.",
+        "If multiple AMS units are daisy-chained, test with only one connected to isolate the fault."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0700-0200-0002-0001",
+      "tags": ["AMS", "communication", "cable", "hub"]
+    },
+
+    {
+      "code": "0700-0200-0003-0001",
+      "alt_codes": ["070002000030001"],
+      "name": "AMS internal sensor error",
+      "description": "General AMS internal sensor fault.",
+      "severity": "warning",
+      "categories": ["ams", "sensor"],
+      "fix_steps": [
+        "Power-cycle the printer and AMS and wait for all AMS LEDs to show normal status.",
+        "Remove all spools and check for loose filament fragments inside the AMS channels.",
+        "Run a short multi-color test print to verify all slots can load and unload.",
+        "If the error repeats or specific slots consistently fail, contact support with the exact code."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0700-0200-0003-0001",
+      "tags": ["AMS", "sensor", "internal fault"]
+    },
+
+    {
+      "code": "0700-4001-0000-0001",
+      "alt_codes": ["0700-4001", "07004001"],
+      "name": "AMS disabled but filament still loaded",
+      "description": "The AMS has been disabled for this print, but filament is still loaded in an AMS slot.",
+      "severity": "warning",
+      "categories": ["ams"],
+      "fix_steps": [
+        "On the printer screen or in Bambu Studio, either re-enable AMS for this job or unload the active AMS slot.",
+        "If you want to print from the rear external spool holder, unload all AMS filament for that toolhead first.",
+        "Restart the print after resolving the conflict."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0700-4001-0000-0001",
+      "tags": ["AMS", "disabled", "filament loaded", "external spool"]
+    },
+
+    {
+      "code": "0701-4001-0000-0001",
+      "alt_codes": ["0701-4001", "07014001"],
+      "name": "Filament still loaded after AMS disabled",
+      "description": "Filament remains loaded from the AMS path after the AMS was disabled.",
+      "severity": "warning",
+      "categories": ["ams"],
+      "fix_steps": [
+        "Use the unload function in the printer menu to pull the filament out of the AMS path.",
+        "Confirm the printer is set to use the external spool or rear holder for the intended tool.",
+        "Restart the job after unloading."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0701-4001-0000-0001",
+      "tags": ["AMS", "filament", "unload", "external spool"]
+    },
+
+    {
+      "code": "0700-8001-0000-0001",
+      "alt_codes": ["0700-8001", "07008001"],
+      "name": "AMS filament run out",
+      "description": "AMS filament has run out in the currently active slot.",
+      "severity": "warning",
+      "categories": ["ams"],
+      "fix_steps": [
+        "Load a new spool into the AMS slot shown on screen.",
+        "Cut the filament tip cleanly at a 45-degree angle and feed it into the AMS until it is grabbed.",
+        "Press Retry on the printer screen.",
+        "If you do not want to continue with AMS, unload and switch the job to the rear external spool holder."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0700-8001-0000-0001",
+      "tags": ["AMS", "filament runout", "empty spool"]
+    },
+
+    {
+      "code": "0701-8001-0000-0001",
+      "alt_codes": ["0701-8001", "07018001"],
+      "name": "AMS filament cutter error: failed to cut",
+      "description": "Failed to cut the filament at the AMS cutter.",
+      "severity": "warning",
+      "categories": ["ams", "mechanical"],
+      "fix_steps": [
+        "Open the AMS side cover and visually inspect the cutter area for debris or jammed filament.",
+        "Clean out any filament chips and verify the cutter blade can move freely by hand (follow AMS safety precautions).",
+        "Close the cover and press Retry.",
+        "If the error continues after clearing, the cutter assembly may need replacement. Contact support."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0701-8001-0000-0001",
+      "tags": ["AMS", "cutter", "filament", "cut failed"]
+    },
+
+    {
+      "code": "0701-8002-0000-0001",
+      "alt_codes": ["0701-8002", "07018002"],
+      "name": "AMS cutter stuck",
+      "description": "The AMS filament cutter is stuck and cannot complete its stroke.",
+      "severity": "warning",
+      "categories": ["ams", "mechanical"],
+      "fix_steps": [
+        "Gently pull out and reseat the cutter handle as described in the AMS maintenance guide.",
+        "Look for filament wedged around the blade and carefully remove it.",
+        "Press Retry and monitor the first few tool changes to confirm normal operation.",
+        "If the cutter repeatedly jams, inspect for wear and order a replacement cutter assembly."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0701-8002-0000-0001",
+      "tags": ["AMS", "cutter", "stuck", "jammed"]
+    },
+
+    {
+      "code": "0701-8003-0000-0001",
+      "alt_codes": ["0701-8003", "07018003"],
+      "name": "Failed to pull filament from extruder: possible clog",
+      "description": "Failed to pull filament out of the extruder. Possible clog or broken filament in the path.",
+      "severity": "warning",
+      "categories": ["ams", "mechanical"],
+      "fix_steps": [
+        "Use the Unload or Cold Pull procedure to clear the hotend and extruder path.",
+        "Inspect the PTFE tube between the extruder and AMS buffer for a broken filament piece.",
+        "If a broken piece is present, push it through gently from the AMS side.",
+        "Once the path is clear, reload filament and resume the print."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0701-8003-0000-0001",
+      "tags": ["AMS", "extruder", "clog", "filament pull", "PTFE"]
+    },
+
+    {
+      "code": "0701-1000-0001-0001",
+      "alt_codes": ["0701100000010001"],
+      "name": "AMS slot motor slipped",
+      "description": "AMS slot motor slipped. The extrusion wheel may be worn, filament may be too thin, or there is high resistance in the feed path.",
+      "severity": "warning",
+      "categories": ["ams", "mechanical"],
+      "fix_steps": [
+        "Check that the filament diameter is consistent and not soft or ovalized.",
+        "Ensure the spool rotates freely and the filament is not tangled or rubbing against the AMS case.",
+        "Try a different filament to rule out material issues.",
+        "If the same slot keeps slipping with normal filament, the AMS slot drive wheel or motor may need service."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0701-1000-0001-0001",
+      "tags": ["AMS", "motor slip", "feed wheel", "filament", "resistance"]
+    },
+
+    {
+      "code": "0701-2000-0002-0002",
+      "alt_codes": ["0701200000020002"],
+      "name": "AMS slot empty or filament broken in AMS",
+      "description": "The selected AMS slot is empty, or the filament has broken inside the AMS.",
+      "severity": "warning",
+      "categories": ["ams"],
+      "fix_steps": [
+        "Confirm that a spool is actually installed in the indicated slot.",
+        "Open the AMS and check whether filament has snapped inside; remove any loose piece.",
+        "Reload filament cleanly and press Retry or restart the job."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0701-2000-0002-0002",
+      "tags": ["AMS", "empty slot", "broken filament"]
+    },
+
+    {
+      "code": "0701-3000-0002-0002",
+      "alt_codes": ["0701300000020002"],
+      "name": "AMS RFID read error",
+      "description": "The RFID tag on the AMS spool cannot be read or is damaged.",
+      "severity": "info",
+      "categories": ["ams", "sensor"],
+      "fix_steps": [
+        "The filament can still be used; you simply lose the auto-profile from RFID.",
+        "Manually select the material type and profile in Bambu Studio or on the printer screen.",
+        "If RFID errors appear across multiple slots, the AMS RFID board may require service.",
+        "Try cleaning the RFID contacts on the spool hub with a dry cloth."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0701-3000-0002-0002",
+      "tags": ["AMS", "RFID", "spool tag", "filament profile"]
+    },
+
+    {
+      "code": "0700-7000-0002-0004",
+      "alt_codes": [
+        "0700-7000-0002-0004",
+        "0700-7100-0002-0004",
+        "0700-7200-0002-0004",
+        "0700-7300-0002-0004",
+        "0701-7000-0002-0004"
+      ],
+      "name": "Failed to pull filament back from toolhead to AMS",
+      "description": "Failed to retract the filament from the toolhead back into the AMS. Filament or spool may be stuck.",
+      "severity": "warning",
+      "categories": ["ams", "mechanical"],
+      "fix_steps": [
+        "Check whether the spool is tangled or has filament crossed over itself.",
+        "Confirm the filament path in the PTFE tubes is clear and unobstructed.",
+        "Manually release any tangle on the spool and try the unload operation again.",
+        "If filament is jammed in the buffer or hub, open the AMS and clear the jam before retrying."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0700-7000-0002-0004",
+      "tags": ["AMS", "filament retract", "stuck spool", "toolhead"]
+    },
+
+    {
+      "code": "0500-0400-0001-0044",
+      "alt_codes": ["0500-0400-0001-0044", "0501-0400-0001-0044"],
+      "name": "AMS firmware mismatch",
+      "description": "The firmware of the AMS does not match the printer firmware. An update is required.",
+      "severity": "warning",
+      "categories": ["ams", "software"],
+      "fix_steps": [
+        "Go to the Firmware page in the printer settings or in Bambu Studio.",
+        "Update the AMS firmware to the version matching the current printer firmware.",
+        "After updating, restart both the printer and AMS.",
+        "Do not start a multi-color print until firmware versions are synchronized."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0500-0400-0001-0044",
+      "tags": ["AMS", "firmware", "update", "version mismatch"]
+    },
+
+    {
+      "code": "0C00-0300-0002-0004",
+      "alt_codes": ["0C000300000020004"],
+      "name": "First layer inspection not supported for this print",
+      "description": "First layer inspection is not supported for the current print job configuration.",
+      "severity": "info",
+      "categories": ["informational", "software"],
+      "fix_steps": [
+        "This is informational. The print can usually continue normally.",
+        "First layer inspection may be unsupported for certain model types or file configurations.",
+        "In Bambu Studio, enable first layer inspection only for supported models.",
+        "For unattended printing, manually inspect the first layer before walking away."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0C00-0300-0002-0004",
+      "tags": ["first layer", "inspection", "camera", "informational"]
+    },
+
+    {
+      "code": "0C00-0300-0002-0005",
+      "alt_codes": ["0C000300000020005"],
+      "name": "First layer inspection timed out",
+      "description": "First layer inspection timed out. Results may be inaccurate.",
+      "severity": "info",
+      "categories": ["informational", "software"],
+      "fix_steps": [
+        "Manually inspect the first layer on the build plate before leaving the print unattended.",
+        "Check that the internal camera view is not obstructed by filament strands or debris.",
+        "Verify your network connection is stable if using remote monitoring.",
+        "Consider cleaning the camera lens with a dry cloth if inspections consistently time out."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0C00-0300-0002-0005",
+      "tags": ["first layer", "inspection", "camera", "timeout"]
+    },
+
+    {
+      "code": "0400-0200-0001-0001",
+      "alt_codes": ["040002000010001"],
+      "name": "Bed leveling failed: Z-calibration or mesh probing error",
+      "description": "Bed leveling failed during Z-calibration or mesh probing.",
+      "severity": "warning",
+      "categories": ["calibration", "mechanical"],
+      "fix_steps": [
+        "Remove the build plate and clean any filament blobs or debris from the nozzle tip and bed surface.",
+        "Reinstall the plate flat and fully seated on all corners.",
+        "Run a full Calibration from the printer menu before the next print.",
+        "If probing consistently fails in the same spot, inspect the plate for warping.",
+        "Replace a warped plate; slight warps can sometimes be corrected by resetting in Bambu Studio."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0400-0200-0001-0001",
+      "tags": ["bed leveling", "calibration", "mesh probe", "Z offset"]
+    },
+
+    {
+      "code": "0400-0300-0001-0001",
+      "alt_codes": ["040003000010001"],
+      "name": "Flow calibration / pressure advance calibration failed",
+      "description": "Flow calibration or pressure advance (PA) calibration failed to complete successfully.",
+      "severity": "warning",
+      "categories": ["calibration"],
+      "fix_steps": [
+        "Verify the nozzle is not partially clogged; perform a cold pull or swap to a fresh hotend.",
+        "Check that the filament is dry and not extremely soft, brittle, or degraded.",
+        "Re-run flow calibration with default speeds; avoid touching the printer during the test.",
+        "If it continues to fail, use a known-good filament profile manually rather than relying on auto-calibration for that material."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0400-0300-0001-0001",
+      "tags": ["flow calibration", "pressure advance", "PA", "calibration", "clog"]
+    },
+
+    {
+      "code": "0500-0200-0001-0001",
+      "alt_codes": ["050002000010001"],
+      "name": "Filament runout at extruder",
+      "description": "Filament runout detected at the extruder sensor (not AMS-side).",
+      "severity": "warning",
+      "categories": ["mechanical", "sensor"],
+      "fix_steps": [
+        "Check that filament is still present on the spool or in the AMS slot feeding the toolhead.",
+        "If the spool is empty, load a new spool and cut a clean, sharp tip.",
+        "Feed filament to the extruder until grabbed, then use the Load function and resume.",
+        "If the code appears with a full spool, inspect the runout sensor area for debris or a stuck lever arm."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0500-0200-0001-0001",
+      "tags": ["filament runout", "extruder", "sensor", "empty spool"]
+    },
+
+    {
+      "code": "0500-0300-0001-0001",
+      "alt_codes": ["050003000010001"],
+      "name": "Extruder motor overload or step loss",
+      "description": "Extruder motor overload or step loss detected. Possible clog or excessive resistance in the filament path.",
+      "severity": "warning",
+      "categories": ["mechanical", "motion"],
+      "fix_steps": [
+        "Listen for clicking or grinding from the extruder during printing; stop if heard.",
+        "Heat the nozzle and unload filament; check the tip for a thick plug or burnt material.",
+        "Perform a cold pull or replace the nozzle or hotend if manual resistance is high.",
+        "After clearing, reduce print speed and flow rate for very viscous filaments.",
+        "Check the extruder gear for accumulated filament dust and clean if needed."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0500-0300-0001-0001",
+      "tags": ["extruder", "motor", "clog", "step loss", "overload", "grinding"]
+    },
+
+    {
+      "code": "0600-0200-0001-0001",
+      "alt_codes": ["060002000010001"],
+      "name": "Axis homing failed",
+      "description": "Axis homing failed. X, Y, or Z endstop error or obstruction preventing homing.",
+      "severity": "warning",
+      "categories": ["motion", "mechanical"],
+      "fix_steps": [
+        "Power off the printer and gently move the toolhead and bed by hand to feel for binding or obstruction.",
+        "Look for stray parts, clips, failed prints, or supports blocking motion on any axis.",
+        "Turn power back on and run a homing cycle with the door open to watch movement.",
+        "Check belt tension on X and Y axes.",
+        "If an axis consistently fails to home, inspect the endstop sensor and contact support if the motor or sensor appears damaged."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0600-0200-0001-0001",
+      "tags": ["homing", "endstop", "X axis", "Y axis", "Z axis", "obstruction"]
+    },
+
+    {
+      "code": "0600-0300-0001-0001",
+      "alt_codes": ["060003000010001"],
+      "name": "Y-axis belt or motor stall detected",
+      "description": "Y-axis belt or motor stall detected during printing.",
+      "severity": "warning",
+      "categories": ["motion", "mechanical"],
+      "fix_steps": [
+        "Inspect the Y-axis rails and rods for dirt or hardened grease; wipe with a lint-free cloth.",
+        "Verify the bed moves smoothly front to back without scraping the side panels or cables.",
+        "Check belt tension; it should be firm but not overly tight or loose.",
+        "In Bambu Studio, reduce acceleration and speed if stalls are intermittent.",
+        "Contact support if the belt looks worn or the motor exhibits unusual noise."
+      ],
+      "wiki_url": "https://wiki.bambulab.com/en/hms/hmscode/HMS_0600-0300-0001-0001",
+      "tags": ["Y axis", "belt", "motor stall", "motion"]
+    }
+
+  ]
+}
