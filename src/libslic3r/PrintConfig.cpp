@@ -3254,6 +3254,17 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionBool(false));
     
+    // Nonplanar debug logging (experimental)
+    def = this->add("nonplanar_debug", coBool);
+    def->label = L("Enable nonplanar debug output");
+    def->category = L("Experimental");
+    def->tooltip = L("When enabled, writes human-readable debug comments "
+                     "into the G-code output describing nonplanar Z lifting "
+                     "decisions. Intended for users without C++ access who "
+                     "need to diagnose nonplanar slicing behavior.");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(false));
+    
     def = this->add("default_jerk", coFloat);
     def->label = L("Default");
     def->category = L("Speed");

@@ -49,8 +49,11 @@
 
 #include "SVG.hpp"
 
+#include "../slic3r/GUI/NonplanarSurface.hpp"
+
 #include <tbb/parallel_for.h>
 #include "calib.hpp"
+#include "slic3r/GUI/NonplanarSurface.hpp"
 // Intel redesigned some TBB interface considerably when merging TBB with their oneAPI set of libraries, see GH #7332.
 // We are using quite an old TBB 2017 U7. Before we update our build servers, let's use the old API, which is deprecated in up to date TBB.
 #if ! defined(TBB_VERSION_MAJOR)
@@ -3266,6 +3269,61 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
             file.write("M981 S1 P20000 ;open spaghetti detector\n");
         }
 
+        // ── Nonplanar: init surface sampler ──────────────────────────────────────
+        // Reset any surface sampler from a previous export. This must happen before
+        // any _extrude call so that m_nonplanar_surface is never stale.        
+        m_nonplanar_surface.reset();
+        if (m_config.nonplanar_slicing.value) {
+            // Use the first printable object's mesh as the reference surface.
+            // Only one mesh is used for the whole print; multi-object prints are
+            // not individually sampled.            
+            const PrintObject* np_object = nullptr;
+            for (const PrintObject* obj : print.objects()) {
+                if (!obj->layers().empty()) {
+                    np_object = obj;
+                    break;
+                }
+            }
+            if (np_object) {
+                NonplanarConfig np_cfg;
+                np_cfg.enabled             = true;
+                np_cfg.max_slope_angle_deg = m_config.nonplanar_max_angle.value;
+                np_cfg.layer_height        = np_object->config().layer_height.value;
+                np_cfg.perimeters_only     = m_config.nonplanar_perimeters_only.value;
+                np_cfg.nozzle_diameter     = m_config.nozzle_diameter.get_at(0);
+                // raw_mesh() returns the mesh in object-local coordinates.
+                // The AABB tree is built over this mesh in NonplanarSurface's constructor.
+                TriangleMesh np_mesh = np_object->model_object()->raw_mesh(); 
+
+                Vec3d mesh_center = np_mesh.bounding_box().center();
+                BOOST_LOG_TRIVIAL(warning) << "NP mesh center" 
+                    << mesh_center.x() << ", " << mesh_center.y() << ", " << mesh_center.z();
+                
+                if (m_config.nonplanar_debug.value) {
+                    // Debug comment written into the G-code header so it is visible
+                    // in any viewer or log without needing a C++ build.
+                    file.write_format(
+                        "; NP_DEBUG init: max_angle=%.1f layer_height=%.3f nozzle=%.2f perimeters_only=%d\n",
+                        np_cfg.max_slope_angle_deg,
+                        np_cfg.layer_height,
+                        np_cfg.nozzle_diameter,
+                        (int)np_cfg.perimeters_only);
+                    file.write_format(
+                        "; NP_DEBUG mesh: center=(%.3f, %.3f, %.3f) triangles=%zu\n",
+                        mesh_center.x(), mesh_center.y(), mesh_center.z(),
+                        np_mesh.its.indices.size());
+                }
+                
+                m_nonplanar_surface = std::make_unique<NonplanarSurface>(np_mesh, np_cfg);
+            }
+        }
+        else if (m_config.nonplanar_debug.value) {
+            file.write_format("; NP_DEBUG init: no printable object found, nonplanar disabled\n");
+        }
+        // ─────────────────────────────────────────────────────────────────────────
+        
+        
+        
         // Do all objects for each layer.
         if (print.config().print_sequence == PrintSequence::ByObject && !has_wipe_tower) {
             size_t finished_objects = 0;
@@ -6320,6 +6378,16 @@ double GCode::calc_max_volumetric_speed(const double layer_height, const double 
 
 std::string GCode::_extrude(const ExtrusionPath &path, std::string description, double speed)
 {
+    
+    // Temporary diagnostic log: reports whether the surface sampler is valid
+    // and which role this path has. Remove before shipping.
+    if (m_config.nonplanar_slicing.value) {
+        BOOST_LOG_TRIVIAL(warning) << "NP _extrude: m_nonplanar_surface="
+            << (m_nonplanar_surface ? "valid" : "NULL")
+            << " role=" << path.role()
+            << " apply_np=" << (m_nonplanar_surface && m_nonplanar_surface->is_enabled());
+    }
+    
     std::string gcode;
 
     if (is_bridge(path.role()))
@@ -6327,6 +6395,18 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
     const ExtrusionPathSloped* sloped = dynamic_cast<const ExtrusionPathSloped*>(&path);
 
+    // Determine whether nonplanar Z lifting should be applied to this specific path.
+    // Lifting is skipped when:
+    //   - m_nonplanar_surface is null (feature disabled or no mesh was found)
+    //   - perimeters_only is set and this is not an inner or outer perimeter
+    // This flag is evaluated once per path and reused in both the non-arc and
+    // variable-speed loops below.
+    const bool apply_np_this_path = m_nonplanar_surface &&
+        m_nonplanar_surface->is_enabled() &&
+        (!m_config.nonplanar_perimeters_only.value ||
+         path.role() == erExternalPerimeter ||
+         path.role() == erPerimeter);
+    
     const auto get_sloped_z = [&sloped, this](double z_ratio) {
         const auto height = sloped->height;
         return lerp(m_nominal_z - height, m_nominal_z, z_ratio);
@@ -6691,6 +6771,49 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                          [speed](const ProcessedPoint &p) { return fabs(double(p.speed) - speed) > 1; }); // Ignore small speed variations (under 1mm/sec)
     }
 
+    // Pre-lift the entire polyline in one batch query before entering the
+    // per-segment loop. Doing this upfront avoids repeated AABB lookups inside
+    // the loop and lets the debug block below inspect the full Z range at once.
+    std::vector<Vec3d> all_lifted;
+    if (apply_np_this_path) {
+        // Reconstruct a flat Polyline from the Line3 segments so lift_polyline
+        // can work on it. The first point of each line is skipped after the
+        // first segment to avoid duplicating shared endpoints.
+        Polyline full_pl;
+        for (const Line3& l : path.polyline.lines()) {
+            if (full_pl.empty())
+                full_pl.points.push_back(l.a.to_point());
+            full_pl.points.push_back(l.b.to_point());
+        }
+        all_lifted = m_nonplanar_surface->lift_polyline(full_pl, m_nominal_z);
+    }
+    
+    // Temporary diagnostic log: reports the Z range of the lifted points so
+    // you can confirm lifting is occurring and is in the right ballpark.
+    // Remove before shipping.
+    double min_z = 1e9, max_z = -1e9;
+    for (const auto& p : all_lifted) {
+        min_z = std::min(min_z, p.z());
+        max_z = std::max(max_z, p.z());
+    }
+    BOOST_LOG_TRIVIAL(warning) << "NP all_lifted: size=" << all_lifted.size()
+        << " nominal=" << m_nominal_z
+        << " min_z=" << min_z
+        << " max_z=" << max_z
+        << " delta=" << (max_z - min_z);
+    
+    // G-code debug comment: written once per path when debug is enabled,
+    // giving non-C++ users visibility into what the lifter computed.
+    if (m_config.nonplanar_debug.value && apply_np_this_path && !all_lifted.empty()) {
+        gcode += Slic3r::format(
+            "; NP_DEBUG path: role=%d pts=%zu nominal_z=%.3f lifted_min=%.3f lifted_max=%.3f delta=%.4f\n",
+            (int)path.role(),
+            all_lifted.size(),
+            m_nominal_z,
+            min_z, max_z,
+            max_z - min_z);
+    }
+    
     double F = speed * 60;  // convert mm/sec to mm/min
     
     // Orca: Dynamic PA
@@ -6963,13 +7086,32 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
                 apply_role_based_fan_speed();
             }
-            // BBS: use G1 if not enable arc fitting or has no arc fitting result or in spiral_mode mode or we are doing sloped extrusion
+            // Re-evaluate apply_np_this_path in this inner scope because arc fitting
+            // is bypassed when nonplanar is active: this guard mirrors the outer flag
+            // and also prevents arc G2/G3 from being emitted for nonplanar paths.
+            const bool apply_np_this_path = m_nonplanar_surface && m_nonplanar_surface->is_enabled() && 
+                (!m_config.nonplanar_perimeters_only.value 
+                || path.role() == erExternalPerimeter || path.role() == erPerimeter);
+            
+            // BBS: use G1 if not enable arc fitting or has no arc fitting result or in spiral_mode mode or we are doing sloped extrusion or we are using nonplanar slicing for this path
             // Attention: G2 and G3 is not supported in spiral_mode mode
-            if (!m_config.enable_arc_fitting || path.polyline.fitting_result.empty() || m_config.spiral_mode || sloped != nullptr || path.z_contoured) {
+            if (!m_config.enable_arc_fitting || path.polyline.fitting_result.empty() || m_config.spiral_mode || sloped != nullptr || path.z_contoured || apply_np_this_path) {
                 double path_length = 0.;
                 double total_length = sloped == nullptr ? 0. : path.polyline.length() * SCALING_FACTOR;
                 double saved_z      = m_writer.get_position().z();
 
+                // Tracks whether the opening "; NP flatZ=X.X" tag has been written for
+                // this path. The tag is emitted lazily on the first segment that actually
+                // uses a lifted Z, so paths where all lifts are zero do not produce noise.
+                bool np_tag_written = false;
+                // The flat layer Z at the moment extrusion begins. Stored here so all
+                // segments in this path reference the same baseline, even if the writer
+                // Z drifts slightly during the loop.
+                const double flat_layer_z = m_writer.get_position().z();
+                // Index into all_lifted, incremented once per segment so each segment
+                // consumes the correct lifted Z from the pre-computed array.
+                size_t seg_idx = 0;
+                
                 for (const Line3& line : path.polyline.lines()) {
                     std::string tempDescription = description;
                     const double line_length = line.length() * SCALING_FACTOR;
@@ -7005,11 +7147,50 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                                          GCodeWriter::full_gcode_comment ? tempDescription : "");
 
                     } else if (sloped == nullptr) {
-                        // Normal extrusion
-                        gcode += m_writer.extrude_to_xy(
-                            this->point_to_gcode(line.b.to_point()),
-                            dE,
-                            GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                        // Normal extrusion, with optional nonplanar Z lift.
+                        // Uses seg_idx+1 because all_lifted[0] is the start point of the path
+                        // and the first move destination is all_lifted[1].
+                        if (apply_np_this_path && 
+                        seg_idx + 1 < all_lifted.size()) {
+                            Vec2d dest2d = this->point_to_gcode(line.b.to_point());
+                            // Emit the opening tag once, carrying the flat layer Z so
+                            // GCodeProcessor can attribute these moves to the correct layer.
+                            
+                            if (!np_tag_written) {
+                                gcode += "; NP flatZ=";
+                                gcode += Slic3r::float_to_string_decimal_point(float(flat_layer_z), 2);
+                                gcode += "\n";
+                                np_tag_written = true;
+                                if (m_config.nonplanar_debug.value) {
+                                    gcode += Slic3r::format(
+                                        "; NP_DEBUG seg_start: flat_z=%.3f first_lifted_z=%.3f\n",
+                                        flat_layer_z,
+                                        all_lifted[seg_idx + 1].z());
+                                }
+                            }
+                            if (m_config.nonplanar_debug.value) {
+                                gcode += Slic3r::format(
+                                    "; NP_DEBUG seg %zu: xy=(%.3f,%.3f) flat_z=%.3f lifted_z=%.3f dz=%.4f\n",
+                                    seg_idx,
+                                    dest2d.x(), dest2d.y(),
+                                    flat_layer_z,
+                                    all_lifted[seg_idx + 1].z(),
+                                    all_lifted[seg_idx + 1].z() - flat_layer_z);
+                            }
+                            
+                            gcode += m_writer.extrude_to_xyz(
+                                Vec3d(dest2d.x(), dest2d.y(), 
+                                      all_lifted[seg_idx + 1].z()),
+                                dE,
+                                GCodeWriter::full_gcode_comment ? tempDescription : "");
+                        } else {
+                            // No lift available or not applicable: fall back to flat XY extrusion.
+                            gcode += m_writer.extrude_to_xy(
+                                this->point_to_gcode(line.b.to_point()),
+                                dE,
+                                GCodeWriter::full_gcode_comment ? tempDescription : "",
+                                path.is_force_no_extrusion());
+                        }
                     } else {
                         // Sloped extrusion
                         const auto [z_ratio, e_ratio] = sloped->interpolate(path_length / total_length);
@@ -7019,6 +7200,22 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             dest3d,
                             dE * e_ratio,
                             GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                    }
+                    ++seg_idx;
+                }
+                
+                // Close the nonplanar block. GCodeProcessor uses this tag to clear
+                // m_is_nonplanar and m_np_flat_z so subsequent flat moves are not
+                // misattributed to the lifted layer.
+                if (np_tag_written) 
+                {
+                    gcode += "; NP end\n";
+                    if (m_config.nonplanar_debug.value) 
+                    {
+                        gcode += Slic3r::format(
+                            "; NP_DEBUG path_end: %zu segments processed, %zu lifted\n",
+                            seg_idx,
+                            all_lifted.size());
                     }
                 }
             } else {
@@ -7107,6 +7304,14 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
             pre_fan_enabled = true;
 
         double path_length = 0.;
+        
+        // Same semantics as the non-variable-speed loop above.
+        // np_tag_written guards the one-time "; NP flatZ=" header emission.
+        // flat_layer_z is captured once before the loop so all segments share
+        // the same baseline Z reference.
+        bool np_tag_written = false;
+        const double flat_layer_z = m_writer.get_position().z();
+        
         for (size_t i = 1; i < new_points.size(); i++) {
             std::string tempDescription = description;
             const ProcessedPoint &processed_point = new_points[i];
@@ -7211,8 +7416,45 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 gcode += m_writer.extrude_to_xyz(Vec3d(dest2d.x(), dest2d.y(), z), e,
                                                  GCodeWriter::full_gcode_comment ? tempDescription : "");
             } else if (sloped == nullptr) {
-                // Normal extrusion
-                gcode += m_writer.extrude_to_xy(p.head<2>(), dE, GCodeWriter::full_gcode_comment ? tempDescription : "");
+                // Nonplanar lift for variable-speed paths.
+                // Uses index i directly because new_points is already indexed by point
+                // rather than by segment, so all_lifted[i] corresponds to this point.
+                if (apply_np_this_path && i < all_lifted.size()) {
+                    if (!np_tag_written) {
+                        gcode += "; NP flatZ=";
+                        gcode += Slic3r::float_to_string_decimal_point(
+                            float(flat_layer_z), 2);
+                        gcode += "\n";
+                        np_tag_written = true;
+                        if (m_config.nonplanar_debug.value) 
+                        {
+                            gcode += Slic3r::format(
+                                "; NP_DEBUG var_seg_start: flat_z=%.3f first_lifted_z=%.3f\n",
+                                flat_layer_z,
+                                all_lifted[i].z());
+                        }
+                    }
+                    if (m_config.nonplanar_debug.value) 
+                    {
+                        gcode += Slic3r::format(
+                            "; NP_DEBUG var_seg %zu: lifted_z=%.3f dz=%.4f speed=%.1f\n",
+                            i,
+                            all_lifted[i].z(),
+                            all_lifted[i].z() - flat_layer_z,
+                            double(new_points[i].speed));
+                    }
+                    Vec2d dest2d = p.head<2>();
+                    gcode += m_writer.extrude_to_xyz(
+                        Vec3d(dest2d.x(), dest2d.y(), all_lifted[i].z()),
+                        dE,
+                        GCodeWriter::full_gcode_comment ? tempDescription : "");
+                } else {
+                    // Flat fallback when no lift is available for this point.
+                    gcode += m_writer.extrude_to_xy(
+                        p.head<2>(),
+                        dE,
+                        GCodeWriter::full_gcode_comment ? tempDescription : "");
+                }
             } else {
                 // Sloped extrusion
                 const auto [z_ratio, e_ratio] = sloped->interpolate(path_length / total_length);
@@ -7222,6 +7464,14 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
             prev = p;
 
+        }
+        
+        // Close the nonplanar block. GCodeProcessor uses this tag to clear
+        // m_is_nonplanar and m_np_flat_z so subsequent flat moves are not
+        // misattributed to the lifted layer.
+        if (np_tag_written) 
+        {
+            gcode += "; NP end\n";
         }
     }
     if (m_enable_cooling_markers) {

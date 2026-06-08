@@ -2451,6 +2451,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("nonplanar_slicing");
         optgroup->append_single_option_line("nonplanar_max_angle");
         optgroup->append_single_option_line("nonplanar_perimeters_only");
+        optgroup->append_single_option_line("nonplanar_debug");
     
         page = add_options_page(L("Strength"), "custom-gcode_strength"); // ORCA: icon only visible on placeholders
         optgroup = page->new_optgroup(L("Walls"), L"param_wall");
@@ -2881,6 +2882,7 @@ void TabPrint::toggle_options()
         const bool np = m_config->opt_bool("nonplanar_slicing");
         toggle_option("nonplanar_max_angle", np);
         toggle_option("nonplanar_perimeters_only", np);
+        toggle_option("nonplanar_debug", np);
     }
 }
 

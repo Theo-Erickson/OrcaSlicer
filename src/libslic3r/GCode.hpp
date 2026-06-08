@@ -35,6 +35,8 @@
 #include <string>
 #include <cfloat>
 
+#include "slic3r/GUI/NonplanarSurface.hpp"
+
 namespace Slic3r {
 
 // Forward declarations.
@@ -643,6 +645,9 @@ private:
     bool m_need_change_layer_lift_z = false;
     int m_start_gcode_filament = -1;
     std::string m_filament_instances_code;
+    
+    // Nonplanar surface sampler — initialised once per object in do_export().
+    std::unique_ptr<NonplanarSurface> m_nonplanar_surface;
 
     std::set<unsigned int>                  m_initial_layer_extruders;
     std::vector<std::vector<unsigned int>>  m_sorted_layer_filaments;

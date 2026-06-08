@@ -1653,7 +1653,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionBool,               nonplanar_slicing))
     ((ConfigOptionFloat,              nonplanar_max_angle))
     ((ConfigOptionBool,               nonplanar_perimeters_only))
-
+    ((ConfigOptionBool,               nonplanar_debug))
 )
 
 // This object is mapped to Perl as Slic3r::Config::Full.
