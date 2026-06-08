@@ -1649,6 +1649,10 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionPoint,               bed_mesh_probe_distance))
     ((ConfigOptionFloat,               adaptive_bed_mesh_margin))
 
+    // ── Nonplanar slicing (experimental) ────────────────────────────────
+    ((ConfigOptionBool,               nonplanar_slicing))
+    ((ConfigOptionFloat,              nonplanar_max_angle))
+    ((ConfigOptionBool,               nonplanar_perimeters_only))
 
 )
 

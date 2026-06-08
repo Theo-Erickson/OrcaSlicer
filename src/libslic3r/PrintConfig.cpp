@@ -3229,6 +3229,31 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionPercent(50));
     
+    // Nonplanar slicing defaults
+    def = this->add("nonplanar_slicing", coBool);
+    def->label = L("Enable nonplanar slicing");
+    def->category = L("Experimental");
+    def->tooltip = L("TOOLTIP");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(true));
+    
+    def = this->add("nonplanar_max_angle", coFloat);
+    def->label = L("Max angle");
+    def->category = L("Experimental");
+    def->tooltip = L("TOOLTIP");
+    def->sidetext = L("degrees");	// millimeters, CIS languages need translation
+    def->min = 5.0f;
+    def->max = 60.0f;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloat(45.f));
+    
+    def = this->add("nonplanar_perimeters_only", coBool);
+    def->label = L("Enable nonplanar slicing only on perimeters only");
+    def->category = L("Experimental");
+    def->tooltip = L("TOOLTIP");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(false));
+    
     def = this->add("default_jerk", coFloat);
     def->label = L("Default");
     def->category = L("Speed");

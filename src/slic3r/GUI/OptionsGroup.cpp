@@ -749,6 +749,12 @@ void ConfigOptionsGroup::reload_config()
 		// index in the vector option, zero for scalars
         int 			   opt_index = kvp.second.second;
 		const ConfigOptionDef &option = m_options.at(opt_id).opt;
+	    
+	    // Guard: skip if the option doesn't exist in this config
+	    // (can happen for PrintObjectConfig options on partially-initialized model configs)
+	    if (!m_config->has(opt_key))
+	        continue;
+	    
 		this->set_value(opt_id, config_value(opt_key, opt_index, option.gui_flags == "serialized"));
 	}
 }

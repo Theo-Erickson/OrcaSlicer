@@ -2445,8 +2445,14 @@ void TabPrint::build()
         optgroup->append_single_option_line("overhang_reverse", "quality_settings_overhangs#reverse-on-even");
         optgroup->append_single_option_line("overhang_reverse_internal_only", "quality_settings_overhangs#reverse-internal-only");
         optgroup->append_single_option_line("overhang_reverse_threshold", "quality_settings_overhangs#reverse-threshold");
-
-    page = add_options_page(L("Strength"), "custom-gcode_strength"); // ORCA: icon only visible on placeholders
+        
+    // ── Nonplanar slicing (experimental) ─────────────────────────────
+        optgroup = page->new_optgroup(L("Nonplanar slicing (experimental)"), L"param_advanced");
+        optgroup->append_single_option_line("nonplanar_slicing");
+        optgroup->append_single_option_line("nonplanar_max_angle");
+        optgroup->append_single_option_line("nonplanar_perimeters_only");
+    
+        page = add_options_page(L("Strength"), "custom-gcode_strength"); // ORCA: icon only visible on placeholders
         optgroup = page->new_optgroup(L("Walls"), L"param_wall");
         optgroup->append_single_option_line("wall_loops", "strength_settings_walls#wall-loops");
         optgroup->append_single_option_line("alternate_extra_wall", "strength_settings_walls#alternate-extra-wall");
@@ -2868,6 +2874,13 @@ void TabPrint::toggle_options()
             cb->Append(_(def->enum_labels[i]));
         }
         cb->SetValue(n);
+    }
+    
+    // Nonplanar slicing: only toggle if config has these options
+    if (m_config->has("nonplanar_slicing")) {
+        const bool np = m_config->opt_bool("nonplanar_slicing");
+        toggle_option("nonplanar_max_angle", np);
+        toggle_option("nonplanar_perimeters_only", np);
     }
 }
 
