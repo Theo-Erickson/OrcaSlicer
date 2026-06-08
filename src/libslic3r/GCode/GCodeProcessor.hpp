@@ -788,6 +788,17 @@ class Print;
         std::vector<int> m_physical_extruder_map;
         bool m_manual_filament_change;
 
+        // Nonplanar slicing viewer state
+        // Nonplanar slicing viewer state.
+        // Set to true while the processor is inside a nonplanar toolpath segment
+        // (between "NP flatZ=" and "NP end" tags emitted by GCode.cpp).
+        bool  m_is_nonplanar { false };
+        // The flat layer Z that the current nonplanar segment logically belongs to.
+        // Used to attribute nonplanar moves back to their correct layer for the
+        // toolpath viewer and statistics, since their actual Z values deviate from
+        // the layer stack.
+        float m_np_flat_z    { 0.0f };
+        
         //BBS: x, y offset for gcode generated
         double          m_x_offset{ 0 };
         double          m_y_offset{ 0 };

@@ -2437,6 +2437,9 @@ void GCodeProcessor::reset()
     m_cached_position.reset();
     m_wiping = false;
     m_flushing = false;
+    // Nonplanar slicing viewer state
+    m_is_nonplanar = false;
+    m_np_flat_z = 0.0f;
     m_virtual_flushing = false;
     m_wipe_tower = false;
     m_remaining_volume = std::vector<float>(MAXIMUM_EXTRUDER_NUMBER, 0.f);
@@ -3053,6 +3056,27 @@ void GCodeProcessor::process_tags(const std::string_view comment, bool producers
         m_processing_start_custom_gcode = (m_extrusion_role == erCustom && m_g1_line_id == 0);
         return;
     }
+    
+    // Nonplanar flat-Z tags emitted by GCode.cpp.
+    // "NP flatZ=X.X" marks the start of a nonplanar segment and carries the
+    // flat layer Z the segment belongs to. "NP end" closes the segment.
+    // Parsing here keeps the viewer and statistics correctly anchored to the
+    // logical layer Z rather than the actual lifted Z values in the moves.
+    static const std::string np_start_tag = "NP flatZ=";
+    static const std::string np_end_tag   = "NP end";
+    if (comment == np_end_tag) {
+        m_is_nonplanar = false;
+        m_np_flat_z    = 0.0f;
+        return;
+    }
+    if (boost::starts_with(comment, np_start_tag)) {
+        float parsed = 0.0f;
+        if (parse_number(std::string_view(comment).substr(np_start_tag.size()), parsed)) {
+            m_is_nonplanar = true;
+            m_np_flat_z    = parsed;
+        }
+        return;
+    }
 
     // ; OBJECT_ID  start
     if (boost::starts_with(comment, " start printing object")) {
@@ -3251,6 +3275,12 @@ void GCodeProcessor::process_tags(const std::string_view comment, bool producers
     // layer change tag
     if (comment == reserved_tag(ETags::Layer_Change)) {
         ++m_layer_id;
+        // Clear nonplanar state on every layer change. A nonplanar segment must
+        // never carry over into the next layer, both for viewer correctness and
+        // to prevent stale m_np_flat_z values from misattributing moves if an
+        // "NP end" tag was somehow missed.
+        m_is_nonplanar = false;
+        m_np_flat_z    = 0.0f;
         return;
     }
 }
