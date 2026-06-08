@@ -347,6 +347,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/MultiTaskModel.hpp
     GUI/NetworkTestDialog.cpp
     GUI/NetworkTestDialog.hpp
+    GUI/NonplanarSurface.cpp
+    GUI/NonplanarSurface.hpp
     GUI/Notebook.cpp
     GUI/Notebook.hpp
     GUI/NotificationManager.cpp
