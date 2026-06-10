@@ -1774,6 +1774,67 @@ void PreferencesDialog::create_items()
 #endif // _WIN32
 
     //////////////////////////
+    //// GIZMO TAB
+    /////////////////////////////////////
+    m_pref_tabs->AppendItem(_L("Gizmo"));
+    f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));
+    g_sizer = f_sizers.back();
+    g_sizer->AddGrowableCol(0, 1);
+ 
+    //// GIZMO > Plane Handles
+    g_sizer->Add(create_item_title(_L("Plane Handles")), 1, wxEXPAND);
+ 
+    // Position style
+    {
+        std::vector<wxString> position_labels = {
+            _L("At arrow end"),      // "at_arrow_end"
+            _L("At intersection"),   // "intersection"
+            _L("Midpoint"),          // "midpoint"
+        };
+        std::vector<std::string> position_keys = {
+            "at_arrow_end",
+            "intersection",
+            "midpoint",
+        };
+        auto item_plane_position = create_item_combobox(
+            _L("Handle position"),
+            _L("Where the plane constraint squares are placed relative to the gizmo.\n"
+               "At arrow end: squares near the face corner where axis arrows meet (Blender style).\n"
+               "At intersection: squares sit at the junction of two axis lines.\n"
+               "Midpoint: squares halfway between gizmo origin and arrow tip."),
+            "plane_handle_position",
+            position_labels,
+            position_keys
+        );
+        g_sizer->Add(item_plane_position);
+    }
+ 
+    // Visual shape
+    {
+        std::vector<wxString> shape_labels = {
+            _L("Square"),   // "square"
+            _L("Circle"),   // "circle"
+        };
+        std::vector<std::string> shape_keys = {
+            "square",
+            "circle",
+        };
+        auto item_plane_shape = create_item_combobox(
+            _L("Handle shape"),
+            _L("Visual shape of the plane constraint handles.\n"
+               "Square: flat filled rectangle with an outline border.\n"
+               "Circle: filled disc with a ring border."),
+            "plane_handle_shape",
+            shape_labels,
+            shape_keys
+        );
+        g_sizer->Add(item_plane_shape);
+    }
+ 
+    g_sizer->AddSpacer(FromDIP(10));
+    sizer_page->Add(g_sizer, 0, wxEXPAND);
+    
+    //////////////////////////
     //// DEVELOPER TAB
     /////////////////////////////////////
     m_pref_tabs->AppendItem(_L("Developer"));

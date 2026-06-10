@@ -1,4 +1,5 @@
 #include "GLGizmoScale.hpp"
+#include "../PlaneHandlePrefs.hpp"
 #include "slic3r/GUI/GLCanvas3D.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
 #include "slic3r/GUI/Plater.hpp"
@@ -323,7 +324,7 @@ void GLGizmoScale3D::on_start_dragging()
     auto grabbers_transform    = m_grabbers_tran.get_matrix();
     m_starting.drag_position   = grabbers_transform * m_grabbers[m_hover_id].center;
     m_starting.plane_center    = grabbers_transform * m_grabbers[4].center;
-    m_starting.plane_nromal    = (grabbers_transform * m_grabbers[5].center
+    m_starting.plane_normal    = (grabbers_transform * m_grabbers[5].center
                                  - grabbers_transform * m_grabbers[4].center).normalized();
     m_starting.ctrl_down       = wxGetKeyState(WXK_CONTROL);
     m_starting.box             = m_bounding_box;
@@ -418,21 +419,41 @@ void GLGizmoScale3D::update_grabbers_data()
     for (int i = 0; i < 10; ++i)
         m_grabbers[i].matrix = m_grabbers_tran.get_matrix();
 
-    // ORCA: plane handle grabber centers — centered on each face of the bbox.
-    // YZ plane (locks X): centered on the +X face at (max.x, 0, 0) in local space
-    m_grabbers[SCALE_PLANE_ID_YZ].center = Vec3d(box_half_size.x(), 0.0, 0.0);
-    m_grabbers[SCALE_PLANE_ID_YZ].color       = AXES_COLOR[0];     // red   (X locked)
-    m_grabbers[SCALE_PLANE_ID_YZ].hover_color = AXES_HOVER_COLOR[0];
+    // ORCA: plane handle grabber centers, driven by position preference.
+    {
+        const double mean = (box_half_size.x() + box_half_size.y() + box_half_size.z()) / 3.0;
+        const double sz   = mean * SCALE_PLANE_SQUARE_SIZE;
 
-    // XZ plane (locks Y): centered on the +Y face at (0, max.y, 0)
-    m_grabbers[SCALE_PLANE_ID_XZ].center = Vec3d(0.0, box_half_size.y(), 0.0);
-    m_grabbers[SCALE_PLANE_ID_XZ].color       = AXES_COLOR[1];     // green (Y locked)
-    m_grabbers[SCALE_PLANE_ID_XZ].hover_color = AXES_HOVER_COLOR[1];
+        Vec3d pos_yz, pos_xz, pos_xy;
+        switch (m_plane_prefs.position) {
+        case PlaneHandlePosition::AtIntersection:
+            // Near corner of square at gizmo origin, extends sz along each free axis
+            pos_yz = { box_half_size.x(), sz, sz };
+            pos_xz = { sz, box_half_size.y(), sz };
+            pos_xy = { sz, sz, box_half_size.z() };
+            break;
+        case PlaneHandlePosition::Midpoint:
+            pos_yz = { box_half_size.x(), box_half_size.y() * 0.5, box_half_size.z() * 0.5 };
+            pos_xz = { box_half_size.x() * 0.5, box_half_size.y(), box_half_size.z() * 0.5 };
+            pos_xy = { box_half_size.x() * 0.5, box_half_size.y() * 0.5, box_half_size.z() };
+            break;
+        default: // AtArrowEnd — centered on face
+            pos_yz = { box_half_size.x(), 0.0, 0.0 };
+            pos_xz = { 0.0, box_half_size.y(), 0.0 };
+            pos_xy = { 0.0, 0.0, box_half_size.z() };
+            break;
+        }
 
-    // XY plane (locks Z): centered on the +Z face at (0, 0, max.z)
-    m_grabbers[SCALE_PLANE_ID_XY].center = Vec3d(0.0, 0.0, box_half_size.z());
-    m_grabbers[SCALE_PLANE_ID_XY].color       = AXES_COLOR[2];     // blue  (Z locked)
-    m_grabbers[SCALE_PLANE_ID_XY].hover_color = AXES_HOVER_COLOR[2];
+        m_grabbers[SCALE_PLANE_ID_YZ].center     = pos_yz;
+        m_grabbers[SCALE_PLANE_ID_YZ].color       = AXES_COLOR[0];
+        m_grabbers[SCALE_PLANE_ID_YZ].hover_color = AXES_HOVER_COLOR[0];
+        m_grabbers[SCALE_PLANE_ID_XZ].center     = pos_xz;
+        m_grabbers[SCALE_PLANE_ID_XZ].color       = AXES_COLOR[1];
+        m_grabbers[SCALE_PLANE_ID_XZ].hover_color = AXES_HOVER_COLOR[1];
+        m_grabbers[SCALE_PLANE_ID_XY].center     = pos_xy;
+        m_grabbers[SCALE_PLANE_ID_XY].color       = AXES_COLOR[2];
+        m_grabbers[SCALE_PLANE_ID_XY].hover_color = AXES_HOVER_COLOR[2];
+    }
 
     for (int i = SCALE_PLANE_ID_YZ; i <= SCALE_PLANE_ID_XY; ++i)
         m_grabbers[i].matrix = m_grabbers_tran.get_matrix();
@@ -455,6 +476,18 @@ void GLGizmoScale3D::on_render()
 {
     glsafe(::glClear(GL_DEPTH_BUFFER_BIT));
     glsafe(::glEnable(GL_DEPTH_TEST));
+
+    // ORCA: reload prefs each frame, force rebuild if changed
+    {
+        const PlaneHandlePrefs new_prefs = PlaneHandlePrefs::load();
+        if (new_prefs != m_plane_prefs) {
+            m_plane_prefs = new_prefs;
+            for (auto& ph : m_plane_handles) {
+                ph.quad_model.reset();
+                ph.border_model.reset();
+            }
+        }
+    }
 
     update_grabbers_data();
 
@@ -595,8 +628,9 @@ void GLGizmoScale3D::rebuild_plane_quads()
     const Vec3d hs    = 0.5 * m_bounding_box.size();
     const double mean = (hs.x() + hs.y() + hs.z()) / 3.0;
     const double sz   = mean * SCALE_PLANE_SQUARE_SIZE;
+    static constexpr int CIRCLE_SEGS = 32;
 
-    auto build_handle = [&](PlaneHandle& ph, const Vec3d& c,
+    auto build_square = [&](PlaneHandle& ph, const Vec3d& c,
                              const Vec3d& u, const Vec3d& v,
                              const ColorRGBA& col)
     {
@@ -647,23 +681,58 @@ void GLGizmoScale3D::rebuild_plane_quads()
         }
     };
 
-    // YZ plane handle: in Y-Z plane at +X face
-    build_handle(m_plane_handles[0],
-        m_grabbers[SCALE_PLANE_ID_YZ].center,
-        Vec3d::UnitY(), Vec3d::UnitZ(),
-        m_grabbers[SCALE_PLANE_ID_YZ].color);
+    auto build_circle = [&](PlaneHandle& ph, const Vec3d& c,
+                             const Vec3d& u, const Vec3d& v,
+                             const ColorRGBA& col)
+    {
+        const Vec3f normal = (Vec3f)(u.cross(v).normalized().cast<float>());
+        {
+            ph.quad_model.reset();
+            GLModel::Geometry g;
+            g.format = { GLModel::Geometry::EPrimitiveType::Triangles,
+                         GLModel::Geometry::EVertexLayout::P3N3 };
+            ColorRGBA fill = col; fill.a(0.35f); g.color = fill;
+            g.reserve_vertices(CIRCLE_SEGS + 1);
+            g.reserve_indices(CIRCLE_SEGS * 3);
+            g.add_vertex((Vec3f)c.cast<float>(), normal);
+            for (int i = 0; i < CIRCLE_SEGS; ++i) {
+                const double a = 2.0 * M_PI * i / CIRCLE_SEGS;
+                g.add_vertex((Vec3f)(c + u*(sz*std::cos(a)) + v*(sz*std::sin(a))).cast<float>(), normal);
+            }
+            for (int i = 0; i < CIRCLE_SEGS; ++i)
+                g.add_triangle(0, i+1, (i+1)%CIRCLE_SEGS + 1);
+            ph.quad_model.init_from(std::move(g));
+        }
+        {
+            ph.border_model.reset();
+            GLModel::Geometry g;
+            g.format = { GLModel::Geometry::EPrimitiveType::Lines,
+                         GLModel::Geometry::EVertexLayout::P3 };
+            g.color = col;
+            g.reserve_vertices(CIRCLE_SEGS); g.reserve_indices(CIRCLE_SEGS * 2);
+            for (int i = 0; i < CIRCLE_SEGS; ++i) {
+                const double a = 2.0 * M_PI * i / CIRCLE_SEGS;
+                g.add_vertex((Vec3f)(c + u*(sz*std::cos(a)) + v*(sz*std::sin(a))).cast<float>());
+            }
+            for (int i = 0; i < CIRCLE_SEGS; ++i) g.add_line(i, (i+1)%CIRCLE_SEGS);
+            ph.border_model.init_from(std::move(g));
+        }
+    };
 
-    // XZ plane handle: in X-Z plane at +Y face
-    build_handle(m_plane_handles[1],
-        m_grabbers[SCALE_PLANE_ID_XZ].center,
-        Vec3d::UnitX(), Vec3d::UnitZ(),
-        m_grabbers[SCALE_PLANE_ID_XZ].color);
+    const bool use_circle = (m_plane_prefs.shape == PlaneHandleShape::Circle);
+    auto build = [&](PlaneHandle& ph, const Vec3d& c,
+                     const Vec3d& u, const Vec3d& v, const ColorRGBA& col) {
+        if (use_circle) build_circle(ph, c, u, v, col);
+        else            build_square(ph, c, u, v, col);
+    };
 
-    // XY plane handle: in X-Y plane at +Z face
-    build_handle(m_plane_handles[2],
-        m_grabbers[SCALE_PLANE_ID_XY].center,
-        Vec3d::UnitX(), Vec3d::UnitY(),
-        m_grabbers[SCALE_PLANE_ID_XY].color);
+    // Winding: u × v = outward normal for each face
+    build(m_plane_handles[0], m_grabbers[SCALE_PLANE_ID_YZ].center,
+          Vec3d::UnitY(), Vec3d::UnitZ(), m_grabbers[SCALE_PLANE_ID_YZ].color);
+    build(m_plane_handles[1], m_grabbers[SCALE_PLANE_ID_XZ].center,
+          Vec3d::UnitZ(), Vec3d::UnitX(), m_grabbers[SCALE_PLANE_ID_XZ].color); // swapped for +UnitY normal
+    build(m_plane_handles[2], m_grabbers[SCALE_PLANE_ID_XY].center,
+          Vec3d::UnitX(), Vec3d::UnitY(), m_grabbers[SCALE_PLANE_ID_XY].color);
 }
 
 void GLGizmoScale3D::render_plane_handles(const Transform3d& base_matrix)
@@ -699,6 +768,7 @@ void GLGizmoScale3D::render_plane_handles(const Transform3d& base_matrix)
         }
 
         glsafe(::glDepthMask(GL_TRUE));
+        glsafe(::glEnable(GL_CULL_FACE));
         glsafe(::glDisable(GL_BLEND));
         shader->stop_using();
     }
@@ -850,10 +920,10 @@ double GLGizmoScale3D::calc_ratio(const UpdateData& data) const
 
     if (len_starting_vec != 0.0) {
         Vec3d mouse_dir    = data.mouse_ray.unit_vector();
-        Vec3d plane_normal = m_starting.plane_nromal;
+        Vec3d plane_normal = m_starting.plane_normal;
         if (m_hover_id == 5) {
-            Vec3d plane_vec = mouse_dir.cross(m_starting.plane_nromal);
-            plane_normal    = plane_vec.cross(m_starting.plane_nromal);
+            Vec3d plane_vec = mouse_dir.cross(m_starting.plane_normal);
+            plane_normal    = plane_vec.cross(m_starting.plane_normal);
         }
         plane_normal = plane_normal.normalized();
 

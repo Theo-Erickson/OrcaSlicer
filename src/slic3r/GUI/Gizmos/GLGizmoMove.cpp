@@ -1,4 +1,5 @@
 #include "GLGizmoMove.hpp"
+#include "../PlaneHandlePrefs.hpp"
 #include "slic3r/GUI/GLCanvas3D.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
 //BBS: GUI refactor
@@ -270,6 +271,7 @@ void GLGizmoMove3D::on_start_dragging()
 
     m_displacement = Vec3d::Zero();
     m_prev_plane_displacement = Vec3d::Zero();
+    m_drag_plane_model.reset(); // force rebuild for the newly active plane
     const BoundingBoxf3& box = m_parent.get_selection().get_bounding_box();
     m_starting_box_center        = box.center();
     m_starting_box_bottom_center = box.center();
@@ -373,39 +375,63 @@ void GLGizmoMove3D::on_render()
         m_grabbers[i].hover_color = AXES_HOVER_COLOR[i];
     }
 
-    // ORCA: plane handle grabber positions.
+    // ORCA: reload preferences each frame so Preferences dialog changes
+    // take effect without restarting. Force a quad rebuild if anything changed.
+    {
+        const PlaneHandlePrefs new_prefs = PlaneHandlePrefs::load();
+        if (new_prefs != m_plane_prefs) {
+            m_plane_prefs = new_prefs;
+            // Reset all quad models so rebuild_plane_quads() regenerates them
+            for (auto& ph : m_plane_handles) {
+                ph.quad_model.reset();
+                ph.border_model.reset();
+            }
+        }
+    }
+
+    // ORCA: plane handle grabber positions, computed from the current style pref.
     // Each quad is centered on the corresponding bbox face, at the face midpoint.
     // This matches Blender's convention: the square sits just inside the face corner
     // formed by the two axis arrows, inset by a fixed fraction of the face size.
     {
-        const Vec3d hs = 0.5 * m_bounding_box.size(); // half-size
-        const double inset = 0.0f; // fraction of face half-size to inset from face center
+        const Vec3d hs = 0.5 * m_bounding_box.size();
+        // sz_world: the rendered square half-size in local units, same formula as rebuild_plane_quads
+        const double sz = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE;
 
-        // YZ plane handle (locks X): centered at (+X face, inset toward Y+Z corner)
-        m_grabbers[PLANE_ID_YZ].center = {
-            hs.x(),
-            hs.y() * inset,
-            hs.z() * inset
-        };
-        // XZ plane handle (locks Y): centered at (+Y face, inset toward X+Z corner)
-        m_grabbers[PLANE_ID_XZ].center = {
-            hs.x() * inset,
-            hs.y(),
-            hs.z() * inset
-        };
-        // XY plane handle (locks Z): centered at (+Z face, inset toward X+Y corner)
-        m_grabbers[PLANE_ID_XY].center = {
-            hs.x() * inset,
-            hs.y() * inset,
-            hs.z()
-        };
+        Vec3d pos_yz, pos_xz, pos_xy;
 
-        // Color: constrained-axis color (Blender convention)
-        m_grabbers[PLANE_ID_YZ].color       = AXES_COLOR[0];     // red   (X locked)
+        switch (m_plane_prefs.position) {
+        case PlaneHandlePosition::AtIntersection:
+            // Near corner of the square aligns with the gizmo origin (0,0,0).
+            // The square extends sz along each free axis, so its center is at (sz, sz)
+            // from the origin, sitting on the bbox face along the constrained axis.
+            pos_yz = { hs.x(), sz, sz };
+            pos_xz = { sz,     hs.y(), sz };
+            pos_xy = { sz,     sz,     hs.z() };
+            break;
+        case PlaneHandlePosition::Midpoint:
+            // Center on the axis arrow, halfway between origin and arrow tip.
+            // Arrow tip is at hs + space_size; midpoint is roughly at hs * 0.5.
+            pos_yz = { hs.x(), hs.y() * 0.5, hs.z() * 0.5 };
+            pos_xz = { hs.x() * 0.5, hs.y(), hs.z() * 0.5 };
+            pos_xy = { hs.x() * 0.5, hs.y() * 0.5, hs.z() };
+            break;
+        default: // AtArrowEnd — centered on the bbox face, matching Blender
+            pos_yz = { hs.x(), 0.0, 0.0 };
+            pos_xz = { 0.0,    hs.y(), 0.0 };
+            pos_xy = { 0.0,    0.0,    hs.z() };
+            break;
+        }
+
+        m_grabbers[PLANE_ID_YZ].center = pos_yz;
+        m_grabbers[PLANE_ID_XZ].center = pos_xz;
+        m_grabbers[PLANE_ID_XY].center = pos_xy;
+
+        m_grabbers[PLANE_ID_YZ].color       = AXES_COLOR[0];
         m_grabbers[PLANE_ID_YZ].hover_color = AXES_HOVER_COLOR[0];
-        m_grabbers[PLANE_ID_XZ].color       = AXES_COLOR[1];     // green (Y locked)
+        m_grabbers[PLANE_ID_XZ].color       = AXES_COLOR[1];
         m_grabbers[PLANE_ID_XZ].hover_color = AXES_HOVER_COLOR[1];
-        m_grabbers[PLANE_ID_XY].color       = AXES_COLOR[2];     // blue  (Z locked)
+        m_grabbers[PLANE_ID_XY].color       = AXES_COLOR[2];
         m_grabbers[PLANE_ID_XY].hover_color = AXES_HOVER_COLOR[2];
     }
 
@@ -490,6 +516,10 @@ void GLGizmoMove3D::on_render()
     // ORCA: draw plane handle quads on top
     render_plane_handles(base_matrix);
 
+    // ORCA: during an active plane drag, show the full constraint plane
+    if (m_dragging && m_hover_id >= PLANE_ID_YZ)
+        render_drag_plane_overlay(base_matrix);
+
     if (m_object_manipulation->is_instance_coordinates()) {
 #if SLIC3R_OPENGL_ES
         GLShaderProgram* shader2 = wxGetApp().get_shader("dashed_lines");
@@ -558,10 +588,13 @@ void GLGizmoMove3D::rebuild_plane_quads()
     const Vec3d hs = 0.5 * m_bounding_box.size();
     const double sz = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE;
 
+    // Number of segments for the circle approximation
+    static constexpr int CIRCLE_SEGS = 32;
+    
     // Lambda: build one plane handle quad.
     // c  = center in local space
     // u,v = two in-plane unit axes
-    auto build_handle = [&](PlaneHandle& ph, const Vec3d& c,
+    auto build_square = [&](PlaneHandle& ph, const Vec3d& c,
                              const Vec3d& u, const Vec3d& v,
                              const ColorRGBA& col)
     {
@@ -580,22 +613,59 @@ void GLGizmoMove3D::rebuild_plane_quads()
             GLModel::Geometry g;
             g.format = { GLModel::Geometry::EPrimitiveType::Triangles,
                          GLModel::Geometry::EVertexLayout::P3N3 };
-            // Semi-transparent: alpha ~0.35 gives Blender-like appearance
-            ColorRGBA fill_col = col;
-            fill_col.a(0.35f);
-            g.color = fill_col;
-            g.reserve_vertices(4);
-            g.reserve_indices(6);
-
+            ColorRGBA fill = col; 
+            fill.a(0.35f);
+            g.color = fill;
+            g.reserve_vertices(4); g.reserve_indices(6);
             g.add_vertex((Vec3f)c0.cast<float>(), n);
             g.add_vertex((Vec3f)c1.cast<float>(), n);
             g.add_vertex((Vec3f)c2.cast<float>(), n);
             g.add_vertex((Vec3f)c3.cast<float>(), n);
+            g.add_triangle(0, 1, 2); g.add_triangle(0, 2, 3);
+            ph.quad_model.init_from(std::move(g));
+        }
+        // Border
+        {
+            ph.border_model.reset();
+            GLModel::Geometry g;
+            g.format = { GLModel::Geometry::EPrimitiveType::Lines,
+                         GLModel::Geometry::EVertexLayout::P3 };
+            g.color = col;
+            g.reserve_vertices(4); g.reserve_indices(8);
+            g.add_vertex((Vec3f)c0.cast<float>()); g.add_vertex((Vec3f)c1.cast<float>());
+            g.add_vertex((Vec3f)c2.cast<float>()); g.add_vertex((Vec3f)c3.cast<float>());
+            g.add_line(0,1); g.add_line(1,2); g.add_line(2,3); g.add_line(3,0);
+            ph.border_model.init_from(std::move(g));
+        }
+    };
 
-            // Two triangles forming the quad
-            g.add_triangle(0, 1, 2);
-            g.add_triangle(0, 2, 3);
+    auto build_circle = [&](PlaneHandle& ph, const Vec3d& c,
+                             const Vec3d& u, const Vec3d& v,
+                             const ColorRGBA& col)
+    {
+        const Vec3f normal = (Vec3f)(u.cross(v).normalized().cast<float>());
 
+        // Fan-triangulated filled disc
+        {
+            ph.quad_model.reset();
+            GLModel::Geometry g;
+            g.format = { GLModel::Geometry::EPrimitiveType::Triangles,
+                         GLModel::Geometry::EVertexLayout::P3N3 };
+            ColorRGBA fill = col; fill.a(0.35f);
+            g.color = fill;
+            g.reserve_vertices(CIRCLE_SEGS + 1);
+            g.reserve_indices(CIRCLE_SEGS * 3);
+            // Centre vertex
+            g.add_vertex((Vec3f)c.cast<float>(), normal);
+            for (int i = 0; i < CIRCLE_SEGS; ++i) {
+                const double a = 2.0 * M_PI * i / CIRCLE_SEGS;
+                const Vec3d  p = c + u * (sz * std::cos(a)) + v * (sz * std::sin(a));
+                g.add_vertex((Vec3f)p.cast<float>(), normal);
+            }
+            for (int i = 0; i < CIRCLE_SEGS; ++i) {
+                const int next = (i + 1) % CIRCLE_SEGS;
+                g.add_triangle(0, i + 1, next + 1);
+            }
             ph.quad_model.init_from(std::move(g));
         }
 
@@ -605,41 +675,37 @@ void GLGizmoMove3D::rebuild_plane_quads()
             GLModel::Geometry g;
             g.format = { GLModel::Geometry::EPrimitiveType::Lines,
                          GLModel::Geometry::EVertexLayout::P3 };
-            g.color = col;  // fully opaque border
-            g.reserve_vertices(4);
-            g.reserve_indices(8);
-
-            g.add_vertex((Vec3f)c0.cast<float>());
-            g.add_vertex((Vec3f)c1.cast<float>());
-            g.add_vertex((Vec3f)c2.cast<float>());
-            g.add_vertex((Vec3f)c3.cast<float>());
-
-            g.add_line(0, 1);
-            g.add_line(1, 2);
-            g.add_line(2, 3);
-            g.add_line(3, 0);
-
+            g.color = col;
+            g.reserve_vertices(CIRCLE_SEGS);
+            g.reserve_indices(CIRCLE_SEGS * 2);
+            for (int i = 0; i < CIRCLE_SEGS; ++i) {
+                const double a = 2.0 * M_PI * i / CIRCLE_SEGS;
+                const Vec3d  p = c + u * (sz * std::cos(a)) + v * (sz * std::sin(a));
+                g.add_vertex((Vec3f)p.cast<float>());
+            }
+            for (int i = 0; i < CIRCLE_SEGS; ++i)
+                g.add_line(i, (i + 1) % CIRCLE_SEGS);
             ph.border_model.init_from(std::move(g));
         }
     };
 
-    // YZ plane handle (locked X): lies in Y-Z plane, sits near +X face
-    build_handle(m_plane_handles[0],
-        m_grabbers[PLANE_ID_YZ].center,
-        Vec3d::UnitY(), Vec3d::UnitZ(),
-        m_grabbers[PLANE_ID_YZ].color);
+    const bool use_circle = (m_plane_prefs.shape == PlaneHandleShape::Circle);
+    auto build = [&](PlaneHandle& ph, const Vec3d& c,
+                     const Vec3d& u, const Vec3d& v, const ColorRGBA& col) {
+        if (use_circle) build_circle(ph, c, u, v, col);
+        else            build_square(ph, c, u, v, col);
+    };
 
-    // XZ plane handle (locked Y): lies in X-Z plane, sits near +Y face
-    build_handle(m_plane_handles[1],
-        m_grabbers[PLANE_ID_XZ].center,
-        Vec3d::UnitX(), Vec3d::UnitZ(),
-        m_grabbers[PLANE_ID_XZ].color);
-
-    // XY plane handle (locked Z): lies in X-Y plane, sits near +Z face
-    build_handle(m_plane_handles[2],
-        m_grabbers[PLANE_ID_XY].center,
-        Vec3d::UnitX(), Vec3d::UnitY(),
-        m_grabbers[PLANE_ID_XY].color);
+    // Winding: u × v must point AWAY from bbox center (outward normal).
+    // YZ: UnitY × UnitZ = +UnitX ✓
+    build(m_plane_handles[0], m_grabbers[PLANE_ID_YZ].center,
+          Vec3d::UnitY(), Vec3d::UnitZ(), m_grabbers[PLANE_ID_YZ].color);
+    // XZ: UnitZ × UnitX = +UnitY ✓  (swap from naive UnitX,UnitZ)
+    build(m_plane_handles[1], m_grabbers[PLANE_ID_XZ].center,
+          Vec3d::UnitZ(), Vec3d::UnitX(), m_grabbers[PLANE_ID_XZ].color);
+    // XY: UnitX × UnitY = +UnitZ ✓
+    build(m_plane_handles[2], m_grabbers[PLANE_ID_XY].center,
+          Vec3d::UnitX(), Vec3d::UnitY(), m_grabbers[PLANE_ID_XY].color);
 }
 
 void GLGizmoMove3D::render_plane_handles(const Transform3d& base_matrix)
@@ -662,6 +728,9 @@ void GLGizmoMove3D::render_plane_handles(const Transform3d& base_matrix)
         glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
         // Disable depth write so the transparent fill doesn't occlude other gizmo parts
         glsafe(::glDepthMask(GL_FALSE));
+        // Double-sided: disable back-face culling so the quad is visible from
+        // both sides regardless of viewing angle
+        glsafe(::glDisable(GL_CULL_FACE));
 
         for (int i = 0; i < 3; ++i) {
             if (!m_grabbers[plane_grabber_ids[i]].enabled)
@@ -681,6 +750,7 @@ void GLGizmoMove3D::render_plane_handles(const Transform3d& base_matrix)
         }
 
         glsafe(::glDepthMask(GL_TRUE));
+        glsafe(::glEnable(GL_CULL_FACE));
         glsafe(::glDisable(GL_BLEND));
         shader->stop_using();
     }
@@ -724,8 +794,93 @@ void GLGizmoMove3D::render_plane_handles(const Transform3d& base_matrix)
 }
 
 // ---------------------------------------------------------------------------
-// ORCA: plane projection math
+// ORCA: drag constraint plane overlay
 // ---------------------------------------------------------------------------
+
+void GLGizmoMove3D::render_drag_plane_overlay(const Transform3d& base_matrix)
+{
+    // Build a large quad spanning the full bbox face for the active drag plane.
+    // Rebuilt only when the bbox changes.
+    const Vec3d hs = 0.5 * m_bounding_box.size();
+
+    if (!m_drag_plane_model.is_initialized() || !m_drag_plane_last_hs.isApprox(hs)) {
+        m_drag_plane_last_hs = hs;
+        m_drag_plane_model.reset();
+
+        // Determine which plane is active and build its full-face quad.
+        // We use a large enough quad to span the visible area; 3× the bbox
+        // half-size on each free axis gives a generous visible extent.
+        const double ext = 3.0;
+        Vec3d c, u, v;
+        Vec3f n;
+        ColorRGBA col;
+
+        if (m_hover_id == PLANE_ID_YZ) {
+            // YZ plane: locked X, full extent in Y and Z
+            c   = { hs.x(), 0.0, 0.0 };
+            u   = Vec3d::UnitY();
+            v   = Vec3d::UnitZ();
+            n   = Vec3f::UnitX();
+            col = AXES_COLOR[0];
+        } else if (m_hover_id == PLANE_ID_XZ) {
+            c   = { 0.0, hs.y(), 0.0 };
+            u   = Vec3d::UnitZ();
+            v   = Vec3d::UnitX();
+            n   = Vec3f::UnitY();
+            col = AXES_COLOR[1];
+        } else { // PLANE_ID_XY
+            c   = { 0.0, 0.0, hs.z() };
+            u   = Vec3d::UnitX();
+            v   = Vec3d::UnitY();
+            n   = Vec3f::UnitZ();
+            col = AXES_COLOR[2];
+        }
+
+        const double eu = std::max(hs.y(), hs.z()) * ext;
+        const double ev = eu;
+
+        const Vec3d p0 = c - u * eu - v * ev;
+        const Vec3d p1 = c + u * eu - v * ev;
+        const Vec3d p2 = c + u * eu + v * ev;
+        const Vec3d p3 = c - u * eu + v * ev;
+
+        GLModel::Geometry g;
+        g.format = { GLModel::Geometry::EPrimitiveType::Triangles,
+                     GLModel::Geometry::EVertexLayout::P3N3 };
+        col.a(0.10f); // very low opacity — indicator only, not a blocker
+        g.color = col;
+        g.reserve_vertices(4); g.reserve_indices(6);
+        g.add_vertex((Vec3f)p0.cast<float>(), n);
+        g.add_vertex((Vec3f)p1.cast<float>(), n);
+        g.add_vertex((Vec3f)p2.cast<float>(), n);
+        g.add_vertex((Vec3f)p3.cast<float>(), n);
+        g.add_triangle(0, 1, 2); g.add_triangle(0, 2, 3);
+        m_drag_plane_model.init_from(std::move(g));
+    }
+
+    const Camera& camera = wxGetApp().plater()->get_camera();
+    GLShaderProgram* shader = wxGetApp().get_shader("gouraud_light");
+    if (shader != nullptr) {
+        shader->start_using();
+        shader->set_uniform("view_model_matrix", camera.get_view_matrix() * base_matrix);
+        shader->set_uniform("projection_matrix", camera.get_projection_matrix());
+        shader->set_uniform("emission_factor", 0.3f);
+
+        glsafe(::glEnable(GL_BLEND));
+        glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+        glsafe(::glDepthMask(GL_FALSE));
+        glsafe(::glDisable(GL_CULL_FACE));
+
+        m_drag_plane_model.render();
+
+        glsafe(::glDepthMask(GL_TRUE));
+        glsafe(::glEnable(GL_CULL_FACE));
+        glsafe(::glDisable(GL_BLEND));
+        shader->stop_using();
+    }
+}
+
+
 
 Vec3d GLGizmoMove3D::calc_plane_projection(const UpdateData& data,
                                             const Vec3d& plane_normal) const

@@ -4,6 +4,7 @@
 #include "GLGizmoBase.hpp"
 //BBS: add size adjust related
 #include "GizmoObjectManipulation.hpp"
+#include "../PlaneHandlePrefs.hpp"
 
 
 namespace Slic3r {
@@ -46,6 +47,13 @@ class GLGizmoMove3D : public GLGizmoBase
     };
     std::array<PlaneHandle, 3> m_plane_handles;
 
+    // ORCA: cached plane handle preferences
+    PlaneHandlePrefs m_plane_prefs;
+
+    // ORCA: full-face plane overlay shown during active plane-constrained drag
+    GLModel m_drag_plane_model;
+    Vec3d   m_drag_plane_last_hs{ Vec3d::Zero() }; // rebuilt when bbox changes
+
     //BBS: add size adjust related
     GizmoObjectManipulation* m_object_manipulation;
 
@@ -83,6 +91,7 @@ private:
     Vec3d  calc_plane_projection(const UpdateData& data, const Vec3d& plane_normal) const;
     void   rebuild_plane_quads();
     void   render_plane_handles(const Transform3d& base_matrix);
+    void   render_drag_plane_overlay(const Transform3d& base_matrix);
     void   change_cs_by_selection();
 
 private:

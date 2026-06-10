@@ -4,6 +4,7 @@
 #include "GLGizmoBase.hpp"
 //BBS: add size adjust related
 #include "GizmoObjectManipulation.hpp"
+#include "../PlaneHandlePrefs.hpp"
 
 #include "libslic3r/BoundingBox.hpp"
 
@@ -23,23 +24,24 @@ class GLGizmoScale3D : public GLGizmoBase
         Vec3d center{Vec3d::Zero()};//sphere bounding box center
         Vec3d instance_center{Vec3d::Zero()};
         Vec3d plane_center;  // keep the relative center position for scale in the bottom plane
-        Vec3d plane_nromal;  // keep the bottom plane
+        Vec3d plane_normal;  // keep the bottom plane
         BoundingBoxf3 box;
         Vec3d pivots[6];// Vec3d constraint_position{Vec3d::Zero()};
         Vec3d local_pivots[6];
         bool ctrl_down;
 
-        StartingData() : scale(Vec3d::Ones()), drag_position(Vec3d::Zero()), ctrl_down(false) { for (int i = 0; i < 5; ++i) { pivots[i] = Vec3d::Zero(); } }
+        StartingData() : scale(Vec3d::Ones()), drag_position(Vec3d::Zero()), ctrl_down(false)
+        { for (int i = 0; i < 5; ++i) { pivots[i] = Vec3d::Zero(); } }
     };
 
-    mutable BoundingBoxf3 m_bounding_box;
-    Geometry::Transformation m_grabbers_tran;//m_grabbers_transform
-    Vec3d                 m_center{Vec3d::Zero()};
-    Vec3d                 m_instance_center{Vec3d::Zero()};
-    Vec3d m_scale;
-    Vec3d m_offset;
-    double m_snap_step;
-    StartingData m_starting;
+    mutable BoundingBoxf3     m_bounding_box;
+    Geometry::Transformation  m_grabbers_tran;
+    Vec3d                     m_center{ Vec3d::Zero() };
+    Vec3d                     m_instance_center{ Vec3d::Zero() };
+    Vec3d                     m_scale;
+    Vec3d                     m_offset;
+    double                    m_snap_step;
+    StartingData              m_starting;
 
     struct GrabberConnection
     {
@@ -61,6 +63,9 @@ class GLGizmoScale3D : public GLGizmoBase
     };
     std::array<PlaneHandle, 3> m_plane_handles;
 
+    // ORCA: cached plane handle preferences
+    PlaneHandlePrefs m_plane_prefs;
+
     // ORCA: plane normal captured at drag start, used throughout the drag
     Vec3d m_plane_drag_normal{ Vec3d::Zero() };
 
@@ -75,7 +80,7 @@ public:
     double get_snap_step(double step) const { return m_snap_step; }
     void set_snap_step(double step) { m_snap_step = step; }
 
-    const Vec3d &get_scale();
+    const Vec3d& get_scale();
     void set_scale(const Vec3d& scale) { m_starting.scale = scale; m_scale = scale; }
 
     const Vec3d& get_offset() const { return m_offset; }
@@ -91,6 +96,7 @@ public:
 
     void data_changed(bool is_serializing) override;
     void enable_ununiversal_scale(bool enable);
+    
 protected:
     virtual bool on_init() override;
     virtual std::string on_get_name() const override;
