@@ -33,8 +33,12 @@ enum class PlaneHandleShape
 // and call PlaneHandlePrefs::load() at the start of on_render().
 struct PlaneHandlePrefs
 {
-    PlaneHandlePosition position { PlaneHandlePosition::AtArrowEnd };
-    PlaneHandleShape    shape    { PlaneHandleShape::Square };
+    PlaneHandlePosition position       { PlaneHandlePosition::AtArrowEnd };
+    PlaneHandleShape    shape          { PlaneHandleShape::Square };
+    // Handle size as a percentage of the default computed size (100 = default)
+    float               size_pct       { 100.0f };
+    // Opacity of the drag-constraint plane overlay (0.0 = invisible, 1.0 = solid)
+    float               drag_plane_opacity { 0.10f };
 
     // Load current values from AppConfig.  Safe to call every frame; the
     // AppConfig get() path is a map lookup so it is cheap.
@@ -45,7 +49,10 @@ struct PlaneHandlePrefs
 
     bool operator==(const PlaneHandlePrefs& o) const
     {
-        return position == o.position && shape == o.shape;
+        return position           == o.position
+            && shape              == o.shape
+            && size_pct           == o.size_pct
+            && drag_plane_opacity == o.drag_plane_opacity;
     }
     bool operator!=(const PlaneHandlePrefs& o) const { return !(*this == o); }
 };

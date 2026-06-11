@@ -173,7 +173,8 @@ bool GLGizmoScale3D::on_mouse(const wxMouseEvent &mouse_event)
     const Vec3d hs   = 0.5 * m_bounding_box.size();
     const double mean = (hs.x() + hs.y() + hs.z()) / 3.0;
     const double world_scale = m_grabbers[0].matrix.linear().col(0).norm();
-    const double sz  = mean * SCALE_PLANE_SQUARE_SIZE * world_scale;
+    const double size_scale_om = std::max(0.0f, m_plane_prefs.size_pct) / 100.0f;
+    const double sz  = mean * SCALE_PLANE_SQUARE_SIZE * world_scale * size_scale_om;
 
     const bool axis_dragging = m_dragging && m_hover_id >= 0 && m_hover_id < SCALE_PLANE_ID_YZ;
     if (!axis_dragging) {
@@ -627,17 +628,16 @@ void GLGizmoScale3D::rebuild_plane_quads()
 {
     const Vec3d hs    = 0.5 * m_bounding_box.size();
     const double mean = (hs.x() + hs.y() + hs.z()) / 3.0;
-    const double sz   = mean * SCALE_PLANE_SQUARE_SIZE;
+    const double size_scale = std::max(0.0f, m_plane_prefs.size_pct) / 100.0f;
+    const double sz   = mean * SCALE_PLANE_SQUARE_SIZE * size_scale;
     static constexpr int CIRCLE_SEGS = 32;
 
     auto build_square = [&](PlaneHandle& ph, const Vec3d& c,
                              const Vec3d& u, const Vec3d& v,
                              const ColorRGBA& col)
     {
-        const Vec3d c0 = c - u * sz - v * sz;
-        const Vec3d c1 = c + u * sz - v * sz;
-        const Vec3d c2 = c + u * sz + v * sz;
-        const Vec3d c3 = c - u * sz + v * sz;
+        const Vec3d c0 = c - u*sz - v*sz, c1 = c + u*sz - v*sz;
+        const Vec3d c2 = c + u*sz + v*sz, c3 = c - u*sz + v*sz;
         const Vec3f n  = (Vec3f)(u.cross(v).normalized().cast<float>());
 
         // Filled quad
@@ -646,17 +646,11 @@ void GLGizmoScale3D::rebuild_plane_quads()
             GLModel::Geometry g;
             g.format = { GLModel::Geometry::EPrimitiveType::Triangles,
                          GLModel::Geometry::EVertexLayout::P3N3 };
-            ColorRGBA fill = col;
-            fill.a(0.35f);
-            g.color = fill;
-            g.reserve_vertices(4);
-            g.reserve_indices(6);
-            g.add_vertex((Vec3f)c0.cast<float>(), n);
-            g.add_vertex((Vec3f)c1.cast<float>(), n);
-            g.add_vertex((Vec3f)c2.cast<float>(), n);
-            g.add_vertex((Vec3f)c3.cast<float>(), n);
-            g.add_triangle(0, 1, 2);
-            g.add_triangle(0, 2, 3);
+            ColorRGBA fill = col; fill.a(0.35f); g.color = fill;
+            g.reserve_vertices(4); g.reserve_indices(6);
+            g.add_vertex((Vec3f)c0.cast<float>(), n); g.add_vertex((Vec3f)c1.cast<float>(), n);
+            g.add_vertex((Vec3f)c2.cast<float>(), n); g.add_vertex((Vec3f)c3.cast<float>(), n);
+            g.add_triangle(0,1,2); g.add_triangle(0,2,3);
             ph.quad_model.init_from(std::move(g));
         }
 
@@ -667,16 +661,10 @@ void GLGizmoScale3D::rebuild_plane_quads()
             g.format = { GLModel::Geometry::EPrimitiveType::Lines,
                          GLModel::Geometry::EVertexLayout::P3 };
             g.color = col;
-            g.reserve_vertices(4);
-            g.reserve_indices(8);
-            g.add_vertex((Vec3f)c0.cast<float>());
-            g.add_vertex((Vec3f)c1.cast<float>());
-            g.add_vertex((Vec3f)c2.cast<float>());
-            g.add_vertex((Vec3f)c3.cast<float>());
-            g.add_line(0, 1);
-            g.add_line(1, 2);
-            g.add_line(2, 3);
-            g.add_line(3, 0);
+            g.reserve_vertices(4); g.reserve_indices(8);
+            g.add_vertex((Vec3f)c0.cast<float>()); g.add_vertex((Vec3f)c1.cast<float>());
+            g.add_vertex((Vec3f)c2.cast<float>()); g.add_vertex((Vec3f)c3.cast<float>());
+            g.add_line(0,1); g.add_line(1,2); g.add_line(2,3); g.add_line(3,0);
             ph.border_model.init_from(std::move(g));
         }
     };

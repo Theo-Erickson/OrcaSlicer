@@ -1773,7 +1773,7 @@ void PreferencesDialog::create_items()
     sizer_page->Add(g_sizer, 0, wxEXPAND);
 #endif // _WIN32
 
-    //////////////////////////
+     //////////////////////////
     //// GIZMO TAB
     /////////////////////////////////////
     m_pref_tabs->AppendItem(_L("Gizmo"));
@@ -1781,54 +1781,114 @@ void PreferencesDialog::create_items()
     g_sizer = f_sizers.back();
     g_sizer->AddGrowableCol(0, 1);
  
+    // Helper: mark the 3D canvas dirty so gizmo repaints immediately when
+    // a setting changes (the gizmo reloads prefs every frame, so a single
+    // repaint is enough to see the change without any mouse movement).
+    auto repaint_canvas = []() {
+        if (Plater* p = wxGetApp().plater())
+            p->canvas3D()->set_as_dirty();
+    };
+ 
     //// GIZMO > Plane Handles
     g_sizer->Add(create_item_title(_L("Plane Handles")), 1, wxEXPAND);
  
-    // Position style
+    // Position style — combo uses onchange overload so we can call repaint_canvas
     {
         std::vector<wxString> position_labels = {
-            _L("At arrow end"),      // "at_arrow_end"
-            _L("At intersection"),   // "intersection"
-            _L("Midpoint"),          // "midpoint"
+            _L("At arrow end"), _L("At intersection"), _L("Midpoint"),
         };
         std::vector<std::string> position_keys = {
-            "at_arrow_end",
-            "intersection",
-            "midpoint",
+            "at_arrow_end", "intersection", "midpoint",
         };
-        auto item_plane_position = create_item_combobox(
+        // Read current selection index from stored string key
+        const std::string cur_pos = app_config->get("plane_handle_position");
+        int pos_idx = 0;
+        if      (cur_pos == "intersection") pos_idx = 1;
+        else if (cur_pos == "midpoint")     pos_idx = 2;
+ 
+        wxBoxSizer* sizer_pos;
+        ComboBox*   combo_pos;
+        std::tie(sizer_pos, combo_pos) = create_item_combobox_base(
             _L("Handle position"),
-            _L("Where the plane constraint squares are placed relative to the gizmo.\n"
-               "At arrow end: squares near the face corner where axis arrows meet (Blender style).\n"
-               "At intersection: squares sit at the junction of two axis lines.\n"
-               "Midpoint: squares halfway between gizmo origin and arrow tip."),
-            "plane_handle_position",
-            position_labels,
-            position_keys
+            _L("Where the plane constraint squares are placed.\n"
+               "At arrow end: centered on the bbox face (Blender style).\n"
+               "At intersection: near corner at gizmo origin.\n"
+               "Midpoint: halfway between origin and arrow tip."),
+            "plane_handle_position", position_labels, pos_idx
         );
-        g_sizer->Add(item_plane_position);
+        combo_pos->GetDropDown().Bind(wxEVT_COMBOBOX, [this, position_keys, repaint_canvas](wxCommandEvent& e) {
+            int sel = e.GetSelection();
+            if (sel >= 0 && sel < (int)position_keys.size())
+                app_config->set("plane_handle_position", position_keys[sel]);
+            repaint_canvas();
+            e.Skip();
+        });
+        g_sizer->Add(sizer_pos);
     }
  
-    // Visual shape
+    // Shape
     {
-        std::vector<wxString> shape_labels = {
-            _L("Square"),   // "square"
-            _L("Circle"),   // "circle"
-        };
-        std::vector<std::string> shape_keys = {
-            "square",
-            "circle",
-        };
-        auto item_plane_shape = create_item_combobox(
+        std::vector<wxString>    shape_labels = { _L("Square"), _L("Circle") };
+        std::vector<std::string> shape_keys   = { "square",     "circle"     };
+        const std::string cur_shape = app_config->get("plane_handle_shape");
+        int shape_idx = (cur_shape == "circle") ? 1 : 0;
+ 
+        wxBoxSizer* sizer_shape;
+        ComboBox*   combo_shape;
+        std::tie(sizer_shape, combo_shape) = create_item_combobox_base(
             _L("Handle shape"),
-            _L("Visual shape of the plane constraint handles.\n"
-               "Square: flat filled rectangle with an outline border.\n"
-               "Circle: filled disc with a ring border."),
-            "plane_handle_shape",
-            shape_labels,
-            shape_keys
+            _L("Square: filled rectangle with border.  Circle: filled disc with ring border."),
+            "plane_handle_shape", shape_labels, shape_idx
         );
-        g_sizer->Add(item_plane_shape);
+        combo_shape->GetDropDown().Bind(wxEVT_COMBOBOX, [this, shape_keys, repaint_canvas](wxCommandEvent& e) {
+            int sel = e.GetSelection();
+            if (sel >= 0 && sel < (int)shape_keys.size())
+                app_config->set("plane_handle_shape", shape_keys[sel]);
+            repaint_canvas();
+            e.Skip();
+        });
+        g_sizer->Add(sizer_shape);
+    }
+ 
+    // Handle size 0-500%
+    {
+        if (app_config->get("plane_handle_size_pct").empty())
+            app_config->set("plane_handle_size_pct", "100");
+ 
+        auto item_plane_size = create_item_spinctrl(
+            _L("Handle size"), "", _L("%"),
+            _L("Size of the plane handles as a percentage of the default size.\n"
+               "100% = default.  Range: 0-500%."),
+            "plane_handle_size_pct", 0, 500,
+            [repaint_canvas](int) { repaint_canvas(); }
+        );
+        g_sizer->Add(item_plane_size);
+    }
+ 
+    //// GIZMO > Drag Plane Overlay
+    g_sizer->Add(create_item_title(_L("Drag Plane Overlay")), 1, wxEXPAND);
+ 
+    // Opacity 0-100% (stored as integer, loaded as float 0-1 by PlaneHandlePrefs::load)
+    {
+        // Migrate old float value if present
+        std::string alpha_str = app_config->get("plane_handle_drag_opacity");
+        if (!alpha_str.empty() && alpha_str.find('.') != std::string::npos) {
+            try {
+                int pct = static_cast<int>(std::stof(alpha_str) * 100.0f + 0.5f);
+                app_config->set("plane_handle_drag_opacity", std::to_string(pct));
+            } catch (...) { app_config->set("plane_handle_drag_opacity", "10"); }
+        } else if (alpha_str.empty()) {
+            app_config->set("plane_handle_drag_opacity", "10");
+        }
+ 
+        auto item_plane_opacity = create_item_spinctrl(
+            _L("Drag plane opacity"), "", _L("%"),
+            _L("Opacity of the translucent plane shown during a plane-constrained drag.\n"
+               "0% = invisible, 100% = fully opaque.  Default: 10%."),
+            "plane_handle_drag_opacity", 0, 100,
+            [repaint_canvas](int) { repaint_canvas(); }
+        );
+        g_sizer->Add(item_plane_opacity);
     }
  
     g_sizer->AddSpacer(FromDIP(10));

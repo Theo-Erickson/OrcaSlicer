@@ -129,7 +129,8 @@ bool GLGizmoMove3D::on_mouse(const wxMouseEvent &mouse_event)
     const double sz_local = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE;
     // Extract uniform scale from the matrix (use first column magnitude)
     const double world_scale = m_grabbers[0].matrix.linear().col(0).norm();
-    const double sz = sz_local * world_scale;
+    const double size_scale_ht = std::max(0.0f, m_plane_prefs.size_pct) / 100.0f;
+    const double sz = sz_local * world_scale * size_scale_ht;
 
     // Only hit-test if we are not already dragging an axis grabber
     const bool axis_dragging = m_dragging && m_hover_id >= 0 && m_hover_id < 3;
@@ -348,6 +349,17 @@ void GLGizmoMove3D::on_render()
 {
     const Selection& selection = m_parent.get_selection();
 
+    // ORCA: render the drag plane overlay BEFORE clearing depth so it
+    // is occluded by the ground plane and other scene geometry, matching
+    // how the model itself clips through the bed.
+    if (m_dragging && m_hover_id >= PLANE_ID_YZ) {
+        // We need base_matrix and bounding box for the overlay, but they are
+        // computed below. Re-query here so the overlay has correct transforms.
+        const auto& [box_pre, box_trafo_pre] = selection.get_bounding_box_in_current_reference_system();
+        m_bounding_box = box_pre;
+        render_drag_plane_overlay(box_trafo_pre);
+    }
+
     glsafe(::glClear(GL_DEPTH_BUFFER_BIT));
     glsafe(::glEnable(GL_DEPTH_TEST));
 
@@ -395,8 +407,9 @@ void GLGizmoMove3D::on_render()
     // formed by the two axis arrows, inset by a fixed fraction of the face size.
     {
         const Vec3d hs = 0.5 * m_bounding_box.size();
-        // sz_world: the rendered square half-size in local units, same formula as rebuild_plane_quads
-        const double sz = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE;
+        // sz_world: rendered square half-size in local units, same formula as rebuild_plane_quads
+        const double sz = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE
+                          * (std::max(0.0f, m_plane_prefs.size_pct) / 100.0f);
 
         Vec3d pos_yz, pos_xz, pos_xy;
 
@@ -586,7 +599,9 @@ void GLGizmoMove3D::rebuild_plane_quads()
     // applied at render time via the shader uniform.
 
     const Vec3d hs = 0.5 * m_bounding_box.size();
-    const double sz = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE;
+    // Apply size_pct preference: 100% = default size, 0-500% range
+    const double size_scale = std::max(0.0f, m_plane_prefs.size_pct) / 100.0f;
+    const double sz = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE * size_scale;
 
     // Number of segments for the circle approximation
     static constexpr int CIRCLE_SEGS = 32;
@@ -613,8 +628,7 @@ void GLGizmoMove3D::rebuild_plane_quads()
             GLModel::Geometry g;
             g.format = { GLModel::Geometry::EPrimitiveType::Triangles,
                          GLModel::Geometry::EVertexLayout::P3N3 };
-            ColorRGBA fill = col; 
-            fill.a(0.35f);
+            ColorRGBA fill = col; fill.a(0.35f);
             g.color = fill;
             g.reserve_vertices(4); g.reserve_indices(6);
             g.add_vertex((Vec3f)c0.cast<float>(), n);
@@ -800,7 +814,7 @@ void GLGizmoMove3D::render_plane_handles(const Transform3d& base_matrix)
 void GLGizmoMove3D::render_drag_plane_overlay(const Transform3d& base_matrix)
 {
     // Build a large quad spanning the full bbox face for the active drag plane.
-    // Rebuilt only when the bbox changes.
+    // Rebuilt when bbox or active plane changes.
     const Vec3d hs = 0.5 * m_bounding_box.size();
 
     if (!m_drag_plane_model.is_initialized() || !m_drag_plane_last_hs.isApprox(hs)) {
@@ -816,38 +830,30 @@ void GLGizmoMove3D::render_drag_plane_overlay(const Transform3d& base_matrix)
         ColorRGBA col;
 
         if (m_hover_id == PLANE_ID_YZ) {
-            // YZ plane: locked X, full extent in Y and Z
-            c   = { hs.x(), 0.0, 0.0 };
-            u   = Vec3d::UnitY();
-            v   = Vec3d::UnitZ();
-            n   = Vec3f::UnitX();
+            c = { hs.x(), 0.0, 0.0 };
+            u = Vec3d::UnitY(); v = Vec3d::UnitZ(); n = Vec3f::UnitX();
             col = AXES_COLOR[0];
         } else if (m_hover_id == PLANE_ID_XZ) {
-            c   = { 0.0, hs.y(), 0.0 };
-            u   = Vec3d::UnitZ();
-            v   = Vec3d::UnitX();
-            n   = Vec3f::UnitY();
+            c = { 0.0, hs.y(), 0.0 };
+            u = Vec3d::UnitZ(); v = Vec3d::UnitX(); n = Vec3f::UnitY();
             col = AXES_COLOR[1];
-        } else { // PLANE_ID_XY
-            c   = { 0.0, 0.0, hs.z() };
-            u   = Vec3d::UnitX();
-            v   = Vec3d::UnitY();
-            n   = Vec3f::UnitZ();
+        } else {
+            c = { 0.0, 0.0, hs.z() };
+            u = Vec3d::UnitX(); v = Vec3d::UnitY(); n = Vec3f::UnitZ();
             col = AXES_COLOR[2];
         }
 
-        const double eu = std::max(hs.y(), hs.z()) * ext;
-        const double ev = eu;
+        const double eu = std::max({ hs.x(), hs.y(), hs.z() }) * ext;
 
-        const Vec3d p0 = c - u * eu - v * ev;
-        const Vec3d p1 = c + u * eu - v * ev;
-        const Vec3d p2 = c + u * eu + v * ev;
-        const Vec3d p3 = c - u * eu + v * ev;
+        const Vec3d p0 = c - u * eu - v * eu;
+        const Vec3d p1 = c + u * eu - v * eu;
+        const Vec3d p2 = c + u * eu + v * eu;
+        const Vec3d p3 = c - u * eu + v * eu;
 
         GLModel::Geometry g;
         g.format = { GLModel::Geometry::EPrimitiveType::Triangles,
                      GLModel::Geometry::EVertexLayout::P3N3 };
-        col.a(0.10f); // very low opacity — indicator only, not a blocker
+        col.a(0.12f); // base alpha — overridden at render time by drag_plane_opacity pref
         g.color = col;
         g.reserve_vertices(4); g.reserve_indices(6);
         g.add_vertex((Vec3f)p0.cast<float>(), n);
@@ -860,24 +866,35 @@ void GLGizmoMove3D::render_drag_plane_overlay(const Transform3d& base_matrix)
 
     const Camera& camera = wxGetApp().plater()->get_camera();
     GLShaderProgram* shader = wxGetApp().get_shader("gouraud_light");
-    if (shader != nullptr) {
-        shader->start_using();
-        shader->set_uniform("view_model_matrix", camera.get_view_matrix() * base_matrix);
-        shader->set_uniform("projection_matrix", camera.get_projection_matrix());
-        shader->set_uniform("emission_factor", 0.3f);
+    if (!shader) return;
 
-        glsafe(::glEnable(GL_BLEND));
-        glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-        glsafe(::glDepthMask(GL_FALSE));
-        glsafe(::glDisable(GL_CULL_FACE));
+    shader->start_using();
+    shader->set_uniform("view_model_matrix", camera.get_view_matrix() * base_matrix);
+    shader->set_uniform("projection_matrix", camera.get_projection_matrix());
+    shader->set_uniform("emission_factor", 0.3f);
 
-        m_drag_plane_model.render();
-
-        glsafe(::glDepthMask(GL_TRUE));
-        glsafe(::glEnable(GL_CULL_FACE));
-        glsafe(::glDisable(GL_BLEND));
-        shader->stop_using();
+    // Apply opacity from prefs without rebuilding geometry
+    {
+        ColorRGBA c = m_drag_plane_model.get_color();
+        c.a(m_plane_prefs.drag_plane_opacity);
+        m_drag_plane_model.set_color(c);
     }
+
+    // Render with full depth test so the plane is clipped by the ground
+    // plane and other scene geometry (same depth buffer state the scene
+    // left behind before on_render cleared it).
+    glsafe(::glEnable(GL_BLEND));
+    glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+    glsafe(::glEnable(GL_DEPTH_TEST));
+    glsafe(::glDepthMask(GL_FALSE));   // don't write depth so scene isn't polluted
+    glsafe(::glDisable(GL_CULL_FACE));
+
+    m_drag_plane_model.render();
+
+    glsafe(::glDepthMask(GL_TRUE));
+    glsafe(::glEnable(GL_CULL_FACE));
+    glsafe(::glDisable(GL_BLEND));
+    shader->stop_using();
 }
 
 
