@@ -1773,7 +1773,7 @@ void PreferencesDialog::create_items()
     sizer_page->Add(g_sizer, 0, wxEXPAND);
 #endif // _WIN32
 
-     //////////////////////////
+    //////////////////////////
     //// GIZMO TAB
     /////////////////////////////////////
     m_pref_tabs->AppendItem(_L("Gizmo"));
@@ -1889,6 +1889,50 @@ void PreferencesDialog::create_items()
             [repaint_canvas](int) { repaint_canvas(); }
         );
         g_sizer->Add(item_plane_opacity);
+    }
+ 
+    g_sizer->AddSpacer(FromDIP(10));
+    sizer_page->Add(g_sizer, 0, wxEXPAND);
+ 
+    //// GIZMO > Snap Ticks
+    g_sizer->Add(create_item_title(_L("Snap Ticks")), 1, wxEXPAND);
+ 
+    // Enable / disable the whole system
+    auto item_ticks_enable = create_item_checkbox(
+        _L("Enable snap ticks"),
+        _L("Show tick marks along axis arrows for snapping to bbox multiples,\n"
+           "plate center, and plate edges. Hover near a tick for 0.4s to snap."),
+        "gizmo_snap_ticks_enabled"
+    );
+    g_sizer->Add(item_ticks_enable);
+ 
+    // Tick style
+    {
+        std::vector<wxString>    tick_style_labels = {
+            _L("On arrow (ruler style)"),
+            _L("Floating labels"),
+        };
+        std::vector<std::string> tick_style_keys = { "on_arrow", "floating" };
+        const std::string cur_tick = app_config->get("gizmo_snap_tick_style");
+        int tick_idx = (cur_tick == "floating") ? 1 : 0;
+ 
+        wxBoxSizer* sizer_tick;
+        ComboBox*   combo_tick;
+        std::tie(sizer_tick, combo_tick) = create_item_combobox_base(
+            _L("Tick style"),
+            _L("On arrow: perpendicular marks cross the axis line (like a ruler).\n"
+               "Floating labels: pill labels float above the arrow."),
+            "gizmo_snap_tick_style", tick_style_labels, tick_idx
+        );
+        combo_tick->GetDropDown().Bind(wxEVT_COMBOBOX,
+            [this, tick_style_keys, repaint_canvas](wxCommandEvent& e) {
+                int sel = e.GetSelection();
+                if (sel >= 0 && sel < (int)tick_style_keys.size())
+                    app_config->set("gizmo_snap_tick_style", tick_style_keys[sel]);
+                repaint_canvas();
+                e.Skip();
+            });
+        g_sizer->Add(sizer_tick);
     }
  
     g_sizer->AddSpacer(FromDIP(10));

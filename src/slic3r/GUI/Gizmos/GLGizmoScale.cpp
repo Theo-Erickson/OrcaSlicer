@@ -1,5 +1,5 @@
 #include "GLGizmoScale.hpp"
-#include "../PlaneHandlePrefs.hpp"
+#include "PlaneHandlePrefs.hpp"
 #include "slic3r/GUI/GLCanvas3D.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
 #include "slic3r/GUI/Plater.hpp"
@@ -134,6 +134,9 @@ static bool scale_ray_intersects_quad(const Linef3& ray,
 
 bool GLGizmoScale3D::on_mouse(const wxMouseEvent &mouse_event)
 {
+    // ORCA: keep mouse position current for snap tick proximity testing
+    m_last_mouse_pos = { mouse_event.GetX(), mouse_event.GetY() };
+
     // ORCA: apply scale during drag (existing logic, runs for all grabbers)
     if (mouse_event.Dragging() && m_dragging) {
         // For plane-handle drags, on_dragging is called below. For axis/uniform
@@ -255,11 +258,12 @@ void GLGizmoScale3D::data_changed(bool is_serializing)
     for (unsigned int i = 0; i < 6; ++i)
         m_grabbers[i].enabled = enable_scale_xyz;
 
-    // ORCA: plane handles follow the same enable rule as per-axis handles
     for (int i = SCALE_PLANE_ID_YZ; i <= SCALE_PLANE_ID_XY; ++i)
         m_grabbers[i].enabled = enable_scale_xyz;
 
     set_scale(Vec3d::Ones());
+    // ORCA: rebuild ticks on next render
+    m_ticks_built = false;
     change_cs_by_selection();
 }
 
@@ -325,7 +329,7 @@ void GLGizmoScale3D::on_start_dragging()
     auto grabbers_transform    = m_grabbers_tran.get_matrix();
     m_starting.drag_position   = grabbers_transform * m_grabbers[m_hover_id].center;
     m_starting.plane_center    = grabbers_transform * m_grabbers[4].center;
-    m_starting.plane_normal    = (grabbers_transform * m_grabbers[5].center
+    m_starting.plane_nromal    = (grabbers_transform * m_grabbers[5].center
                                  - grabbers_transform * m_grabbers[4].center).normalized();
     m_starting.ctrl_down       = wxGetKeyState(WXK_CONTROL);
     m_starting.box             = m_bounding_box;
@@ -359,6 +363,7 @@ void GLGizmoScale3D::on_stop_dragging()
 {
     m_parent.do_scale(L("Gizmo-Scale"));
     m_starting.ctrl_down = false;
+    m_snap_ticks.clear_snap();
 }
 
 void GLGizmoScale3D::on_dragging(const UpdateData& data)
@@ -367,10 +372,10 @@ void GLGizmoScale3D::on_dragging(const UpdateData& data)
     else if ((m_hover_id == 2) || (m_hover_id == 3)) do_scale_along_axis(Y, data);
     else if ((m_hover_id == 4) || (m_hover_id == 5)) do_scale_along_axis(Z, data);
     else if (m_hover_id >= 6 && m_hover_id <= 9)     do_scale_uniform(data);
-    // ORCA: plane-constrained scale
     else if (m_hover_id == SCALE_PLANE_ID_YZ)        do_scale_on_plane(X, data);
     else if (m_hover_id == SCALE_PLANE_ID_XZ)        do_scale_on_plane(Y, data);
     else if (m_hover_id == SCALE_PLANE_ID_XY)        do_scale_on_plane(Z, data);
+    // ORCA: scale tick snap override -- to be reimplemented with new tick API
 }
 
 void GLGizmoScale3D::update_grabbers_data()
@@ -557,6 +562,37 @@ void GLGizmoScale3D::on_render()
 
     // ORCA: draw plane handle quads
     render_plane_handles(m_grabbers_tran.get_matrix());
+
+    // ORCA: snap tick rendering and dwell timer
+    if (m_plane_prefs.ticks_enabled) {
+        const auto  now = std::chrono::steady_clock::now();
+        const float dt  = m_ticks_built
+            ? std::chrono::duration<float>(now - m_last_render_time).count()
+            : 0.0f;
+        m_last_render_time = now;
+
+        // Rebuild scale ticks once on activation
+        if (!m_ticks_built) {
+            const Vec3d world_pos = m_parent.get_selection().get_bounding_box().center();
+            const bool off_bed = world_pos.z() > 0.1;
+            m_snap_ticks.build_scale_ticks(m_bounding_box, off_bed);
+            m_ticks_built = true;
+        }
+
+        // Update proximity and timer
+        m_snap_ticks.update_proximity(m_last_mouse_pos,
+                                      wxGetApp().plater()->get_camera());
+        if (m_snap_ticks.update_timer(dt))
+            set_dirty();
+
+        // Render ticks in world space
+        m_snap_ticks.render(wxGetApp().plater()->get_camera(),
+                            m_plane_prefs.tick_style);
+
+        // Tooltip
+        const SnapTick* ht = m_snap_ticks.hovered_tick();
+        if (ht) m_parent.set_tooltip(ht->label + "\n(click to snap)");
+    }
 }
 
 void GLGizmoScale3D::on_register_raycasters_for_picking()
@@ -639,8 +675,6 @@ void GLGizmoScale3D::rebuild_plane_quads()
         const Vec3d c0 = c - u*sz - v*sz, c1 = c + u*sz - v*sz;
         const Vec3d c2 = c + u*sz + v*sz, c3 = c - u*sz + v*sz;
         const Vec3f n  = (Vec3f)(u.cross(v).normalized().cast<float>());
-
-        // Filled quad
         {
             ph.quad_model.reset();
             GLModel::Geometry g;
@@ -653,8 +687,6 @@ void GLGizmoScale3D::rebuild_plane_quads()
             g.add_triangle(0,1,2); g.add_triangle(0,2,3);
             ph.quad_model.init_from(std::move(g));
         }
-
-        // Border
         {
             ph.border_model.reset();
             GLModel::Geometry g;
@@ -760,8 +792,6 @@ void GLGizmoScale3D::render_plane_handles(const Transform3d& base_matrix)
         glsafe(::glDisable(GL_BLEND));
         shader->stop_using();
     }
-
-    // Opaque borders
 #if SLIC3R_OPENGL_ES
     GLShaderProgram* line_shader = wxGetApp().get_shader("dashed_lines");
 #else
@@ -908,10 +938,10 @@ double GLGizmoScale3D::calc_ratio(const UpdateData& data) const
 
     if (len_starting_vec != 0.0) {
         Vec3d mouse_dir    = data.mouse_ray.unit_vector();
-        Vec3d plane_normal = m_starting.plane_normal;
+        Vec3d plane_normal = m_starting.plane_nromal;
         if (m_hover_id == 5) {
-            Vec3d plane_vec = mouse_dir.cross(m_starting.plane_normal);
-            plane_normal    = plane_vec.cross(m_starting.plane_normal);
+            Vec3d plane_vec = mouse_dir.cross(m_starting.plane_nromal);
+            plane_normal    = plane_vec.cross(m_starting.plane_nromal);
         }
         plane_normal = plane_normal.normalized();
 

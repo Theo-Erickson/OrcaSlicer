@@ -1,5 +1,5 @@
 #include "GLGizmoMove.hpp"
-#include "../PlaneHandlePrefs.hpp"
+#include "PlaneHandlePrefs.hpp"
 #include "slic3r/GUI/GLCanvas3D.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
 //BBS: GUI refactor
@@ -70,8 +70,12 @@ std::string GLGizmoMove3D::get_tooltip() const
              +  "Y: " + format(show_position ? position(1) : m_displacement(1), 2) + "\n"
              + "[Z: " + format(show_position ? position(2) : m_displacement(2), 2) + "]";
     }
-    else
-        return "";
+    // ORCA: snap tick hover tooltip
+    else if (m_plane_prefs.ticks_enabled) {
+        const SnapTick* ht = m_snap_ticks.hovered_tick();
+        if (ht) return ht->label + "\n(click to snap)";
+    }
+    return "";
 }
 
 // ORCA: ray-triangle intersection helper (Möller-Trumbore)
@@ -103,6 +107,8 @@ static bool ray_intersects_quad(const Linef3& ray,
 
 bool GLGizmoMove3D::on_mouse(const wxMouseEvent &mouse_event)
 {
+    // ORCA: keep mouse position current for snap tick proximity testing
+    m_last_mouse_pos = { mouse_event.GetX(), mouse_event.GetY() };
     // ORCA: manually hit-test the plane handle quads using the mouse ray.
     // We do this before use_grabbers so that if the mouse is over a plane
     // quad we can set m_hover_id and handle drag ourselves.
@@ -127,7 +133,6 @@ bool GLGizmoMove3D::on_mouse(const wxMouseEvent &mouse_event)
     // Quad half-size in world units: scale the local sz by the matrix scale factor
     const Vec3d hs = 0.5 * m_bounding_box.size();
     const double sz_local = std::max({ hs.x(), hs.y(), hs.z() }) * PLANE_SQUARE_SIZE;
-    // Extract uniform scale from the matrix (use first column magnitude)
     const double world_scale = m_grabbers[0].matrix.linear().col(0).norm();
     const double size_scale_ht = std::max(0.0f, m_plane_prefs.size_pct) / 100.0f;
     const double sz = sz_local * world_scale * size_scale_ht;
@@ -182,16 +187,37 @@ bool GLGizmoMove3D::on_mouse(const wxMouseEvent &mouse_event)
             else
                 m_plane_drag_normal = (lin * Vec3d::UnitZ()).normalized();
 
-            // Refresh the selection's position cache so that set_relative
-            // translate uses the object's *current* position as the baseline,
-            // not the baseline from a previous drag. Without this the locked
-            // axis snaps back to wherever it was at the start of the last drag.
             m_parent.get_selection().setup_cache();
-
             m_dragging = true;
             on_start_dragging();
             set_dirty();
             return true;
+        }
+        else if (mouse_event.LeftDown() && hit_plane_id == -1
+                 && m_plane_prefs.ticks_enabled) {
+            // ORCA: click-to-snap -- if hovering a tick mark, teleport object there
+            const SnapTick* clicked = m_snap_ticks.try_click_snap();
+            if (clicked) {
+                Selection& sel = m_parent.get_selection();
+                sel.setup_cache();
+                const Vec3d cur = sel.get_bounding_box().center();
+                Vec3d target    = cur;
+                for (int ax = 0; ax < clicked->axes_count; ++ax) {
+                    const int a = clicked->axes[ax];
+                    if (a >= 0 && a <= 2)
+                        target(a) = clicked->world_pos(a);
+                }
+                // Translate by the displacement in world coordinates
+                TransformationType tt;
+                tt.set_world();
+                sel.translate(target - cur, tt);
+                m_parent.do_move(L("Snap to tick"));
+                // Rebuild ticks at new position after snap
+                m_ticks_built = false;
+                m_snap_ticks.clear_snap();
+                set_dirty();
+                return true;
+            }
         }
         else if (mouse_event.LeftUp() && m_dragging && m_hover_id >= PLANE_ID_YZ) {
             // Stop dragging a plane handle
@@ -214,9 +240,10 @@ bool GLGizmoMove3D::on_mouse(const wxMouseEvent &mouse_event)
 
 void GLGizmoMove3D::data_changed(bool is_serializing) {
     m_grabbers[2].enabled = !m_parent.get_selection().is_wipe_tower();
-    // ORCA: keep plane handles in sync with Z axis availability
     m_grabbers[PLANE_ID_XZ].enabled = m_grabbers[2].enabled;
     m_grabbers[PLANE_ID_XY].enabled = m_grabbers[2].enabled;
+    // ORCA: mark ticks dirty so they rebuild on next render
+    m_ticks_built = false;
     change_cs_by_selection();
 }
 
@@ -292,6 +319,9 @@ void GLGizmoMove3D::on_stop_dragging()
 {
     m_parent.do_move(L("Gizmo-Move"));
     m_displacement = Vec3d::Zero();
+    m_snap_ticks.clear_snap();
+    // Force tick rebuild at the new position after drag ends
+    m_ticks_built = false;
 }
 
 void GLGizmoMove3D::on_dragging(const UpdateData& data)
@@ -302,6 +332,7 @@ void GLGizmoMove3D::on_dragging(const UpdateData& data)
         m_displacement.y() = calc_projection(data);
     else if (m_hover_id == 2)
         m_displacement.z() = calc_projection(data);
+
     // ORCA: plane-constrained movement.
     // calc_plane_projection returns a world-space delta. We project onto the
     // gizmo's local axes and set only the free-axis components of m_displacement.
@@ -402,9 +433,6 @@ void GLGizmoMove3D::on_render()
     }
 
     // ORCA: plane handle grabber positions, computed from the current style pref.
-    // Each quad is centered on the corresponding bbox face, at the face midpoint.
-    // This matches Blender's convention: the square sits just inside the face corner
-    // formed by the two axis arrows, inset by a fixed fraction of the face size.
     {
         const Vec3d hs = 0.5 * m_bounding_box.size();
         // sz_world: rendered square half-size in local units, same formula as rebuild_plane_quads
@@ -529,9 +557,33 @@ void GLGizmoMove3D::on_render()
     // ORCA: draw plane handle quads on top
     render_plane_handles(base_matrix);
 
-    // ORCA: during an active plane drag, show the full constraint plane
-    if (m_dragging && m_hover_id >= PLANE_ID_YZ)
-        render_drag_plane_overlay(base_matrix);
+    // ORCA: snap tick rendering
+    if (m_plane_prefs.ticks_enabled) {
+        const auto  now = std::chrono::steady_clock::now();
+        const float dt  = m_ticks_built
+            ? std::chrono::duration<float>(now - m_last_render_time).count()
+            : 0.0f;
+        m_last_render_time = now;
+
+        // Build ticks once on activation -- frozen in world space.
+        // m_ticks_built resets in data_changed() and on_stop_dragging().
+        if (!m_ticks_built) {
+            const Vec2d plate_size(256.0, 256.0); // TODO: real bed size
+            const Vec3d world_pos = selection.get_bounding_box().center();
+            m_snap_ticks.build_move_ticks(m_bounding_box, plate_size, world_pos);
+            m_ticks_built = true;
+        }
+
+        // Update hover proximity every frame (ticks are world-space so no drift)
+        m_snap_ticks.update_proximity(m_last_mouse_pos,
+                                      wxGetApp().plater()->get_camera());
+        if (m_snap_ticks.update_timer(dt))
+            set_dirty();
+
+        m_snap_ticks.render(wxGetApp().plater()->get_camera(),
+                            m_plane_prefs.tick_style);
+        // Tooltip returned from get_tooltip()
+    }
 
     if (m_object_manipulation->is_instance_coordinates()) {
 #if SLIC3R_OPENGL_ES
@@ -591,13 +643,6 @@ void GLGizmoMove3D::on_render_input_window(float x, float y, float bottom_limit)
 
 void GLGizmoMove3D::rebuild_plane_quads()
 {
-    // Each plane handle is a square centered on the grabber's center position.
-    // We build both a filled quad (for picking and the semi-transparent fill)
-    // and a line-loop border.
-    //
-    // All coordinates are in local (bounding-box) space; base_matrix is
-    // applied at render time via the shader uniform.
-
     const Vec3d hs = 0.5 * m_bounding_box.size();
     // Apply size_pct preference: 100% = default size, 0-500% range
     const double size_scale = std::max(0.0f, m_plane_prefs.size_pct) / 100.0f;
@@ -605,24 +650,18 @@ void GLGizmoMove3D::rebuild_plane_quads()
 
     // Number of segments for the circle approximation
     static constexpr int CIRCLE_SEGS = 32;
-    
-    // Lambda: build one plane handle quad.
-    // c  = center in local space
-    // u,v = two in-plane unit axes
+
     auto build_square = [&](PlaneHandle& ph, const Vec3d& c,
                              const Vec3d& u, const Vec3d& v,
                              const ColorRGBA& col)
     {
-        // Corners of the square
         const Vec3d c0 = c - u * sz - v * sz;
         const Vec3d c1 = c + u * sz - v * sz;
         const Vec3d c2 = c + u * sz + v * sz;
         const Vec3d c3 = c - u * sz + v * sz;
+        const Vec3f n  = (Vec3f)(u.cross(v).normalized().cast<float>());
 
-        // Normal (for lighting, just use the cross product)
-        const Vec3f n = (Vec3f)(u.cross(v).normalized().cast<float>());
-
-        // --- filled quad (two triangles) ---
+        // Filled quad
         {
             ph.quad_model.reset();
             GLModel::Geometry g;
@@ -682,8 +721,7 @@ void GLGizmoMove3D::rebuild_plane_quads()
             }
             ph.quad_model.init_from(std::move(g));
         }
-
-        // --- border (line loop) ---
+        // Ring border
         {
             ph.border_model.reset();
             GLModel::Geometry g;
@@ -740,7 +778,6 @@ void GLGizmoMove3D::render_plane_handles(const Transform3d& base_matrix)
 
         glsafe(::glEnable(GL_BLEND));
         glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-        // Disable depth write so the transparent fill doesn't occlude other gizmo parts
         glsafe(::glDepthMask(GL_FALSE));
         // Double-sided: disable back-face culling so the quad is visible from
         // both sides regardless of viewing angle
@@ -821,9 +858,6 @@ void GLGizmoMove3D::render_drag_plane_overlay(const Transform3d& base_matrix)
         m_drag_plane_last_hs = hs;
         m_drag_plane_model.reset();
 
-        // Determine which plane is active and build its full-face quad.
-        // We use a large enough quad to span the visible area; 3× the bbox
-        // half-size on each free axis gives a generous visible extent.
         const double ext = 3.0;
         Vec3d c, u, v;
         Vec3f n;

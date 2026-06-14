@@ -2,9 +2,10 @@
 #define slic3r_GLGizmoMove_hpp_
 
 #include "GLGizmoBase.hpp"
-//BBS: add size adjust related
 #include "GizmoObjectManipulation.hpp"
-#include "../PlaneHandlePrefs.hpp"
+#include "GizmoSnapTicks.hpp"
+#include "PlaneHandlePrefs.hpp"
+#include <chrono>
 
 
 namespace Slic3r {
@@ -49,6 +50,12 @@ class GLGizmoMove3D : public GLGizmoBase
 
     // ORCA: cached plane handle preferences
     PlaneHandlePrefs m_plane_prefs;
+
+    // ORCA: snap tick system for move gizmo
+    GizmoSnapTicks   m_snap_ticks;
+    std::chrono::steady_clock::time_point m_last_render_time;
+    bool  m_ticks_built    { false };
+    Point m_last_mouse_pos { 0, 0 };
 
     // ORCA: full-face plane overlay shown during active plane-constrained drag
     GLModel m_drag_plane_model;

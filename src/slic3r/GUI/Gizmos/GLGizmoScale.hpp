@@ -2,11 +2,13 @@
 #define slic3r_GLGizmoScale_hpp_
 
 #include "GLGizmoBase.hpp"
-//BBS: add size adjust related
 #include "GizmoObjectManipulation.hpp"
-#include "../PlaneHandlePrefs.hpp"
+#include "PlaneHandlePrefs.hpp"
 
 #include "libslic3r/BoundingBox.hpp"
+#include <chrono>
+
+#include "GizmoSnapTicks.hpp"
 
 
 namespace Slic3r {
@@ -21,12 +23,12 @@ class GLGizmoScale3D : public GLGizmoBase
         Vec3d scale;
         Vec3d drag_position;
         Vec3d constraint_position;
-        Vec3d center{Vec3d::Zero()};//sphere bounding box center
-        Vec3d instance_center{Vec3d::Zero()};
-        Vec3d plane_center;  // keep the relative center position for scale in the bottom plane
-        Vec3d plane_normal;  // keep the bottom plane
+        Vec3d center{ Vec3d::Zero() };
+        Vec3d instance_center{ Vec3d::Zero() };
+        Vec3d plane_center;
+        Vec3d plane_nromal;
         BoundingBoxf3 box;
-        Vec3d pivots[6];// Vec3d constraint_position{Vec3d::Zero()};
+        Vec3d pivots[6];
         Vec3d local_pivots[6];
         bool ctrl_down;
 
@@ -55,7 +57,6 @@ class GLGizmoScale3D : public GLGizmoBase
     std::array<GrabberConnection, 7> m_grabber_connections;
 
     // ORCA: plane handle geometry (filled quad + border), one per plane
-    // Index: 0 = YZ (locks X), 1 = XZ (locks Y), 2 = XY (locks Z)
     struct PlaneHandle
     {
         GLModel quad_model;
@@ -66,6 +67,12 @@ class GLGizmoScale3D : public GLGizmoBase
     // ORCA: cached plane handle preferences
     PlaneHandlePrefs m_plane_prefs;
 
+    // ORCA: snap tick system for scale gizmo
+    GizmoSnapTicks   m_snap_ticks;
+    std::chrono::steady_clock::time_point m_last_render_time;
+    bool  m_ticks_built    { false };
+    Point m_last_mouse_pos { 0, 0 };
+
     // ORCA: plane normal captured at drag start, used throughout the drag
     Vec3d m_plane_drag_normal{ Vec3d::Zero() };
 
@@ -74,7 +81,6 @@ class GLGizmoScale3D : public GLGizmoBase
 
 public:
     //BBS: add obj manipulation logic
-    //GLGizmoScale3D(GLCanvas3D& parent, const std::string& icon_filename, unsigned int sprite_id);
     GLGizmoScale3D(GLCanvas3D& parent, const std::string& icon_filename, unsigned int sprite_id, GizmoObjectManipulation* obj_manipulation);
 
     double get_snap_step(double step) const { return m_snap_step; }
@@ -87,16 +93,11 @@ public:
 
     std::string get_tooltip() const override;
 
-    /// <summary>
-    /// Postpone to Grabber for scale
-    /// </summary>
-    /// <param name="mouse_event">Keep information about mouse click</param>
-    /// <returns>Return True when use the information otherwise False.</returns>
     bool on_mouse(const wxMouseEvent &mouse_event) override;
 
     void data_changed(bool is_serializing) override;
     void enable_ununiversal_scale(bool enable);
-    
+
 protected:
     virtual bool on_init() override;
     virtual std::string on_get_name() const override;
@@ -108,7 +109,6 @@ protected:
     virtual void on_render() override;
     virtual void on_register_raycasters_for_picking() override;
     virtual void on_unregister_raycasters_for_picking() override;
-    //BBS: GUI refactor: add object manipulation
     virtual void on_render_input_window(float x, float y, float bottom_limit);
 
 private:

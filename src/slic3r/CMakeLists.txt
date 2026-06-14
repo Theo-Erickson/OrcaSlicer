@@ -172,6 +172,11 @@ set(SLIC3R_GUI_SOURCES
     GUI/Gizmos/GLGizmoSVG.hpp
     GUI/Gizmos/GLGizmoUtils.cpp
     GUI/Gizmos/GLGizmoUtils.hpp
+    GUI/Gizmos/GizmoSnapTicks.cpp
+    GUI/Gizmos/GizmoSnapTicks.hpp
+    GUI/Gizmos/GizmoEnums.hpp
+    GUI/Gizmos/PlaneHandlePrefs.hpp
+    GUI/Gizmos/PlaneHandlePrefs.cpp
     #GUI/Gizmos/GLGizmoText.cpp
     #GUI/Gizmos/GLGizmoText.hpp
     GUI/GLCanvas3D.cpp
@@ -367,8 +372,6 @@ set(SLIC3R_GUI_SOURCES
     GUI/ParamsPanel.hpp
     GUI/PartPlate.cpp
     GUI/PartPlate.hpp
-    GUI/PlaneHandlePrefs.hpp
-    GUI/PlaneHandlePrefs.cpp
     GUI/FilamentGroupPopup.hpp
     GUI/FilamentGroupPopup.cpp
     GUI/PhysicalPrinterDialog.cpp
