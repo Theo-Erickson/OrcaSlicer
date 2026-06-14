@@ -9,6 +9,8 @@ namespace GUI {
 enum class PlaneHandlePosition { AtArrowEnd, AtIntersection, Midpoint };
 enum class PlaneHandleShape    { Square, Circle };
 enum class TickStyle           { OnArrow, FloatingLabel };
+enum class TickDisplayMode     { InlineWithObject, OnPlate };
+
 
 } // namespace GUI
 } // namespace Slic3r

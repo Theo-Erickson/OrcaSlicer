@@ -209,6 +209,7 @@ bool GLGizmoMove3D::on_mouse(const wxMouseEvent &mouse_event)
                 }
                 // Translate by the displacement in world coordinates
                 TransformationType tt;
+                tt.set_relative();
                 tt.set_world();
                 sel.translate(target - cur, tt);
                 m_parent.do_move(L("Snap to tick"));
@@ -570,7 +571,8 @@ void GLGizmoMove3D::on_render()
         if (!m_ticks_built) {
             const Vec2d plate_size(256.0, 256.0); // TODO: real bed size
             const Vec3d world_pos = selection.get_bounding_box().center();
-            m_snap_ticks.build_move_ticks(m_bounding_box, plate_size, world_pos);
+            m_snap_ticks.build_move_ticks(m_bounding_box, plate_size,
+                                          world_pos, m_plane_prefs);
             m_ticks_built = true;
         }
 

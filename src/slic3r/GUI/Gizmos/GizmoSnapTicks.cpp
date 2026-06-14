@@ -78,107 +78,151 @@ const SnapTick* GizmoSnapTicks::hovered_tick() const
 // Build move ticks -- all stored as frozen world positions
 // ---------------------------------------------------------------------------
 
-void GizmoSnapTicks::build_move_ticks(const BoundingBoxf3& bbox,
-                                       const Vec2d&         plate_size,
-                                       const Vec3d&         world_pos)
+void GizmoSnapTicks::build_move_ticks(const BoundingBoxf3&    bbox,
+                                       const Vec2d&            plate_size,
+                                       const Vec3d&            world_pos,
+                                       const PlaneHandlePrefs& prefs)
 {
     m_ticks.clear();
     invalidate_models();
 
-    const Vec3d size = bbox.size();
-    const double cx  = plate_size.x() * 0.5;
-    const double cy  = plate_size.y() * 0.5;
+    const Vec3d  size = bbox.size();
+    const Vec3d  hs   = size * 0.5;
+    const double cx   = plate_size.x() * 0.5;
+    const double cy   = plate_size.y() * 0.5;
 
-    // Helper: add a single-axis bbox multiple tick at a world position
-    auto add_bbox = [&](int axis, double world_coord, int mul, bool positive) {
+    // Helper: add a tick at an absolute world coord on a single axis
+    auto add_single = [&](TickCategory cat, int axis,
+                          double world_coord, const std::string& lbl, int mul = 0)
+    {
         SnapTick t;
-        t.category   = TickCategory::BboxMultiple;
-        t.world_pos  = world_pos; // start from object center
-        t.world_pos(axis) = world_coord;
-        t.axes[0]    = axis; t.axes[1] = -1; t.axes_count = 1;
-        t.mul        = mul;
-        const std::string sign = positive ? "+" : "-";
-        t.label = sign + std::to_string(mul) + "\xC3\x97"
-                + " (" + (axis==0?"X":axis==1?"Y":"Z") + ")";
+        t.category       = cat;
+        t.world_pos      = world_pos;
+        t.world_pos(axis)= world_coord;
+        t.axes[0]        = axis; t.axes[1] = -1; t.axes_count = 1;
+        t.label          = lbl;  t.mul      = mul;
         m_ticks.push_back(t);
     };
 
-    // Bbox multiples: 1x-5x per axis, positive and negative
-    for (int a = 0; a < 3; ++a) {
-        const double dim = size(a);
-        if (dim < 1e-4) continue;
-        for (int mul = 1; mul <= 5; ++mul) {
-            add_bbox(a, world_pos(a) + dim * mul, mul, true);
-            add_bbox(a, world_pos(a) - dim * mul, mul, false);
+    // --- Axis bbox-multiple ticks ---
+    if (prefs.axis_ticks_enabled) {
+        const bool do_axis[3] = {
+            prefs.axis_tick_x,
+            prefs.axis_tick_y,
+            prefs.axis_tick_z
+        };
+        for (int a = 0; a < 3; ++a) {
+            if (!do_axis[a]) continue;
+            const double dim = size(a);
+            if (dim < 1e-4) continue;
+            for (int n = 0; n < prefs.axis_tick_count; ++n) {
+                const float  mul_f = prefs.axis_tick_start
+                                   + n * prefs.axis_tick_increment;
+                const std::string axis_name = (a==0?"X":a==1?"Y":"Z");
+                // Format multiplier cleanly: "1x", "1.5x" etc.
+                char buf[16];
+                if (std::abs(mul_f - std::round(mul_f)) < 0.01f)
+                    std::snprintf(buf, sizeof(buf), "%d", (int)std::round(mul_f));
+                else
+                    std::snprintf(buf, sizeof(buf), "%.1f", mul_f);
+                const std::string lbl_base = std::string(buf) + " x bounding box (" + axis_name + ")";
+                add_single(TickCategory::BboxMultiple, a,
+                           world_pos(a) + dim * mul_f,  "+" + lbl_base, n+1);
+                add_single(TickCategory::BboxMultiple, a,
+                           world_pos(a) - dim * mul_f,  "-" + lbl_base, -(n+1));
+            }
         }
     }
 
-    // --- Plate reference ticks ---
+    // --- Plate ticks ---
+    if (prefs.plate_ticks_enabled) {
+        // X edges: snap object FACE to plate edge (offset by bbox half-width)
+        if (prefs.plate_tick_x_edges) {
+            add_single(TickCategory::PlateReference, 0,
+                       hs.x(),                    "Plate edge X-");
+            add_single(TickCategory::PlateReference, 0,
+                       plate_size.x() - hs.x(),   "Plate edge X+");
+        }
+        // Y edges
+        if (prefs.plate_tick_y_edges) {
+            add_single(TickCategory::PlateReference, 1,
+                       hs.y(),                    "Plate edge Y-");
+            add_single(TickCategory::PlateReference, 1,
+                       plate_size.y() - hs.y(),   "Plate edge Y+");
+        }
 
-    // X-axis center line (object snaps to plate center X, Y stays)
-    {
-        SnapTick t;
-        t.category = TickCategory::PlateReference;
-        t.world_pos = world_pos; t.world_pos.x() = cx;
-        t.axes[0] = 0; t.axes[1] = -1; t.axes_count = 1;
-        t.label = "Plate center X";
-        m_ticks.push_back(t);
-    }
-    // Y-axis center line
-    {
-        SnapTick t;
-        t.category = TickCategory::PlateReference;
-        t.world_pos = world_pos; t.world_pos.y() = cy;
-        t.axes[0] = 1; t.axes[1] = -1; t.axes_count = 1;
-        t.label = "Plate center Y";
-        m_ticks.push_back(t);
+        // Plate origin / center ticks
+        if (prefs.plate_tick_origin) {
+            // Use PlateCenter category so X/Y center spines are also cyan
+            add_single(TickCategory::PlateCenter, 0, cx, "Plate center X");
+            add_single(TickCategory::PlateCenter, 1, cy, "Plate center Y");
+            // XY center: snaps both axes simultaneously
+            SnapTick t;
+            t.category      = TickCategory::PlateCenter;
+            t.world_pos     = world_pos;
+            t.world_pos.x() = cx; t.world_pos.y() = cy;
+            t.axes[0] = 0; t.axes[1] = 1; t.axes_count = 2;
+            t.label = "Plate center";
+            m_ticks.push_back(t);
+        }
+
+        // Plate division ticks: N interior points per HALF of the plate.
+        // With N=2: left_edge, 1/3, 2/3, center, 4/3, 5/3, right_edge
+        // i.e. each half [0, cx] and [cx, plate_size] gets N evenly-spaced
+        // interior points, giving N+1 segments per half.
+        if (prefs.plate_divisions > 0) {
+            const int N = prefs.plate_divisions;
+            // X axis: divide [0,cx] into N+1 segments and [cx,plate_x] into N+1
+            if (prefs.plate_tick_x_edges) {
+                // Left half: points at cx * k/(N+1) for k=1..N
+                for (int k = 1; k <= N; ++k) {
+                    const double t_pos = cx * k / (N + 1);
+                    const int pct = static_cast<int>(t_pos / plate_size.x() * 100.0 + 0.5);
+                    add_single(TickCategory::PlateReference, 0,
+                               t_pos, std::to_string(pct) + "% X");
+                }
+                // Right half: points at cx + (plate_x-cx)*k/(N+1) for k=1..N
+                for (int k = 1; k <= N; ++k) {
+                    const double t_pos = cx + (plate_size.x() - cx) * k / (N + 1);
+                    const int pct = static_cast<int>(t_pos / plate_size.x() * 100.0 + 0.5);
+                    add_single(TickCategory::PlateReference, 0,
+                               t_pos, std::to_string(pct) + "% X");
+                }
+            }
+            // Y axis: same split around cy
+            if (prefs.plate_tick_y_edges) {
+                for (int k = 1; k <= N; ++k) {
+                    const double t_pos = cy * k / (N + 1);
+                    const int pct = static_cast<int>(t_pos / plate_size.y() * 100.0 + 0.5);
+                    add_single(TickCategory::PlateReference, 1,
+                               t_pos, std::to_string(pct) + "% Y");
+                }
+                for (int k = 1; k <= N; ++k) {
+                    const double t_pos = cy + (plate_size.y() - cy) * k / (N + 1);
+                    const int pct = static_cast<int>(t_pos / plate_size.y() * 100.0 + 0.5);
+                    add_single(TickCategory::PlateReference, 1,
+                               t_pos, std::to_string(pct) + "% Y");
+                }
+            }
+        }
     }
 
-    // XY center (snaps both X and Y simultaneously)
-    {
-        SnapTick t;
-        t.category = TickCategory::PlateCenter;
-        t.world_pos = world_pos;
-        t.world_pos.x() = cx; t.world_pos.y() = cy;
-        t.axes[0] = 0; t.axes[1] = 1; t.axes_count = 2;
-        t.label = "Plate center";
-        m_ticks.push_back(t);
+    // Apply display mode: OnPlate = force Z to 0 for that tick group
+    for (auto& t : m_ticks) {
+        if (t.category == TickCategory::BboxMultiple &&
+            prefs.axis_ticks_enabled &&
+            prefs.axis_tick_display == TickDisplayMode::OnPlate)
+            t.world_pos.z() = 0.0;
+        if ((t.category == TickCategory::PlateReference ||
+             t.category == TickCategory::PlateCenter) &&
+            prefs.plate_ticks_enabled &&
+            prefs.plate_tick_display == TickDisplayMode::OnPlate)
+            t.world_pos.z() = 0.0;
     }
 
-    // Plate edges X
-    {
-        SnapTick t;
-        t.category = TickCategory::PlateReference;
-        t.world_pos = world_pos; t.world_pos.x() = 0.0;
-        t.axes[0] = 0; t.axes_count = 1;
-        t.label = "Plate edge X\xe2\x86\x90"; // ←
-        m_ticks.push_back(t);
-    }
-    {
-        SnapTick t;
-        t.category = TickCategory::PlateReference;
-        t.world_pos = world_pos; t.world_pos.x() = plate_size.x();
-        t.axes[0] = 0; t.axes_count = 1;
-        t.label = "Plate edge X\xe2\x86\x92"; // →
-        m_ticks.push_back(t);
-    }
-    // Plate edges Y
-    {
-        SnapTick t;
-        t.category = TickCategory::PlateReference;
-        t.world_pos = world_pos; t.world_pos.y() = 0.0;
-        t.axes[0] = 1; t.axes_count = 1;
-        t.label = "Plate edge Y\xe2\x86\x90";
-        m_ticks.push_back(t);
-    }
-    {
-        SnapTick t;
-        t.category = TickCategory::PlateReference;
-        t.world_pos = world_pos; t.world_pos.y() = plate_size.y();
-        t.axes[0] = 1; t.axes_count = 1;
-        t.label = "Plate edge Y\xe2\x86\x92";
-        m_ticks.push_back(t);
-    }
+    // Cache opacity values for use during render
+    m_axis_opacity  = prefs.axis_tick_opacity;
+    m_plate_opacity = prefs.plate_tick_opacity;
 
     m_screen_positions.resize(m_ticks.size(), Vec2d::Zero());
 }
@@ -302,9 +346,8 @@ void GizmoSnapTicks::rebuild_models_if_needed()
             g.add_vertex((Vec3f)( perp).cast<float>());
             g.add_line(0, 1);
 
-        } else if (t.category == TickCategory::PlateCenter) {
-            // XY center: flat diamond in XY plane + cross
-            // Diamond
+        } else if (t.category == TickCategory::PlateCenter && t.axes_count == 2) {
+            // XY center diamond + cross (flat in XY plane)
             const float s = CTR_S;
             g.reserve_vertices(8); g.reserve_indices(8);
             g.add_vertex(Vec3f( s,  0,  0)); // 0
@@ -312,12 +355,21 @@ void GizmoSnapTicks::rebuild_models_if_needed()
             g.add_vertex(Vec3f(-s,  0,  0)); // 2
             g.add_vertex(Vec3f( 0, -s,  0)); // 3
             g.add_line(0,1); g.add_line(1,2); g.add_line(2,3); g.add_line(3,0);
-            // Cross
             g.add_vertex(Vec3f(-s*0.6f, 0, 0)); // 4
             g.add_vertex(Vec3f( s*0.6f, 0, 0)); // 5
             g.add_vertex(Vec3f(0, -s*0.6f, 0)); // 6
             g.add_vertex(Vec3f(0,  s*0.6f, 0)); // 7
             g.add_line(4,5); g.add_line(6,7);
+
+        } else if (t.category == TickCategory::PlateCenter && t.axes_count == 1) {
+            // Single-axis center (X-only or Y-only): spine perpendicular to that axis
+            const int a      = t.axes[0];
+            const int free_ax = (a == 0) ? 1 : 0;
+            Vec3d spine = Vec3d::Zero(); spine(free_ax) = PLATE_S;
+            g.reserve_vertices(2); g.reserve_indices(2);
+            g.add_vertex((Vec3f)(-spine).cast<float>());
+            g.add_vertex((Vec3f)( spine).cast<float>());
+            g.add_line(0, 1);
 
         } else {
             // Plate edge or single-axis center: bracket in XY plane
@@ -334,21 +386,19 @@ void GizmoSnapTicks::rebuild_models_if_needed()
             Vec3d arm   = Vec3d::Zero();
 
             if (is_edge) {
-                // Inward direction from edge toward center
-                const double plate_dim = (a == 0) ? 256.0 : 256.0; // fallback
-                const bool near_zero = (t.world_pos(a) < 1.0);
-                arm(a) = near_zero ? INSET : -INSET;
+                // Label suffix tells us which edge:
+                // "X-" or "Y-" = near-origin edge, arm points inward (+axis)
+                // "X+" or "Y+" = far edge, arm points inward (-axis)
+                const bool is_near_edge = (t.label.back() == '-');
+                arm(a) = is_near_edge ? INSET : -INSET;
 
                 g.reserve_vertices(6); g.reserve_indices(6);
-                // Spine
-                g.add_vertex((Vec3f)(-spine).cast<float>()); // 0
-                g.add_vertex((Vec3f)( spine).cast<float>()); // 1
-                // Top arm
-                g.add_vertex((Vec3f)(spine).cast<float>());          // 2
-                g.add_vertex((Vec3f)(spine + arm).cast<float>());    // 3
-                // Bottom arm
-                g.add_vertex((Vec3f)(-spine).cast<float>());         // 4
-                g.add_vertex((Vec3f)(-spine + arm).cast<float>());   // 5
+                g.add_vertex((Vec3f)(-spine).cast<float>()); // 0 spine start
+                g.add_vertex((Vec3f)( spine).cast<float>()); // 1 spine end
+                g.add_vertex((Vec3f)(spine).cast<float>());         // 2 top arm base
+                g.add_vertex((Vec3f)(spine + arm).cast<float>());   // 3 top arm tip
+                g.add_vertex((Vec3f)(-spine).cast<float>());        // 4 bot arm base
+                g.add_vertex((Vec3f)(-spine + arm).cast<float>()); // 5 bot arm tip
                 g.add_line(0,1); g.add_line(2,3); g.add_line(4,5);
             } else {
                 // Center line on one axis: small cross-tick
@@ -385,6 +435,8 @@ void GizmoSnapTicks::render(const Camera& camera, TickStyle /*style*/)
     if (!shader) return;
 
     shader->start_using();
+    glsafe(::glEnable(GL_BLEND));
+    glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
     const auto& vp = camera.get_viewport();
 
@@ -395,12 +447,19 @@ void GizmoSnapTicks::render(const Camera& camera, TickStyle /*style*/)
 
         ColorRGBA col = category_color(t.category, hovered || snapped);
 
+        // Apply opacity based on tick category
+        const float opacity = (t.category == TickCategory::BboxMultiple)
+                              ? m_axis_opacity : m_plate_opacity;
+        // On hover/snap, always show fully opaque so the indicator is clear
+        col.a((hovered || snapped) ? 1.0f : opacity);
+
         // Pulse on snap
         if (snapped && m_pulse_t < 1.0f) {
             const float pulse = std::sin(m_pulse_t * float(M_PI));
             col.r(std::min(1.0f, col.r() + pulse * 0.4f));
             col.g(std::min(1.0f, col.g() + pulse * 0.4f));
             col.b(std::min(1.0f, col.b() + pulse * 0.4f));
+            col.a(1.0f);
         }
 
         // Each tick renders at its frozen world_pos
@@ -423,6 +482,7 @@ void GizmoSnapTicks::render(const Camera& camera, TickStyle /*style*/)
     }
 
     shader->stop_using();
+    glsafe(::glDisable(GL_BLEND));
 }
 
 } // namespace GUI

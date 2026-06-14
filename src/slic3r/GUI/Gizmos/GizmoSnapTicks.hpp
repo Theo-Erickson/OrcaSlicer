@@ -5,6 +5,7 @@
 // Clicking within PROXIMITY_PX of a tick teleports the object there.
 
 #include "GizmoEnums.hpp"
+#include "PlaneHandlePrefs.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/Point.hpp"
 #include "libslic3r/Color.hpp"
@@ -49,11 +50,11 @@ public:
     GizmoSnapTicks();
     ~GizmoSnapTicks();
 
-    // Build tick list. Called once when gizmo activates or selection changes.
-    // world_pos: current object center in world space (used to place bbox ticks)
-    void build_move_ticks(const BoundingBoxf3& bbox,
-                          const Vec2d&         plate_size,
-                          const Vec3d&         world_pos);
+    // Build tick list from prefs. Called once on gizmo activation.
+    void build_move_ticks(const BoundingBoxf3&    bbox,
+                          const Vec2d&            plate_size,
+                          const Vec3d&            world_pos,
+                          const PlaneHandlePrefs& prefs);
 
     void build_scale_ticks(const BoundingBoxf3& bbox, bool include_negative_z);
 
@@ -95,6 +96,10 @@ private:
     struct Impl;
     Impl* m_impl { nullptr };
     bool  m_models_dirty { true };
+
+    // Cached opacity values set during build, applied during render
+    float m_axis_opacity  { 1.0f };
+    float m_plate_opacity { 1.0f };
 
     void invalidate_models();
     void rebuild_models_if_needed();

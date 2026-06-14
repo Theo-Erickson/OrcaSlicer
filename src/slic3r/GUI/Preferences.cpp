@@ -1781,9 +1781,6 @@ void PreferencesDialog::create_items()
     g_sizer = f_sizers.back();
     g_sizer->AddGrowableCol(0, 1);
  
-    // Helper: mark the 3D canvas dirty so gizmo repaints immediately when
-    // a setting changes (the gizmo reloads prefs every frame, so a single
-    // repaint is enough to see the change without any mouse movement).
     auto repaint_canvas = []() {
         if (Plater* p = wxGetApp().plater())
             p->canvas3D()->set_as_dirty();
@@ -1792,85 +1789,72 @@ void PreferencesDialog::create_items()
     //// GIZMO > Plane Handles
     g_sizer->Add(create_item_title(_L("Plane Handles")), 1, wxEXPAND);
  
-    // Position style — combo uses onchange overload so we can call repaint_canvas
+    // Handle position
     {
-        std::vector<wxString> position_labels = {
+        std::vector<wxString>    position_labels = {
             _L("At arrow end"), _L("At intersection"), _L("Midpoint"),
         };
         std::vector<std::string> position_keys = {
             "at_arrow_end", "intersection", "midpoint",
         };
-        // Read current selection index from stored string key
         const std::string cur_pos = app_config->get("plane_handle_position");
         int pos_idx = 0;
         if      (cur_pos == "intersection") pos_idx = 1;
         else if (cur_pos == "midpoint")     pos_idx = 2;
- 
-        wxBoxSizer* sizer_pos;
-        ComboBox*   combo_pos;
+        wxBoxSizer* sizer_pos; ComboBox* combo_pos;
         std::tie(sizer_pos, combo_pos) = create_item_combobox_base(
             _L("Handle position"),
-            _L("Where the plane constraint squares are placed.\n"
-               "At arrow end: centered on the bbox face (Blender style).\n"
-               "At intersection: near corner at gizmo origin.\n"
-               "Midpoint: halfway between origin and arrow tip."),
+            _L("Where the plane constraint squares are placed."),
             "plane_handle_position", position_labels, pos_idx
         );
-        combo_pos->GetDropDown().Bind(wxEVT_COMBOBOX, [this, position_keys, repaint_canvas](wxCommandEvent& e) {
-            int sel = e.GetSelection();
-            if (sel >= 0 && sel < (int)position_keys.size())
-                app_config->set("plane_handle_position", position_keys[sel]);
-            repaint_canvas();
-            e.Skip();
-        });
+        combo_pos->GetDropDown().Bind(wxEVT_COMBOBOX,
+            [this, position_keys, repaint_canvas](wxCommandEvent& e) {
+                int sel = e.GetSelection();
+                if (sel >= 0 && sel < (int)position_keys.size())
+                    app_config->set("plane_handle_position", position_keys[sel]);
+                repaint_canvas(); e.Skip();
+            });
         g_sizer->Add(sizer_pos);
     }
  
-    // Shape
+    // Handle shape
     {
         std::vector<wxString>    shape_labels = { _L("Square"), _L("Circle") };
         std::vector<std::string> shape_keys   = { "square",     "circle"     };
         const std::string cur_shape = app_config->get("plane_handle_shape");
         int shape_idx = (cur_shape == "circle") ? 1 : 0;
- 
-        wxBoxSizer* sizer_shape;
-        ComboBox*   combo_shape;
+        wxBoxSizer* sizer_shape; ComboBox* combo_shape;
         std::tie(sizer_shape, combo_shape) = create_item_combobox_base(
             _L("Handle shape"),
-            _L("Square: filled rectangle with border.  Circle: filled disc with ring border."),
+            _L("Square: rectangle with border.  Circle: disc with ring."),
             "plane_handle_shape", shape_labels, shape_idx
         );
-        combo_shape->GetDropDown().Bind(wxEVT_COMBOBOX, [this, shape_keys, repaint_canvas](wxCommandEvent& e) {
-            int sel = e.GetSelection();
-            if (sel >= 0 && sel < (int)shape_keys.size())
-                app_config->set("plane_handle_shape", shape_keys[sel]);
-            repaint_canvas();
-            e.Skip();
-        });
+        combo_shape->GetDropDown().Bind(wxEVT_COMBOBOX,
+            [this, shape_keys, repaint_canvas](wxCommandEvent& e) {
+                int sel = e.GetSelection();
+                if (sel >= 0 && sel < (int)shape_keys.size())
+                    app_config->set("plane_handle_shape", shape_keys[sel]);
+                repaint_canvas(); e.Skip();
+            });
         g_sizer->Add(sizer_shape);
     }
  
-    // Handle size 0-500%
+    // Handle size
     {
         if (app_config->get("plane_handle_size_pct").empty())
             app_config->set("plane_handle_size_pct", "100");
- 
-        auto item_plane_size = create_item_spinctrl(
-            _L("Handle size"), "", _L("%"),
+        g_sizer->Add(create_item_spinctrl(
+            _L("Handle size"), "",
+            _L("%"),
             _L("Size of the plane handles as a percentage of the default size.\n"
                "100% = default.  Range: 0-500%."),
             "plane_handle_size_pct", 0, 500,
-            [repaint_canvas](int) { repaint_canvas(); }
-        );
-        g_sizer->Add(item_plane_size);
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
     }
  
-    //// GIZMO > Drag Plane Overlay
-    g_sizer->Add(create_item_title(_L("Drag Plane Overlay")), 1, wxEXPAND);
- 
-    // Opacity 0-100% (stored as integer, loaded as float 0-1 by PlaneHandlePrefs::load)
+    // Drag plane opacity
     {
-        // Migrate old float value if present
         std::string alpha_str = app_config->get("plane_handle_drag_opacity");
         if (!alpha_str.empty() && alpha_str.find('.') != std::string::npos) {
             try {
@@ -1880,60 +1864,214 @@ void PreferencesDialog::create_items()
         } else if (alpha_str.empty()) {
             app_config->set("plane_handle_drag_opacity", "10");
         }
- 
-        auto item_plane_opacity = create_item_spinctrl(
-            _L("Drag plane opacity"), "", _L("%"),
+        g_sizer->Add(create_item_spinctrl(
+            _L("Drag plane opacity"), "",
+            _L("%"),
             _L("Opacity of the translucent plane shown during a plane-constrained drag.\n"
                "0% = invisible, 100% = fully opaque.  Default: 10%."),
             "plane_handle_drag_opacity", 0, 100,
-            [repaint_canvas](int) { repaint_canvas(); }
-        );
-        g_sizer->Add(item_plane_opacity);
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
     }
- 
-    g_sizer->AddSpacer(FromDIP(10));
-    sizer_page->Add(g_sizer, 0, wxEXPAND);
  
     //// GIZMO > Snap Ticks
     g_sizer->Add(create_item_title(_L("Snap Ticks")), 1, wxEXPAND);
  
-    // Enable / disable the whole system
-    auto item_ticks_enable = create_item_checkbox(
+    // Global enable
+    if (app_config->get("gizmo_snap_ticks_enabled").empty())
+        app_config->set("gizmo_snap_ticks_enabled", "1");
+    g_sizer->Add(create_item_checkbox(
         _L("Enable snap ticks"),
-        _L("Show tick marks along axis arrows for snapping to bbox multiples,\n"
-           "plate center, and plate edges. Hover near a tick for 0.4s to snap."),
+        _L("Show snap tick marks on the Move gizmo axes and plate boundaries.\n"
+           "Click a tick mark to teleport the object to that position."),
         "gizmo_snap_ticks_enabled"
-    );
-    g_sizer->Add(item_ticks_enable);
+    ));
  
-    // Tick style
+    // -- Axis Ticks --
+    g_sizer->Add(create_item_title(_L("  Axis Ticks")), 1, wxEXPAND);
+ 
+    if (app_config->get("snap_axis_ticks_enabled").empty())
+        app_config->set("snap_axis_ticks_enabled", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("Enable axis ticks"),
+        _L("Show bounding-box multiple tick marks along the X, Y, Z axis arrows."),
+        "snap_axis_ticks_enabled"
+    ));
+ 
+    // Axis display mode
     {
-        std::vector<wxString>    tick_style_labels = {
-            _L("On arrow (ruler style)"),
-            _L("Floating labels"),
+        std::vector<wxString>    disp_labels = {
+            _L("Inline with object"), _L("On plate (Z = 0)"),
         };
-        std::vector<std::string> tick_style_keys = { "on_arrow", "floating" };
-        const std::string cur_tick = app_config->get("gizmo_snap_tick_style");
-        int tick_idx = (cur_tick == "floating") ? 1 : 0;
- 
-        wxBoxSizer* sizer_tick;
-        ComboBox*   combo_tick;
-        std::tie(sizer_tick, combo_tick) = create_item_combobox_base(
-            _L("Tick style"),
-            _L("On arrow: perpendicular marks cross the axis line (like a ruler).\n"
-               "Floating labels: pill labels float above the arrow."),
-            "gizmo_snap_tick_style", tick_style_labels, tick_idx
+        std::vector<std::string> disp_keys = { "inline", "on_plate" };
+        const std::string cur = app_config->get("snap_axis_tick_display");
+        int idx = (cur == "on_plate") ? 1 : 0;
+        wxBoxSizer* sz; ComboBox* cb;
+        std::tie(sz, cb) = create_item_combobox_base(
+            _L("Axis tick display"),
+            _L("Inline: ticks at object Z height.  On plate: projected to Z=0."),
+            "snap_axis_tick_display", disp_labels, idx
         );
-        combo_tick->GetDropDown().Bind(wxEVT_COMBOBOX,
-            [this, tick_style_keys, repaint_canvas](wxCommandEvent& e) {
+        cb->GetDropDown().Bind(wxEVT_COMBOBOX,
+            [this, disp_keys, repaint_canvas](wxCommandEvent& e) {
                 int sel = e.GetSelection();
-                if (sel >= 0 && sel < (int)tick_style_keys.size())
-                    app_config->set("gizmo_snap_tick_style", tick_style_keys[sel]);
-                repaint_canvas();
-                e.Skip();
+                if (sel >= 0 && sel < (int)disp_keys.size())
+                    app_config->set("snap_axis_tick_display", disp_keys[sel]);
+                repaint_canvas(); e.Skip();
             });
-        g_sizer->Add(sizer_tick);
+        g_sizer->Add(sz);
     }
+ 
+    // Axis tick numeric params
+    {
+        if (app_config->get("snap_axis_tick_start").empty())
+            app_config->set("snap_axis_tick_start", "1");
+        g_sizer->Add(create_item_spinctrl(
+            _L("Start multiplier"), "",
+            _L("x"),
+            _L("First bounding-box multiple to show (e.g. 1 = 1x bbox)."),
+            "snap_axis_tick_start", 1, 20,
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
+    }
+    {
+        if (app_config->get("snap_axis_tick_increment").empty())
+            app_config->set("snap_axis_tick_increment", "10");
+        g_sizer->Add(create_item_spinctrl(
+            _L("Increment"), "",
+            _L("x0.1"),
+            _L("Step between tick marks in units of 0.1x bbox.\n"
+               "E.g. 5 = 0.5x step gives 1x, 1.5x, 2x, 2.5x ..."),
+            "snap_axis_tick_increment", 1, 100,
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
+    }
+    {
+        if (app_config->get("snap_axis_tick_count").empty())
+            app_config->set("snap_axis_tick_count", "5");
+        g_sizer->Add(create_item_spinctrl(
+            _L("Tick count"), "",
+            _L("per axis"),
+            _L("Number of tick marks per direction per axis."),
+            "snap_axis_tick_count", 1, 20,
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
+    }
+    {
+        if (app_config->get("snap_axis_tick_opacity").empty())
+            app_config->set("snap_axis_tick_opacity", "100");
+        g_sizer->Add(create_item_spinctrl(
+            _L("Axis tick opacity"), "",
+            _L("%"),
+            _L("Opacity of axis (bbox-multiple) tick marks. 100% = fully opaque."),
+            "snap_axis_tick_opacity", 0, 100,
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
+    }
+ 
+    // Per-axis checkboxes
+    g_sizer->Add(create_item_title(_L("  Active axes")), 1, wxEXPAND);
+    if (app_config->get("snap_axis_tick_x").empty()) app_config->set("snap_axis_tick_x", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("X axis ticks"),
+        _L("Show snap ticks along the X axis."),
+        "snap_axis_tick_x"
+    ));
+    if (app_config->get("snap_axis_tick_y").empty()) app_config->set("snap_axis_tick_y", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("Y axis ticks"),
+        _L("Show snap ticks along the Y axis."),
+        "snap_axis_tick_y"
+    ));
+    if (app_config->get("snap_axis_tick_z").empty()) app_config->set("snap_axis_tick_z", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("Z axis ticks"),
+        _L("Show snap ticks along the Z axis."),
+        "snap_axis_tick_z"
+    ));
+ 
+    // -- Plate Ticks --
+    g_sizer->Add(create_item_title(_L("  Plate Ticks")), 1, wxEXPAND);
+ 
+    if (app_config->get("snap_plate_ticks_enabled").empty())
+        app_config->set("snap_plate_ticks_enabled", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("Enable plate ticks"),
+        _L("Show snap tick marks at plate edges, center, and division points."),
+        "snap_plate_ticks_enabled"
+    ));
+ 
+    // Plate display mode
+    {
+        std::vector<wxString>    disp_labels = {
+            _L("Inline with object"), _L("On plate (Z = 0)"),
+        };
+        std::vector<std::string> disp_keys = { "inline", "on_plate" };
+        const std::string cur = app_config->get("snap_plate_tick_display");
+        int idx = (cur == "on_plate") ? 1 : 0;
+        wxBoxSizer* sz; ComboBox* cb;
+        std::tie(sz, cb) = create_item_combobox_base(
+            _L("Plate tick display"),
+            _L("Inline: plate ticks at object Z height.  On plate: flat on bed."),
+            "snap_plate_tick_display", disp_labels, idx
+        );
+        cb->GetDropDown().Bind(wxEVT_COMBOBOX,
+            [this, disp_keys, repaint_canvas](wxCommandEvent& e) {
+                int sel = e.GetSelection();
+                if (sel >= 0 && sel < (int)disp_keys.size())
+                    app_config->set("snap_plate_tick_display", disp_keys[sel]);
+                repaint_canvas(); e.Skip();
+            });
+        g_sizer->Add(sz);
+    }
+ 
+    {
+        if (app_config->get("snap_plate_divisions").empty())
+            app_config->set("snap_plate_divisions", "2");
+        g_sizer->Add(create_item_spinctrl(
+            _L("Plate divisions"), "",
+            _L("per half"),
+            _L("Interior snap points between plate origin and each edge.\n"
+               "0 = edges only.  2 = edges + 33% + 66%.  4 = +20,40,60,80%."),
+            "snap_plate_divisions", 0, 10,
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
+    }
+    {
+        if (app_config->get("snap_plate_tick_opacity").empty())
+            app_config->set("snap_plate_tick_opacity", "100");
+        g_sizer->Add(create_item_spinctrl(
+            _L("Plate tick opacity"), "",
+            _L("%"),
+            _L("Opacity of plate tick marks (edges, center, divisions). 100% = fully opaque."),
+            "snap_plate_tick_opacity", 0, 100,
+            [repaint_canvas](int){ repaint_canvas(); }
+        ));
+    }
+ 
+    // Per-type plate checkboxes
+    g_sizer->Add(create_item_title(_L("  Active plate ticks")), 1, wxEXPAND);
+    if (app_config->get("snap_plate_tick_x_edges").empty())
+        app_config->set("snap_plate_tick_x_edges", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("X edges"),
+        _L("Snap to left and right plate edges (object face aligned to edge)."),
+        "snap_plate_tick_x_edges"
+    ));
+    if (app_config->get("snap_plate_tick_y_edges").empty())
+        app_config->set("snap_plate_tick_y_edges", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("Y edges"),
+        _L("Snap to front and back plate edges (object face aligned to edge)."),
+        "snap_plate_tick_y_edges"
+    ));
+    if (app_config->get("snap_plate_tick_origin").empty())
+        app_config->set("snap_plate_tick_origin", "1");
+    g_sizer->Add(create_item_checkbox(
+        _L("Plate origin / center"),
+        _L("Snap to plate center (X+Y), plate center X-only, and center Y-only."),
+        "snap_plate_tick_origin"
+    ));
  
     g_sizer->AddSpacer(FromDIP(10));
     sizer_page->Add(g_sizer, 0, wxEXPAND);
