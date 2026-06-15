@@ -38,6 +38,7 @@
 
 #include "PrintStatusIcon.hpp"
 #include "PrinterStatusPoller.hpp"
+#include "PrintStatusCustomizationPanel.hpp"
 
 #define ENABEL_PRINT_ALL 0
 
@@ -125,6 +126,7 @@ class MainFrame : public DPIFrame
 
     void on_presets_changed(SimpleEvent&);
     void on_value_changed(wxCommandEvent&);
+    void OnPrintStatusThemeChanged(wxCommandEvent& evt);
 
     bool can_start_new_project() const;
     bool can_open_project() const;
@@ -404,7 +406,7 @@ public:
     mutable int m_slice_select{ eSliceAll };
     // Button* m_publish_btn{ nullptr };
     SideButton* m_slice_btn{ nullptr };
-    SideButton* m_slice_option_btn{ nullptr };
+    SideButton* m_slice_option_btn{ nullptr };  
     SideButton* m_print_btn{ nullptr };
     SideButton* m_print_option_btn{ nullptr };
 

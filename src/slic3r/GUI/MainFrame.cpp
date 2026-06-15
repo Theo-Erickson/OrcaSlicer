@@ -68,6 +68,7 @@
 #include "DeviceCore/DevManager.h"
 
 #include "BackgroundSlicingProcess.hpp"   // SlicingProcessCompletedEvent, EVT_PROCESS_COMPLETED
+#include "PrintStatusThemeManager.hpp"
 #include "Jobs/PrintJob.hpp"              // EVT_PRINT_JOB_PROGRESS
 #include "libslic3r/PrintBase.hpp"        // SlicingStatus, DEFAULT_WAIT_IF_CANCELED_FLAGS
 
@@ -731,6 +732,9 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
     // bind events from DiffDlg
 
     bind_diff_dialog();
+    
+    Bind(EVT_PRINT_STATUS_THEME_CHANGED,
+         &MainFrame::OnPrintStatusThemeChanged, this);
 }
 
 void MainFrame::bind_diff_dialog()
@@ -1848,6 +1852,10 @@ wxBoxSizer* MainFrame::create_side_tools()
     sizer->Add(print_panel);
     sizer->Add(FromDIP(19), 0, 0, 0, 0);
 
+    // Initialize PrintStatusThemeManager before creating the Print Status Icon
+    PrintStatusThemeManager::Get().Init();
+    
+    // Create icon that shows the current print state, in the top menu
     m_print_status_icon = new PrintStatusIcon(this, 32);
     sizer->Add(m_print_status_icon);
     //m_side_tools->Layout();
@@ -3977,6 +3985,12 @@ void MainFrame::on_value_changed(wxCommandEvent& event)
             m_plater->on_filament_count_change(value);
         }
     }
+}
+
+void MainFrame::OnPrintStatusThemeChanged(wxCommandEvent&)
+{
+    if (m_print_status_icon)
+        m_print_status_icon->ForceRefresh();
 }
 
 void MainFrame::on_config_changed(DynamicPrintConfig* config) const
