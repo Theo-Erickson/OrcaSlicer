@@ -39,7 +39,6 @@
 	"enable_support": "0",
 	"filename_format": "{input_filename_base}.gcode",
 	"fill_multiline": "1",
-	"first_x_layer_fan_speed": "0",
 	"gap_infill_speed": [
 		"50"
 	],
@@ -116,7 +115,7 @@
 	"print_settings_id": "",
 	"raft_layers": "0",
 	"reduce_crossing_wall": "0",
-	"reduce_infill_retraction": "1",
+	"reduce_infill_retraction": "0",
 	"resolution": "0.012",
 	"seam_position": "aligned",
 	"seam_placement_away_from_overhangs": "0",

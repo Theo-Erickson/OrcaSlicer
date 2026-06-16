@@ -25,7 +25,6 @@ TabAnimMode TabAnimMode_Load();
 void        TabAnimMode_Save(TabAnimMode mode);
 const char* TabAnimMode_Label(TabAnimMode mode);
 
-class ModeSizer;
 class ScalableButton;
 class Button;
 

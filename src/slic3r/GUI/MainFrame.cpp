@@ -46,6 +46,7 @@
 #include "Widgets/ProgressDialog.hpp"
 #include "BindDialog.hpp"
 #include "../Utils/MacDarkMode.hpp"
+#include "../Utils/PrintHost.hpp"
 
 #include <fstream>
 #include <string_view>
@@ -2570,15 +2571,29 @@ static wxMenu* generate_help_menu()
     wxMenu* helpMenu = new wxMenu();
 
     // shortcut key
-    append_menu_item(helpMenu, wxID_ANY, _L("Keyboard Shortcuts") + sep + "&?", _L("Show the list of the keyboard shortcuts"),
+    append_menu_item(helpMenu, wxID_ANY, _L("Keyboard Shortcuts") + sep + "&?", _L("Show the list of keyboard shortcuts"),
         [](wxCommandEvent&) { wxGetApp().keyboard_shortcuts(); });
     // Show Beginner's Tutorial
     append_menu_item(helpMenu, wxID_ANY, _L("Setup Wizard"), _L("Setup Wizard"), [](wxCommandEvent &) {wxGetApp().ShowUserGuide();});
 
     helpMenu->AppendSeparator();
+
     // Open Config Folder
     append_menu_item(helpMenu, wxID_ANY, _L("Show Configuration Folder"), _L("Show Configuration Folder"),
         [](wxCommandEvent&) { Slic3r::GUI::desktop_open_datadir_folder(); });
+
+    helpMenu->AppendSeparator();
+
+    // Troubleshoot center
+    append_menu_item(helpMenu, wxID_ANY, _L("Troubleshoot Center"), "",
+        [](wxCommandEvent&) { wxGetApp().troubleshoot(); });
+
+    append_menu_item(helpMenu, wxID_ANY, _L("Open Network Test"), _L("Open Network Test"), [](wxCommandEvent&) {
+            NetworkTestDialog dlg(wxGetApp().mainframe);
+            dlg.ShowModal();
+        });
+
+    helpMenu->AppendSeparator();
 
     append_menu_item(helpMenu, wxID_ANY, _L("Show Tip of the Day"), _L("Show Tip of the Day"), [](wxCommandEvent&) {
         wxGetApp().plater()->get_dailytips()->open();
@@ -2596,11 +2611,6 @@ static wxMenu* generate_help_menu()
             wxGetApp().check_new_version_sf(true, 1);
         }, "", nullptr, []() {
             return true;
-        });
-
-    append_menu_item(helpMenu, wxID_ANY, _L("Open Network Test"), _L("Open Network Test"), [](wxCommandEvent&) {
-            NetworkTestDialog dlg(wxGetApp().mainframe);
-            dlg.ShowModal();
         });
 
     // About
@@ -2808,6 +2818,21 @@ void MainFrame::init_menubar_as_editor()
             []() { return true; }, this);
 
         append_submenu(fileMenu, export_menu, wxID_ANY, _L("Export"), "");
+
+        fileMenu->AppendSeparator();
+        append_menu_item(fileMenu, wxID_ANY, _L("Sync Presets"), _L("Pull and apply the latest presets from OrcaCloud"),
+            [this](wxCommandEvent&) {
+                if (!wxGetApp().is_user_login()) {
+                    MessageDialog info_dlg(this, _L("You must be logged in to sync presets from cloud."),
+                        _L("Sync Presets"), wxOK | wxICON_INFORMATION);
+                    info_dlg.ShowModal();
+                    return;
+                }
+                wxGetApp().restart_sync_user_preset();
+            }, "", nullptr,
+            [this]() {
+                return wxGetApp().is_user_login() && !wxGetApp().app_config->get_stealth_mode();
+            }, this);
 
         fileMenu->AppendSeparator();
 
@@ -3283,6 +3308,34 @@ void MainFrame::init_menubar_as_editor()
             plater()->get_current_canvas3D()->force_set_focus();
         },
         "", nullptr, []() { return true; }, this);
+
+        append_menu_item(
+        m_topbar->GetTopMenu(), wxID_ANY, _L("Preset Bundle") + "\t", "",
+        [this](wxCommandEvent &) {
+            // Orca: Use GUI_App::open_preferences instead of direct call so windows associations are updated on exit
+            wxGetApp().open_presetbundledialog();
+            plater()->get_current_canvas3D()->force_set_focus();
+        },
+        "", nullptr, []() { return true; }, this);
+
+    append_menu_item(
+        m_topbar->GetTopMenu(), wxID_ANY, _L("Sync Presets"), _L("Pull and apply the latest presets from OrcaCloud"),
+        [this](wxCommandEvent&) {
+            if (!wxGetApp().is_user_login()) {
+                MessageDialog info_dlg(this, _L("You must be logged in to sync presets from cloud."),
+                    _L("Sync Presets"), wxOK | wxICON_INFORMATION);
+                info_dlg.ShowModal();
+                return;
+            }
+            if (m_plater)
+                m_plater->get_notification_manager()->push_notification(
+                    into_u8(_L("Syncing presets from cloud\u2026")));
+            wxGetApp().restart_sync_user_preset();
+        }, "", nullptr,
+        [this]() {
+            return wxGetApp().is_user_login() && !wxGetApp().app_config->get_stealth_mode();
+        }, this);
+
     //m_topbar->AddDropDownMenuItem(preference_item);
     //m_topbar->AddDropDownMenuItem(printer_item);
     //m_topbar->AddDropDownMenuItem(language_item);
@@ -3318,6 +3371,14 @@ void MainFrame::init_menubar_as_editor()
         }, "", nullptr,
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
+    // Flow rate (Wizard Dialog)
+    append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Flow ratio"), _L("Flow Rate Calibration"),
+        [this](wxCommandEvent&) {
+            if (!m_plater) return;
+            if (!m_flow_rate_calib_dlg)
+                m_flow_rate_calib_dlg = new FlowRateCalibrationDialog((wxWindow*)this, wxID_ANY, m_plater);
+            m_flow_rate_calib_dlg->ShowModal();
+        }, "", nullptr,
     // Flow rate (with submenu)
     auto flowrate_menu = new wxMenu();
     append_menu_item(
@@ -3398,6 +3459,15 @@ void MainFrame::init_menubar_as_editor()
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
 #else
+    // On Mac, the Apple menu ignores non-standard custom items, so add Preset Bundle to the File menu
+    fileMenu->AppendSeparator();
+    append_menu_item(
+        fileMenu, wxID_ANY, _L("Preset Bundle"), "",
+        [this](wxCommandEvent &) {
+            wxGetApp().open_presetbundledialog();
+            plater()->get_current_canvas3D()->force_set_focus();
+        },
+        "", nullptr, []() { return true; }, this);
     m_menubar->Append(fileMenu, wxString::Format("&%s", _L("File")));
     if (editMenu)
         m_menubar->Append(editMenu, wxString::Format("&%s", _L("Edit")));
@@ -3437,6 +3507,14 @@ void MainFrame::init_menubar_as_editor()
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
     // Flowrate (with submenu)
+    // ORCA: Flow rate (Wizard Dialog)
+    append_menu_item(calib_menu, wxID_ANY, _L("Flow ratio"), _L("Flow Rate Calibration"),
+        [this](wxCommandEvent&) {
+            if (!m_plater) return;
+            if (!m_flow_rate_calib_dlg)
+                m_flow_rate_calib_dlg = new FlowRateCalibrationDialog((wxWindow*)this, wxID_ANY, m_plater);
+            m_flow_rate_calib_dlg->ShowModal();
+        }, "", nullptr,
     auto flowrate_menu = new wxMenu();
     append_menu_item(flowrate_menu, wxID_ANY, _L("Pass 1"), _L("Flow rate test - Pass 1"),
         [this](wxCommandEvent&) { if (m_plater) m_plater->calib_flowrate(false, 1); }, "", nullptr,
@@ -3707,7 +3785,7 @@ void MainFrame::load_config_file()
  //       return;
     wxFileDialog dlg(this, _L("Select profile to load:"),
         !m_last_config.IsEmpty() ? get_dir_name(m_last_config) : wxGetApp().app_config->get_last_dir(),
-        "config.json", "Config files (*.json;*.zip;*.orca_printer;*.orca_filament)|*.json;*.zip;*.orca_printer;*.orca_filament", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+        "config.json", "Config files (*.json;*.zip;*.orca_printer;*.orca_bundle;*.orca_filament)|*.json;*.zip;*.orca_printer;*.orca_bundle;*.orca_filament", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
      wxArrayString files;
     if (dlg.ShowModal() != wxID_OK)
         return;
@@ -3724,11 +3802,16 @@ void MainFrame::load_config_file()
             int           ids[]{wxID_NO, wxID_YES, wxID_NOTOALL, wxID_YESTOALL};
             return std::find(ids, ids + 4, res) - ids;
         },
-        ForwardCompatibilitySubstitutionRule::Enable);
+        ForwardCompatibilitySubstitutionRule::Enable,
+        *wxGetApp().app_config);
     if (!cfiles.empty()) {
         wxGetApp().app_config->update_config_dir(get_dir_name(cfiles.back()));
         wxGetApp().load_current_presets();
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " presets has been import,and size is" << cfiles.size();
+        NetworkAgent* agent = wxGetApp().getAgent();
+        if (agent) {
+            BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " user is: " << agent->get_user_id();
+        }
     }
     wxGetApp().preset_bundle->update_compatible(PresetSelectCompatibleType::Always);
     update_side_preset_ui();
@@ -4201,15 +4284,12 @@ void MainFrame::load_printer_url()
         return;
 
     auto     cfg = preset_bundle.printers.get_edited_preset().config;
-    wxString url = cfg.opt_string("print_host_webui").empty() ? cfg.opt_string("print_host") : cfg.opt_string("print_host_webui");
+    wxString url = from_u8(PrintHost::get_print_host_webui(&cfg));
     wxString apikey;
     const auto host_type = cfg.option<ConfigOptionEnum<PrintHostType>>("host_type")->value;
     if (cfg.has("printhost_apikey") && (host_type == htPrusaLink || host_type == htPrusaConnect))
         apikey = cfg.opt_string("printhost_apikey");
     if (!url.empty()) {
-        if (!url.Lower().starts_with("http"))
-            url = wxString::Format("http://%s", url);
-
         load_printer_url(url, apikey);
     }
 }
@@ -4275,7 +4355,7 @@ void MainFrame::update_side_preset_ui()
 void MainFrame::on_select_default_preset(SimpleEvent& evt)
 {
     MessageDialog dialog(this,
-                    _L("Do you want to synchronize your personal data from Bambu Cloud?\n"
+                    _L("Do you want to synchronize your personal data from Orca Cloud?\n"
                         "It contains the following information:\n"
                         "1. The Process presets\n"
                         "2. The Filament presets\n"
@@ -4408,3 +4488,4 @@ void SettingsDialog::on_dpi_changed(const wxRect& suggested_rect)
 
 } // GUI
 } // Slic3r
+
