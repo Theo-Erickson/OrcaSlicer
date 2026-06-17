@@ -3379,6 +3379,8 @@ void MainFrame::init_menubar_as_editor()
                 m_flow_rate_calib_dlg = new FlowRateCalibrationDialog((wxWindow*)this, wxID_ANY, m_plater);
             m_flow_rate_calib_dlg->ShowModal();
         }, "", nullptr,
+        [this]() {return m_plater->is_view3D_shown();; }, this);
+        
     // Flow rate (with submenu)
     auto flowrate_menu = new wxMenu();
     append_menu_item(
