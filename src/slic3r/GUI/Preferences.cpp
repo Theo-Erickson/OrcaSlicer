@@ -1922,70 +1922,78 @@ void PreferencesDialog::create_items()
 
     
     //////////////////////////
-    //// CUSTOMIZATION TAB                                                             
-    //////////////////////////
-    m_pref_tabs->AppendItem(_L("Customization"));                                    
-    f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));                        
-    g_sizer = f_sizers.back();                                                       
-    g_sizer->AddGrowableCol(0, 1);                                                   
- 
-    //// CUSTOMIZATION > Tab Icons                                                    
-    g_sizer->Add(create_item_title(_L("Tab Icons")), 1, wxEXPAND);                  
- 
-    // Map AppConfig string values to combobox indices                               
-    // Matches TabAnimMode enum order in Notebook.hpp                                
-    {                                                                                
-        // Build index from current AppConfig value, defaulting to 0 (Always)       
-        const std::vector<wxString> anim_labels = {                                 
-            _L("Always (active + hover)"),                                           
-            _L("Active tab only"),                                                   
-            _L("Hover only"),                                                        
-            _L("Never (static icons)"),                                              
-        };                                                                           
-        const std::vector<std::string> anim_values = {                              
-            "always", "active_only", "hover_only", "never"                          
-        };                                                                           
- 
-        // Resolve current index safely — defaults to 0 if key is missing           
-        std::string cur = app_config->get("tab_icon_anim_mode");                   
-        unsigned int cur_idx = 0;                                                   
-        for (unsigned int i = 0; i < anim_values.size(); ++i) {                    
-            if (anim_values[i] == cur) { cur_idx = i; break; }                     
-        }                                                                            
- 
-        // Use the base helper directly so we control the initial index             
-        auto [sizer_anim, combo_anim] = create_item_combobox_base(                 
-            _L("Animated tab icons"),                                               
-            _L("Controls when tab bar icons animate.\n"                             
-               "Always: animates on the active tab and when hovering.\n"            
-               "Active only: only the selected tab animates.\n"                     
-               "Hover only: animates while hovering over a tab.\n"                  
-               "Never: icons are always static."),                                  
-            "tab_icon_anim_mode",                                                   
-            anim_labels,                                                            
-            cur_idx);                                                               
- 
-        // Save to AppConfig and apply live when selection changes                  
-        combo_anim->GetDropDown().Bind(wxEVT_COMBOBOX,                             
-            [anim_values](wxCommandEvent& e) {                                      
-                int sel = e.GetSelection();                                         
-                if (sel < 0 || sel >= (int)anim_values.size()) return;            
-                wxGetApp().app_config->set("tab_icon_anim_mode",                  
-                                           anim_values[sel]);                      
-                // Apply live — no restart needed                                   
-                if (auto* nb = dynamic_cast<Notebook*>(                            
-                        wxGetApp().mainframe->m_tabpanel))                         
-                    nb->GetBtnsListCtrl()->RefreshAnimMode();                        
-                e.Skip();                                                           
-            });                                                                     
- 
-        combo_anim->SetMinSize(wxSize(FromDIP(220), -1));
-        
-        g_sizer->Add(sizer_anim);                                                  
-    }                                                                               
- 
-    g_sizer->AddSpacer(FromDIP(10));                                               
-    sizer_page->Add(g_sizer, 0, wxEXPAND);                                        
+//// CUSTOMIZATION TAB                                                             
+//////////////////////////
+m_pref_tabs->AppendItem(_L("Customization"));                                    
+f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));                        
+g_sizer = f_sizers.back();                                                       
+g_sizer->AddGrowableCol(0, 1);                                                   
+
+//// CUSTOMIZATION > Tab Icons                                                    
+g_sizer->Add(create_item_title(_L("Tab Icons")), 1, wxEXPAND);                  
+
+// Map AppConfig string values to combobox indices                               
+// Matches TabAnimMode enum order in Notebook.hpp                                
+{                                                                                
+    // Build index from current AppConfig value, defaulting to 0 (Always)       
+    const std::vector<wxString> anim_labels = {                                 
+        _L("Always (active + hover)"),                                           
+        _L("Active tab only"),                                                   
+        _L("Hover only"),                                                        
+        _L("Never (static icons)"),                                              
+    };                                                                           
+    const std::vector<std::string> anim_values = {                              
+        "always", "active_only", "hover_only", "never"                          
+    };                                                                           
+
+    // Resolve current index safely, defaults to 0 if key is missing           
+    std::string cur = app_config->get("tab_icon_anim_mode");                   
+    unsigned int cur_idx = 0;                                                   
+    for (unsigned int i = 0; i < anim_values.size(); ++i) {                    
+        if (anim_values[i] == cur) { cur_idx = i; break; }                     
+    }                                                                            
+
+    // Use the base helper directly so we control the initial index             
+    auto [sizer_anim, combo_anim] = create_item_combobox_base(                 
+        _L("Animated tab icons"),                                               
+        _L("Controls when tab bar icons animate.\n"                             
+           "Always: animates on the active tab and when hovering.\n"            
+           "Active only: only the selected tab animates.\n"                     
+           "Hover only: animates while hovering over a tab.\n"                  
+           "Never: icons are always static."),                                  
+        "tab_icon_anim_mode",                                                   
+        anim_labels,                                                            
+        cur_idx);                                                               
+
+    // Save to AppConfig and apply live when selection changes                  
+    combo_anim->GetDropDown().Bind(wxEVT_COMBOBOX,                             
+        [anim_values](wxCommandEvent& e) {                                      
+            int sel = e.GetSelection();                                         
+            if (sel < 0 || sel >= (int)anim_values.size()) return;            
+            wxGetApp().app_config->set("tab_icon_anim_mode",                  
+                                       anim_values[sel]);                      
+            // Apply live, no restart needed                                   
+            if (auto* nb = dynamic_cast<Notebook*>(                            
+                    wxGetApp().mainframe->m_tabpanel))                         
+                nb->GetBtnsListCtrl()->RefreshAnimMode();                        
+            e.Skip();                                                           
+        });                                                                     
+
+    combo_anim->SetMinSize(wxSize(FromDIP(220), -1));
+    g_sizer->Add(sizer_anim);                                                  
+}                                                                               
+
+//// CUSTOMIZATION > Realistic View
+// NOTE: no new f_sizers.push_back here, we stay on the same g_sizer as Tab Icons above
+g_sizer->Add(create_item_title(_L("Realistic View")), 1, wxEXPAND);
+
+auto* custom_panel = new PrintStatusCustomizationPanel(m_parent);
+g_sizer->Add(custom_panel, 1, wxEXPAND);
+
+// Add the single sizer to the page once
+g_sizer->AddSpacer(FromDIP(10));
+sizer_page->Add(g_sizer, 0, wxEXPAND);
+    
     
     
     
@@ -2044,19 +2052,7 @@ void PreferencesDialog::create_items()
     sizer_page->Add(g_sizer, 0, wxEXPAND);
 
     
-    //////////////////////////
-    //// CUSTOMIZATION TAB
-    /////////////////////////////////////
-    m_pref_tabs->AppendItem(_L("Customization"));
-    f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));
-    g_sizer = f_sizers.back();
-    g_sizer->AddGrowableCol(0, 1);
-
-    auto* custom_panel = new PrintStatusCustomizationPanel(m_parent);
-    g_sizer->Add(custom_panel, 1, wxEXPAND);
-
-    g_sizer->AddSpacer(FromDIP(10));
-    sizer_page->Add(g_sizer, 0, wxEXPAND);
+    
     
     
     
