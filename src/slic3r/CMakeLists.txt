@@ -262,6 +262,7 @@ set(SLIC3R_GUI_SOURCES
     GUI/IMToolbar.hpp
     GUI/InstanceCheck.cpp
     GUI/InstanceCheck.hpp
+    GUI/gif.h
     GUI/Jobs/ArrangeJob.cpp
     GUI/Jobs/ArrangeJob.hpp
     GUI/Jobs/BindJob.cpp
@@ -361,6 +362,10 @@ set(SLIC3R_GUI_SOURCES
     GUI/OpenGLManager.hpp
     GUI/OptionsGroup.cpp
     GUI/OptionsGroup.hpp
+    GUI/PathPreviewCameraMotion.cpp
+    GUI/PathPreviewCameraMotion.hpp
+    GUI/PathPreviewExport.cpp
+    GUI/PathPreviewExport.hpp
     GUI/PathPreviewPlayer.cpp
     GUI/PathPreviewPlayer.hpp
     GUI/ParamsDialog.cpp

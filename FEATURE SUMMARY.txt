@@ -1,0 +1,255 @@
+================================================================================
+FEATURE: Animated Path Preview Player + Export
+Branch:  SlicePathPreviewTimelineFeature
+Files:   src/slic3r/GUI/PathPreviewPlayer.hpp/.cpp
+         src/slic3r/GUI/PathPreviewExport.hpp/.cpp
+         src/slic3r/GUI/gif.h  (MIT-licensed, Charlie Tangora)
+================================================================================
+
+OVERVIEW
+--------
+A floating path preview player panel that animates the G-code toolpath
+visualization layer by layer, with the ability to export the animation as
+an animated GIF, PNG sequence, MP4 (via FFmpeg), or screen recording.
+
+The feature is accessed via a small themed icon button in the bottom-right
+corner of the preview pane. Right-clicking the button opens a context menu
+for configuring the button's anchor position and icon theme.
+
+
+--------------------------------------------------------------------------------
+WHAT WAS BUILT
+--------------------------------------------------------------------------------
+
+PLAYER (PathPreviewPlayer)
+--------------------------
+- Floating ImGui panel anchored to the preview canvas, toggled by a themed
+  icon button (the main entry point for the feature).
+- Button supports three icon themes: Hexagonal (purple), Circular (teal),
+  Diamond (amber), each with distinct animated border effects when playing.
+- Right-click context menu on the button:
+    - Anchor position: Bottom-right (default), Bottom-left, Top-right, Top-left.
+    - Icon theme selection with live hover preview of all three themes.
+    - Theme previews render inline in the menu as mini 3-button strips.
+- Theme and anchor position persisted in AppConfig under [path_preview_player].
+- Panel layout (single row below progress bar):
+    - Left: XY path / Layers mode radio buttons + speed dropdown.
+    - Center: transport buttons (|< << play/pause >> >|).
+    - Right: export button.
+- Progress scrubber: full-width slider showing global animation progress.
+- Two animation modes:
+    - XY Path: animates toolpath moves within each layer before advancing.
+    - Layers: advances one complete layer per tick (Z-axis animation only).
+- Speed presets: 0.125x, 0.25x, 0.5x, 1x, 2x, 4x, 8x, 16x, 32x.
+- Custom speed: selectable via "Custom..." in the dropdown; opens a popup
+  with a float input. Shows as "1.75x*" in the label when active.
+- Transport controls: jump to first/last layer, step moves back/forward,
+  play/pause.
+- Layer counter displayed in the panel.
+- wxTimer drives the animation at ~16ms ticks; player advances state
+  independently of wall-clock rendering.
+- GLCanvas3D integration:
+    - init() called from load_gcode_preview() after slice completes.
+    - render_button() and render_panel() called from _render_imgui_layers()
+      in the CanvasPreview block.
+    - wxTimer bound in constructor; ticks player and export each frame.
+    - reset() called from reset_volumes().
+    - load_config()/save_config() called at init and destructor respectively.
+
+
+EXPORT (PathPreviewExport)
+--------------------------
+- Export dialog accessed via the export icon button in the player panel
+  (flush right on the transport row).
+- Four export modes, each on its own tab:
+    - PNG sequence: numbered frame_%04d.png files, FFmpeg command shown.
+    - Animated GIF: single .gif file using gif.h (MIT, header-only).
+    - MP4 (FFmpeg): PNG frames + automatic FFmpeg invocation if on PATH.
+    - Screen record: countdown + hide-panel option + suggested tool list.
+- Unified resolution presets across all modes (no longer square-only for GIF):
+    Match viewport, 480p (854x480), 720p (1280x720), 1080p (1920x1080),
+    1440p (2560x1440), Square 512, Square 720, Square 1080, Custom.
+- Custom resolution: text input boxes for width and height (forced even).
+- FPS options: 10, 15, 24, 30, 60 fps.
+- GIF-specific: dithering (Floyd-Steinberg / Bayer / None), loop count.
+- Camera orbit: optional horizontal or vertical rotation during export,
+  configurable speed in degrees/second.
+- Text watermark: text, size, corner, opacity, drop shadow, live preview.
+- Info overlay (metadata): per-frame text overlay with checkboxes for
+  printer name, model name, date/time, print time, nozzle size,
+  filament type. Configurable corner, font size, and opacity.
+- Non-realtime export: frames are rendered at CPU/GPU speed, not wall-clock
+  speed. k_frames_per_tick = 4 frames per 16ms tick (~120fps throughput).
+  GIF delay is set from the fps setting, not from render time.
+- Advance animation logic: player state is driven by accumulated animation
+  time (m_export_anim_time), not by the player's is_playing() gate, so
+  export runs without needing to press play.
+- Live preview thumbnail: downsampled FBO output shown in a right-hand
+  column of the dialog during rendering. Updates each tick.
+- Floating progress badge: shown in canvas corner during export even if
+  the dialog is closed.
+- Pixel compositing: watermark and metadata blitted into the pixel buffer
+  using ImGui font atlas glyph sampling before writing each frame.
+- PNG writing: via wxImage::SaveFile (wxBITMAP_TYPE_PNG). No stb dependency.
+- Output folder: wxDirDialog on first export; directory re-used for session.
+- On completion: output folder opened in OS file manager automatically.
+
+
+--------------------------------------------------------------------------------
+KNOWN BUGS
+--------------------------------------------------------------------------------
+
+1. EXPORT REQUIRES VIEWPORT CONTROL (most significant)
+   The current export path calls m_canvas->set_as_dirty() and
+   m_canvas->render() to capture frames, which takes over the main viewport.
+   The FBO approach was designed and partially implemented to fix this, but
+   as of the last tested state the GIF export still reads from the live
+   viewport rather than a fully independent framebuffer.
+   -> User cannot use OrcaSlicer normally during export.
+   -> Intended fix: full FBO render using GCodeViewer::render(w, h, 0)
+      with a local Camera copy, as documented in render_and_write_frame().
+      Needs verification that the FBO path compiles and produces correct output.
+
+2. GIF ORIENTATION
+   The GIF output has been observed upside-down in some states depending on
+   whether GIF_FLIP_VERT is defined and whether the manual row flip is active.
+   The intended state is: GIF_FLIP_VERT NOT defined, manual flip applied once
+   after glReadPixels. Needs re-verification after any render path change.
+
+3. CUSTOM SPEED POPUP
+   The custom speed popup was previously broken because ImGui::OpenPopup()
+   called inside BeginCombo/EndCombo is silently swallowed. Fixed by using
+   a deferred bool flag (open_custom_popup) set during the combo and acted
+   on after EndCombo. Needs testing to confirm fix is stable.
+
+4. LAYERS MODE SPEED
+   In Layers mode, the animation speed was observed to wait for XY path
+   moves to complete before advancing to the next layer. The intended
+   behaviour is to animate the layer slider (Z axis) at the configured speed
+   directly. apply_to_viewer() sets moves_slider to max for the current layer
+   in Layers mode; verify this is working correctly end-to-end.
+
+5. PANEL LAYOUT CLIPPING
+   Depending on canvas width, the panel bottom bar and left/right edges can
+   be clipped. Panel width is computed as max(canvas_w * 0.60, 580px) clamped
+   to 90% of canvas width. On very narrow canvases content may still overflow.
+
+6. UI WINDOWS IN GIF EXPORT
+   The export dialog and path preview panel were observed appearing in GIF
+   frames. This was addressed with m_suppress_for_capture flag and
+   set_panel_visible(false) during capture, but may resurface if the render
+   path changes. Verify with the FBO approach (issue may be moot once
+   the viewport is not used for capture).
+
+7. EXPORT DIALOG BUTTON CLIPPING
+   The "Export GIF" button in the dialog footer was observed cut off on the
+   right edge. Footer now uses window-width-relative X positioning. Needs
+   re-verification on different window sizes.
+
+8. METADATA BLIT ACCURACY
+   The blit_metadata() function reads print time from
+   GCodeViewer::get_print_statistics().modes[0].time — verify this field
+   exists and is populated before use to avoid a crash or zero value.
+
+9. CAMERA COPY ASSIGNMENT
+   The FBO render path does Camera saved_cam = live_cam (copy assignment).
+   If Camera does not have a generated copy assignment operator this will
+   fail to compile. May need to replace with individual setter calls
+   matching the pattern in render_thumbnail_framebuffer() at line ~7378.
+
+10. SCREEN RECORD MODE
+    Screen record countdown and hide-panel logic has not been tested.
+    The panel-restore path (set_panel_visible(true) after playback ends)
+    depends on the player's is_playing() returning false, which may not
+    happen cleanly if the user stops playback manually.
+
+
+--------------------------------------------------------------------------------
+KNOWN LIMITATIONS
+--------------------------------------------------------------------------------
+
+- Export is a prototype. The UX is functional but not polished enough for
+  upstream PR submission yet.
+
+- Only animated GIF has been substantively tested. PNG sequence, MP4, and
+  screen record are implemented but untested in the field.
+
+- MP4 export depends on FFmpeg being on the system PATH. If not found,
+  frames are saved as PNG and the FFmpeg command is copied to clipboard.
+  No bundled encoder.
+
+- GIF uses a 256-color palette per frame (gif.h limitation). Complex
+  multi-color toolpath visualizations will show visible dithering artifacts,
+  especially at smaller resolutions.
+
+- The blit_text() pixel compositing uses ImGui's font atlas for glyph data.
+  It works but is approximate: glyph coverage is sampled from the atlas
+  texture at runtime, so rendered text quality in exported frames depends
+  on ImGui's current font scale and atlas resolution. Very small or very
+  large watermark sizes may look poor.
+
+- Metadata "print time" field depends on GCodeViewer statistics being
+  populated, which only happens after a full slice. If the viewer has not
+  been fully initialized the field will show zero or be omitted.
+
+- Camera orbit during FBO export applies rotation to the live plater camera
+  before each frame. This means the user's camera angle is modified by the
+  export orbit and is not restored to its pre-export position after export.
+
+- No config persistence for export settings (resolution, fps, watermark
+  text, etc.) between sessions. Settings reset to defaults on relaunch.
+
+- The export dialog does not validate that the selected output directory
+  has sufficient disk space before starting.
+
+- k_frames_per_tick = 4 is hardcoded. On slower machines this may cause
+  UI stutter during export. On very fast machines it could be increased
+  for higher throughput.
+
+
+--------------------------------------------------------------------------------
+INTEGRATION NOTES (for future PR preparation)
+--------------------------------------------------------------------------------
+
+GLCanvas3D changes required (not in a separate patch file):
+  load_gcode_preview():
+    m_path_player.init(&m_gcode_viewer, n_layers);
+    m_path_player.load_config(wxGetApp().app_config);
+    m_path_player.set_export_canvas(this);   // wires canvas into export
+
+  _render_imgui_layers() (CanvasPreview block, after _render_gcode):
+    m_path_player.render_button(canvas_w, canvas_h);
+    m_path_player.render_panel(canvas_w, canvas_h);
+    if (m_path_player.is_playing() && !m_preview_anim_timer.IsRunning())
+        m_preview_anim_timer.Start(16);
+    else if (!m_path_player.is_playing() && m_preview_anim_timer.IsRunning())
+        m_preview_anim_timer.Stop();
+
+  Constructor (timer binding):
+    m_preview_anim_timer.Bind(wxEVT_TIMER, [this](wxTimerEvent&) {
+        if (m_path_player.is_playing() || m_path_player.export_busy()) {
+            m_path_player.tick(1.f / 62.5f);
+            set_as_dirty();
+        } else {
+            m_preview_anim_timer.Stop();
+        }
+    });
+
+  ~GLCanvas3D():
+    m_path_player.save_config(wxGetApp().app_config);
+
+  reset_volumes():
+    m_path_player.reset();
+    m_preview_anim_timer.Stop();
+
+  Private members (GLCanvas3D.hpp):
+    PathPreviewPlayer m_path_player;
+    wxTimer           m_preview_anim_timer;
+
+CMakeLists (src/slic3r/GUI/CMakeLists.txt):
+  Add PathPreviewPlayer.cpp and PathPreviewExport.cpp near GCodeViewer.cpp.
+  gif.h is header-only — no CMakeLists entry needed.
+
+================================================================================
+END OF SUMMARY
+================================================================================

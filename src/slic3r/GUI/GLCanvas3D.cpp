@@ -1216,6 +1216,8 @@ GLCanvas3D::~GLCanvas3D()
 {
     reset_volumes();
 
+    m_path_player.save_config(wxGetApp().app_config);
+    m_preview_anim_timer.Stop();
     m_sel_plate_toolbar.del_all_item();
     m_sel_plate_toolbar.del_stats_item();
 }
@@ -3090,8 +3092,12 @@ void GLCanvas3D::load_gcode_preview(const GCodeProcessorResult& gcode_result, co
     {
         const int n_layers = static_cast<int>(
             m_gcode_viewer.get_layers_slider()->GetMaxValue());
-        if (n_layers > 0)
+        if (n_layers > 0) 
+        {
             m_path_player.init(&m_gcode_viewer, n_layers);
+            m_path_player.load_config(wxGetApp().app_config);
+            m_path_player.set_export_canvas(this);  // wires GLCanvas3D into export
+        }
     }
     m_gcode_viewer.get_moves_slider()->SetHigherValue(m_gcode_viewer.get_moves_slider()->GetMaxValue());
 
