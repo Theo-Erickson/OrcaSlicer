@@ -2,6 +2,7 @@
 
 #include "PrintStatusIcon.hpp"
 #include "PrintStatusIconGIF.hpp"
+#include "PrintStatusThemeManager.hpp"
 
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
@@ -127,7 +128,7 @@ void PrintStatusIcon::Apply(PrintState state, int progress_pct)
 // ---------------------------------------------------------------------------
 // GIF loading
 // ---------------------------------------------------------------------------
-wxString PrintStatusIcon::GifName(PrintState s)
+wxString PrintStatusIcon::gif_name(PrintState s)
 {
     switch (s) {
     case PrintState::IDLE:            return "status_idle.gif";
@@ -142,14 +143,44 @@ wxString PrintStatusIcon::GifName(PrintState s)
     case PrintState::FINISH:          return "status_finish.gif";
     case PrintState::FAILED:          return "status_failed.gif";
     case PrintState::OFFLINE:         return "status_offline.gif";
+    case PrintState::HEATING:         return "status_heating.gif";
+    case PrintState::LEVELING:        return "status_leveling.gif";
+    case PrintState::ERROR_PAUSE:     return "status_error_pause.gif";
     default:                          return "status_idle.gif";
     }
 }
 
 wxAnimation PrintStatusIcon::LoadAnim(PrintState s)
 {
-    // 1. Filesystem (resources/icons/print_status/) — hot-swappable.
-    wxFileName p(wxStandardPaths::Get().GetResourcesDir(), GifName(s));
+    // 1. Active theme override (user-selected GIF or PNG on disk).
+    wxString theme_path = PrintStatusThemeManager::Get().Resolve(s);
+    if (!theme_path.empty()) {
+        wxAnimation a;
+        // wxAnimationCtrl supports both GIF and APNG natively.
+        // For static PNG we load it as a single-frame animation via wxImage.
+        wxFileName fn(theme_path);
+        wxString ext = fn.GetExt().Lower();
+        if (ext == "gif") {
+            if (a.LoadFile(theme_path, wxANIMATION_TYPE_GIF))
+                return a;
+        } else if (ext == "png") {
+            // Load as image, wrap in a single-frame wxAnimation.
+            wxImage img;
+            if (img.LoadFile(theme_path, wxBITMAP_TYPE_PNG) && img.IsOk()) {
+                // wxAnimation doesn't have a direct "add frame" API in all
+                // wx versions, so we fall through to the filesystem check
+                // below which will find it if placed in resources/.
+                // For now, display via wxStaticBitmap instead: the
+                // customization panel handles static PNGs in its preview.
+                // TODO: wrap wxImage in a 1-frame GIF via wxMemoryOutputStream
+                //       if full static PNG support in the header icon is needed.
+            }
+        }
+    }
+ 
+    // 2. Filesystem fallback — resources/icons/print_status/<name>
+    //    (original behaviour, kept for backwards compatibility).
+    wxFileName p(wxStandardPaths::Get().GetResourcesDir(), gif_name(s));
     p.AppendDir("icons");
     p.AppendDir("print_status");
     if (p.FileExists()) {
@@ -157,7 +188,8 @@ wxAnimation PrintStatusIcon::LoadAnim(PrintState s)
         if (a.LoadFile(p.GetFullPath(), wxANIMATION_TYPE_GIF))
             return a;
     }
-    // 2. Embedded bytes.
+ 
+    // 3. Embedded bytes (PrintStatusIconGIF.hpp) — always available.
     size_t len = 0;
     const uint8_t* data = PrintStatusIconGIF::GetData(s, len);
     if (data && len) {
@@ -167,6 +199,11 @@ wxAnimation PrintStatusIcon::LoadAnim(PrintState s)
             return a;
     }
     return wxNullAnimation;
+}
+
+void PrintStatusIcon::ForceRefresh()
+{
+    CallAfter([this]() { Apply(m_state, m_progress); });
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +224,9 @@ wxString PrintStatusIcon::Label(PrintState s)
     case PrintState::FINISH:          return "DONE!";
     case PrintState::FAILED:          return "FAILED";
     case PrintState::OFFLINE:         return "OFFLINE";
+    case PrintState::HEATING:         return "HEATING";
+    case PrintState::LEVELING:        return "LEVELING";
+    case PrintState::ERROR_PAUSE:     return "ERROR PAUSE";
     default:                          return "UNKNOWN";
     }
 }
@@ -203,6 +243,9 @@ wxColour PrintStatusIcon::LabelColour(PrintState s)
     case PrintState::SLICED:           return wxColour(130, 200,  70);
     case PrintState::SENDING:          return wxColour( 80, 160, 240);
     case PrintState::FILAMENT_CHANGE:  return wxColour(175, 160, 240);
+    case PrintState::HEATING:          return wxColour(240, 120,  40); 
+    case PrintState::LEVELING:         return wxColour( 80, 200, 160);
+    case PrintState::ERROR_PAUSE:      return wxColour(240,  90,  90); 
     default:                           return wxColour(180, 180, 180);
     }
 }

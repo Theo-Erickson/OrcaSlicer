@@ -23,18 +23,21 @@ namespace Slic3r {
 namespace GUI {
 
 enum class PrintState {
-    IDLE,
-    SLICING,
-    SLICED,
-    SENDING,
-    PREPARE,
-    RUNNING,
-    PAUSE,
-    FILAMENT_CHANGE,
-    CALIBRATING,
-    FINISH,
-    FAILED,
-    OFFLINE,
+    IDLE,          // Printer is IDLE (Intended Default)
+    SLICING,       // model is currently being sliced
+    SLICED,        // model has been sliced into GCode
+    SENDING,       // Slicer is sending the file to the printer
+    PREPARE,       // Printer is setting up conditions for print
+    RUNNING,       // print is in progress
+    PAUSE,         // User caused a pause on the print
+    FILAMENT_CHANGE, // Printer is swapping fillament or tool
+    CALIBRATING,   // Printer is in calibration mode
+    FINISH,        // print has finished
+    FAILED,        // print has be cancelled or failed
+    OFFLINE,       // connected printer not found (Note, a printer may default to this if it was power cycled and is on, but check it in Device tab and it will update)
+    HEATING,       // heatbed/nozzle/chamber warming up
+    LEVELING,      // bed leveling (ABL, mesh probing)
+    ERROR_PAUSE,   // hardware error pause (not user-initiated, likely a warning or error state)
 };
 
 class PrintStatusIcon : public wxPanel
@@ -56,12 +59,15 @@ public:
     // Called when user clicks the icon.
     void BindClickHandler(std::function<void()> handler);
 
+    // Force a refresh of the Icon
+    void ForceRefresh();
+    
 private:
     void Build();
     void Apply(PrintState state, int progress_pct);
 
     static wxAnimation LoadAnim(PrintState state);
-    static wxString    GifName (PrintState state);
+    static wxString    gif_name (PrintState state);
     static wxString    Label   (PrintState state);
     static wxColour    LabelColour(PrintState state);
 

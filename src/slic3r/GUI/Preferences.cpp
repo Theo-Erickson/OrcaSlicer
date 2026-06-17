@@ -20,6 +20,7 @@
 #include "DownloadProgressDialog.hpp"
 #include "Notebook.hpp"
 #include "UnitConversion.hpp"
+#include "PrintStatusCustomizationPanel.hpp"
 
 #ifdef __WINDOWS__
 #ifdef _MSW_DARK_MODE
@@ -1250,10 +1251,19 @@ wxBoxSizer* PreferencesDialog::create_item_link_association( wxString url_prefix
 #endif // WIN32
 
 PreferencesDialog::PreferencesDialog(wxWindow *parent, wxWindowID id, const wxString &title, const wxPoint &pos, const wxSize &size, long style)
-    : DPIDialog(parent, id, _L("Preferences"), pos, size, style)
+    : DPIDialog(parent, id, _L("Preferences"), pos, size, style | wxRESIZE_BORDER)
 {
     SetBackgroundColour(*wxWHITE);
-    SetMinSize(DESIGN_WINDOW_SIZE);
+    
+    wxSize min_sz = DESIGN_WINDOW_SIZE;
+    // Ensure the dialog is tall enough to show all 15 Customization rows
+    // without scrolling. 15 rows × 35px + header/footer ≈ 700px.
+    // Cap at 90% of screen height for smaller displays.
+    int target_h = 700;
+    int screen_h = wxSystemSettings::GetMetric(wxSYS_SCREEN_Y);
+    min_sz.SetHeight(std::min(target_h, static_cast<int>(screen_h * 0.90)));
+    SetMinSize(min_sz); 
+    
     create();
     wxGetApp().UpdateDlgDarkUI(this);
 }
@@ -2033,6 +2043,23 @@ void PreferencesDialog::create_items()
     g_sizer->AddSpacer(FromDIP(10));
     sizer_page->Add(g_sizer, 0, wxEXPAND);
 
+    
+    //////////////////////////
+    //// CUSTOMIZATION TAB
+    /////////////////////////////////////
+    m_pref_tabs->AppendItem(_L("Customization"));
+    f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));
+    g_sizer = f_sizers.back();
+    g_sizer->AddGrowableCol(0, 1);
+
+    auto* custom_panel = new PrintStatusCustomizationPanel(m_parent);
+    g_sizer->Add(custom_panel, 1, wxEXPAND);
+
+    g_sizer->AddSpacer(FromDIP(10));
+    sizer_page->Add(g_sizer, 0, wxEXPAND);
+    
+    
+    
     /////////////////////////////////////
     //////////////////////////
 

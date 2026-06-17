@@ -108,10 +108,8 @@ inline PrintState stage_to_print_state(int stage, const std::string& print_statu
         return PrintState::RUNNING;
 
     // ── Preparation / calibration before first layer ───────────────
-    case 1:   // Auto bed leveling
     case 3:   // Vibration compensation
     case 8:   // Calibrating dynamic flow
-    case 9:   // Scanning bed surface
     case 10:  // Inspecting first layer
     case 11:  // Identifying build plate type
     case 12:  // Calibrating Micro Lidar
@@ -130,8 +128,6 @@ inline PrintState stage_to_print_state(int stage, const std::string& print_statu
     case 44:  // Auto Check: Platform
     case 45:  // Confirming BirdsEye Camera location
     case 46:  // Calibrating BirdsEye Camera
-    case 47:  // Auto bed leveling phase 1
-    case 48:  // Auto bed leveling phase 2
     case 51:  // Printing calibration lines
     case 52:  // Auto Check: Material
     case 53:  // Live View Camera Calibration
@@ -152,8 +148,34 @@ inline PrintState stage_to_print_state(int stage, const std::string& print_statu
 
     // ── User-triggered or automatic pauses ────────────────────────
     case 5:   // M400 pause
-    case 6:   // Paused (filament ran out)
     case 16:  // Paused by the user
+        return PrintState::PAUSE;
+
+    // ── Cooling / heating chambers ─────────────────────────────────
+    case 29:  // Cooling chamber
+    case 40:  // High temperature auto bed leveling
+    case 43:  // Laser Calibration
+    case 50:  // Cooling heatbed
+        return PrintState::PREPARE;
+        
+    // ── HEATING (heatbed/nozzle/chamber warming up) ──────────────────
+    case 2:   // Heatbed preheating
+    case 7:   // Heating nozzle
+    case 15:  // Checking extruder temperature
+    case 49:  // Heating chamber
+    case 54:  // Waiting for heatbed to reach target temperature
+    case 58:  // Thermal Preconditioning
+        return PrintState::HEATING;
+
+    // ── LEVELING (bed leveling specifically) ─────────────────────────
+    case 1:   // Auto bed leveling
+    case 9:   // Scanning bed surface
+    case 47:  // Auto bed leveling phase 1
+    case 48:  // Auto bed leveling phase 2
+        return PrintState::LEVELING;
+
+    // ── ERROR_PAUSE (hardware error, not user pause) ──────────────────
+    case 6:   // Paused (filament ran out)
     case 17:  // Pause (front cover fall off)
     case 20:  // Pause (nozzle temperature malfunction)
     case 21:  // Pause (heatbed temperature malfunction)
@@ -161,26 +183,12 @@ inline PrintState stage_to_print_state(int stage, const std::string& print_statu
     case 26:  // Pause (AMS offline)
     case 27:  // Pause (low speed of heatbreak fan)
     case 28:  // Pause (chamber temperature control problem)
-    case 30:  // Pause (G-code inserted by user)
     case 32:  // Pause (nozzle clumping)
     case 33:  // Pause (cutter error)
     case 34:  // Pause (first layer error)
     case 35:  // Pause (nozzle clog)
-        return PrintState::PAUSE;
-
-    // ── Cooling / heating chambers ─────────────────────────────────
-    case 2:   // Heatbed preheating
-    case 7:   // Heating nozzle
-    case 15:  // Checking extruder temperature
-    case 29:  // Cooling chamber
-    case 40:  // High temperature auto bed leveling
-    case 43:  // Laser Calibration
-    case 49:  // Heating chamber
-    case 58:  // Thermal Preconditioning
-    case 50:  // Cooling heatbed
-    case 54:  // Waiting for heatbed to reach target temperature
-        return PrintState::PREPARE;
-
+        return PrintState::ERROR_PAUSE;
+        
     default:
         break;
     }
