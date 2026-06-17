@@ -1207,6 +1207,18 @@ GLCanvas3D::GLCanvas3D(wxGLCanvas* canvas, Bed3D &bed)
     m_timer_set_color.Bind(wxEVT_TIMER, &GLCanvas3D::on_set_color_timer, this);
     load_arrange_settings();
 
+    m_preview_anim_timer.Bind(wxEVT_TIMER, [this](wxTimerEvent&) {
+        if (m_path_player.is_playing()) {
+            // 16 ms interval → ~62.5 fps; pass exact dt of 1/62.5.
+            m_path_player.tick(1.f / 62.5f);
+            set_as_dirty();
+            request_extra_frame();
+        } else {
+            // Player stopped itself (reached end of print).
+            m_preview_anim_timer.Stop();
+        }
+    });
+    
     m_selection.set_volumes(&m_volumes.volumes);
 
     const wxString alt   = GUI::shortkey_alt_prefix();
@@ -1239,6 +1251,8 @@ GLCanvas3D::~GLCanvas3D()
 
     reset_volumes();
 
+    m_path_player.save_config(wxGetApp().app_config);
+    m_preview_anim_timer.Stop();
     m_sel_plate_toolbar.del_all_item();
     m_sel_plate_toolbar.del_stats_item();
 }
@@ -1384,6 +1398,8 @@ void GLCanvas3D::reset_volumes()
     m_selection.clear();
     m_volumes.clear();
     m_dirty = true;
+    m_path_player.reset();
+    m_preview_anim_timer.Stop();
 
     _set_warning_notification(EWarning::ObjectOutside, false);
 }
@@ -2074,6 +2090,21 @@ void GLCanvas3D::render(bool only_init)
         _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), only_current, true, hover_id);
         // BBS: GUI refactor: add canvas size as parameters
         _render_gcode(cnv_size.get_width(), cnv_size.get_height());
+        
+        /// Path preview Block
+        // Path preview player: corner trigger button and floating panel.
+        {
+            const float w = static_cast<float>(cnv_size.get_width());
+            const float h = static_cast<float>(cnv_size.get_height());
+            m_path_player.render_button(w, h);
+            m_path_player.render_panel(w, h);
+        }
+        // Start or stop the animation timer based on player state.
+        if (m_path_player.is_playing() && !m_preview_anim_timer.IsRunning())
+            m_preview_anim_timer.Start(16);
+        else if (!m_path_player.is_playing() && m_preview_anim_timer.IsRunning())
+            m_preview_anim_timer.Stop();
+        ///
     }
     /* assemble render*/
     else if (m_canvas_type == ECanvasType::CanvasAssembleView) {
@@ -3104,7 +3135,17 @@ void GLCanvas3D::load_gcode_preview(const GCodeProcessorResult& gcode_result, co
     m_gcode_viewer.load_as_gcode(gcode_result, *this->fff_print(), str_tool_colors, str_color_print_colors, wxGetApp().plater()->build_volume(), exclude_bounding_box,
         wxGetApp().get_mode(), only_gcode);
     m_gcode_layers_times_cache = m_gcode_viewer.get_layers_times();
-
+    // Initialise the path-preview player with the freshly loaded layer count.
+    {
+        const int n_layers = static_cast<int>(
+            m_gcode_viewer.get_layers_slider()->GetMaxValue());
+        if (n_layers > 0) 
+        {
+            m_path_player.init(&m_gcode_viewer, n_layers);
+            m_path_player.load_config(wxGetApp().app_config);
+            m_path_player.set_export_canvas(this);  // wires GLCanvas3D into export
+        }
+    }
     m_gcode_viewer.get_moves_slider()->SetHigherValue(m_gcode_viewer.get_moves_slider()->GetMaxValue());
 
     if (wxGetApp().is_editor()) {
