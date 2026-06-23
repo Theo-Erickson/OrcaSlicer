@@ -1395,9 +1395,10 @@ void MenuFactory::create_extra_object_menu()
     (&m_object_menu)->AppendSeparator();
     
     append_menu_item(&m_object_menu, wxID_ANY,
-        _L("Stack Objects (Constants)") + dots,
-        _L("Stack copies of this object vertically with breakaway separators"),
-        [](wxCommandEvent&) {
+        _L("Stack Objects (2 copies, TEST.)") + dots,
+            _L("Stack 2 copies vertically with breakaway separators. "
+               "Interface layers: 1, gap layers: 2, separator ratio: 1.1x (base: 1.5x). "
+               "Separator type: Object Silhouette. Supports: off."),        [](wxCommandEvent&) {
             // Get source object for smart defaults
             const ModelObject* src_obj = nullptr;
             int obj_idx = plater()->get_selected_object_idx();
@@ -1427,8 +1428,10 @@ void MenuFactory::create_extra_object_menu()
         }, m_parent);
     
     append_menu_item(&m_object_menu, wxID_ANY,
-        _L("Stack Objects (defaults)") + dots,
-        _L("Stack copies of this object vertically with breakaway separators"),
+    _L("Stack Objects (2 copies, defaults)") + dots,
+    _L("Stack 2 copies vertically with breakaway separators using default settings. "
+       "Separator layers: 6, gap layers: 8, separator ratio: 1.0x (base: 1.25x). "
+       "Separator type: Perimeter Ring. Supports: off."),
         [](wxCommandEvent&) {
             // Get source object for smart defaults
             const ModelObject* src_obj = nullptr;
