@@ -797,6 +797,12 @@ void SendToPrinterDialog::on_cancel(wxCloseEvent &event)
 {
     m_worker->cancel_all();
 
+    // Wait for the worker thread to fully stop before wx destroys
+    // child windows, preventing in-flight status updates from
+    // hitting dead wx objects (BBLStatusBarPrint dangling pointer)
+    m_worker->wait_for_idle();
+
+    
     if (m_task_timer && m_task_timer->IsRunning()) {
         m_task_timer->Stop();
         m_task_timer.reset();
@@ -2000,6 +2006,13 @@ void SendToPrinterDialog::Reset() {
 
 SendToPrinterDialog::~SendToPrinterDialog()
 {
+    // Stop the worker before wx destroys child windows.
+    // Without this, in-flight status callbacks hit dead BBLStatusBarSend wx objects.
+    if (m_worker) {
+        m_worker->cancel_all();
+        m_worker->wait_for_idle();
+    }
+    
     delete m_refresh_timer;
     if (m_task_timer && m_task_timer->IsRunning())
         m_task_timer->Stop();
