@@ -348,9 +348,21 @@ void BBLStatusBarPrint::set_status_text(const std::string& txt)
 
 void BBLStatusBarPrint::set_status_text(const char *txt)
 {
+    // Prevent re-entrant calls caused by Layout/Update pumping the event loop
+    static thread_local bool s_updating = false;
+    if (s_updating) return;
+
+    struct Guard {
+        bool& flag;
+        Guard(bool& f) : flag(f) { flag = true; }
+        ~Guard() { flag = false; }
+    } guard(s_updating);
+    
     this->set_status_text(wxString::FromUTF8(txt));
     get_panel()->GetParent()->Layout();
     get_panel()->GetParent()->Update();
+
+    s_updating = false;
 }
 
 void BBLStatusBarPrint::msw_rescale() {
