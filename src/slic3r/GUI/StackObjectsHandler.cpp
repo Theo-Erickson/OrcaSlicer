@@ -132,7 +132,7 @@ void stack_objects(
             BoundingBoxf3 mesh_bb = combined.bounding_box();
             const double z_scale  = thickness / (mesh_bb.max.z() - mesh_bb.min.z());
             combined.scale(Vec3f(1.0f, 1.0f, (float)z_scale));
-            combined.translate(0.0f, 0.0f, (float)(-src_local_min_z));
+            combined.translate(0.0f, 0.0f, 0.0);
             return combined;
         }
         default: //default to Disc
