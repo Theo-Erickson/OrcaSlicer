@@ -104,21 +104,23 @@ void FavoritesManager::notify(const std::string& opt_key, bool added) const
 
 void FavoritesManager::save_to_config() const
 {
-    AppConfig* cfg = wxGetApp().app_config;
-    if (!cfg) return;
-
-    std::ostringstream ss;
-    bool first = true;
-    for (const auto& fav : m_favorites) {
-        if (!first) ss << ';';
-        first = false;
-        ss << fav.opt_key << ':'
-           << static_cast<int>(fav.tab_id) << ':'
-           << fav.sort_order << ':'
-           << fav.section_label;
+    if (GUI_App* app = &(wxGetApp())) {
+        if (AppConfig* cfg = app->app_config)
+        {    
+            std::ostringstream ss;
+            bool first = true;
+            for (const auto& fav : m_favorites) {
+                if (!first) ss << ';';
+                first = false;
+                ss << fav.opt_key << ':'
+                   << static_cast<int>(fav.tab_id) << ':'
+                   << fav.sort_order << ':'
+                   << fav.section_label;
+            }
+            cfg->set(CONFIG_SECTION, CONFIG_KEY, ss.str());
+            cfg->save();
+        }
     }
-    cfg->set(CONFIG_SECTION, CONFIG_KEY, ss.str());
-    cfg->save();
 }
 
 void FavoritesManager::register_key(const FavoriteKey& key)

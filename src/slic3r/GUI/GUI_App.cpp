@@ -2154,8 +2154,6 @@ void GUI_App::init_networking_callbacks()
 
 GUI_App::~GUI_App()
 {
-    FavoritesManager::get().save_to_config();
-
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__<< boost::format(": enter");
     if (app_config != nullptr) {
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__<< boost::format(": destroy app_config");
