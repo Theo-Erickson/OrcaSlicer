@@ -728,8 +728,8 @@ install(
 )
 
 install(
-    DIRECTORY   "${CMAKE_SOURCE_DIR}/resources/themes"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+    DIRECTORY   "${CMAKE_SOURCE_DIR}/resources/images/print_status/gifs/themes"
+    DESTINATION "resources/images/print_status/gifs"
 )
 
 add_subdirectory(GUI/DeviceCore)
