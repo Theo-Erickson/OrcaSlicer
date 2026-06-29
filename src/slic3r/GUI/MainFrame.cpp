@@ -520,6 +520,15 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
 
     m_loaded = true;
 
+    Bind(EVT_OPEN_HELP_PANEL, [this](wxCommandEvent& evt) {
+        if (m_help_panel) {
+            int help_tab_idx = m_tabpanel->FindPage(m_help_panel);
+            if (help_tab_idx != wxNOT_FOUND)
+                m_tabpanel->SetSelection(help_tab_idx);
+            m_help_panel->SearchFor(evt.GetString());
+        }
+    });
+    
     // initialize layout
     m_main_sizer = new wxBoxSizer(wxVERTICAL);
     wxSizer* sizer = new wxBoxSizer(wxVERTICAL);
@@ -1172,6 +1181,8 @@ void MainFrame::shutdown()
 //             m_plater->print = undef;
 //         Slic3r::GUI::deregister_on_request_update_callback();
 
+    m_help_panel = nullptr;
+
     // set to null tabs and a plater
     // to avoid any manipulations with them from App->wxEVT_IDLE after of the mainframe closing
     wxGetApp().tabs_list.clear();
@@ -1273,6 +1284,9 @@ void MainFrame::init_tabpanel() {
         else if (panel == m_monitor) {
             //monitor
         }
+        else if (m_help_panel && panel == m_help_panel) {
+            m_help_panel->OnActivate();
+        }
 #ifndef __APPLE__
         if (sel == tp3DEditor) {
             m_topbar->EnableUndoRedoItems();
@@ -1348,6 +1362,10 @@ void MainFrame::init_tabpanel() {
     m_project->SetBackgroundColour(*wxWHITE);
     m_tabpanel->AddPage(m_project, _L("Project"), std::string("tab_auxiliary_active"), std::string("tab_auxiliary_active"), false);
 
+    m_help_panel = new PrintHelpPanel(m_tabpanel);
+    m_help_panel->SetBackgroundColour(*wxWHITE);
+    m_tabpanel->AddPage(m_help_panel, _L("Help"), std::string("tab_helpbook_active"), std::string("tab_helpbook_inactive"), false);
+    
     m_calibration = new CalibrationPanel(m_tabpanel, wxID_ANY, wxDefaultPosition, wxDefaultSize);
     m_calibration->SetBackgroundColour(*wxWHITE);
     m_tabpanel->AddPage(m_calibration, _L("Calibration"), std::string("tab_calibration_active"), std::string("tab_calibration_active"), false);
@@ -1442,6 +1460,14 @@ void MainFrame::show_device(bool bBBLPrinter) {
         m_tabpanel->InsertPage(tpMonitor, m_printer_view, _L("Device"), std::string("tab_monitor_active"),
                                std::string("tab_monitor_active"));
     }
+    
+    if (m_help_panel) {
+        std::string vendor = wxGetApp().preset_bundle->printers.get_edited_preset().vendor
+                             ? wxGetApp().preset_bundle->printers.get_edited_preset().vendor->name : "";
+        std::string model  = wxGetApp().preset_bundle->printers.get_edited_preset().name;
+        m_help_panel->OnPrinterChanged(vendor, model);
+    }
+    
     fit_tab_labels(); // ORCA on printer change
 }
 

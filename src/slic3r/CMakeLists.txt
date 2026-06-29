@@ -434,6 +434,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/SelectMachine.hpp
     GUI/PrePrintChecker.hpp
     GUI/PrePrintChecker.cpp
+    GUI/PrintHelpPanel.hpp
+    GUI/PrintHelpPanel.cpp
     GUI/SelectMachinePop.cpp
     GUI/SelectMachinePop.hpp
     GUI/SendMultiMachinePage.cpp

@@ -7,6 +7,8 @@
 #include <wx/settings.h>
 #include <wx/string.h>
 #include <wx/filehistory.h>
+
+#include "PrintHelpPanel.hpp"
 #ifdef __APPLE__
 #include <wx/taskbar.h>
 #endif // __APPLE__
@@ -226,6 +228,7 @@ public:
         tpCalibration   = 6,
         tpAuxiliary     = 7,
         toDebugTool     = 8,
+        tpHelp          = 9,
     };
 
     //BBS: add slice&&print status update logic
@@ -381,6 +384,8 @@ public:
     //AuxiliaryPanel*       m_auxiliary{ nullptr };
     MultiMachinePage*     m_multi_machine{ nullptr };
     ProjectPanel*         m_project{ nullptr };
+    
+    PrintHelpPanel*     m_help_panel { nullptr };
 
     CalibrationPanel*     m_calibration{ nullptr };
     WebViewPanel*         m_webview { nullptr };
