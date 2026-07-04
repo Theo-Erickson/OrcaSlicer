@@ -118,4 +118,54 @@ std::optional<NonplanarTopRegion> detect_nonplanar_region(
     return region;
 }
 
+std::vector<Vec3d> generate_spiral(
+    const NonplanarTopRegion&    region,
+    const NonplanarSpiralParams& params,
+    const SurfaceZFn&            surface_z)
+{
+    std::vector<Vec3d> pts;
+    if (!region.valid() || region.base_radius <= 0.0 ||
+        params.line_width <= 0.0 || params.points_per_rev < 3)
+        return pts;
+
+    // Archimedean spiral r(theta) = base_radius - b*theta, with b chosen so the radius
+    // shrinks by exactly one line width per revolution (constant radial pitch → tiles the cap).
+    const double b            = params.line_width / (2.0 * M_PI);
+    const double total_angle  = region.base_radius / b;          // == 2*pi * revolutions
+    const double d_theta      = 2.0 * M_PI / params.points_per_rev;
+    const double trans_angle  = std::max(0.0, params.transition_revs) * 2.0 * M_PI;
+
+    // Guard against a runaway point count if line_width is set absurdly small.
+    const size_t max_points = 4'000'000;
+    const size_t n_steps    = std::min<size_t>(
+        max_points, static_cast<size_t>(total_angle / d_theta) + 1);
+    pts.reserve(n_steps + 1);
+
+    for (size_t i = 0; i <= n_steps; ++i) {
+        const double theta = std::min(i * d_theta, total_angle);
+        const double r     = std::max(0.0, region.base_radius - b * theta);
+
+        const double x = region.center.x() + r * std::cos(theta);
+        const double y = region.center.y() + r * std::sin(theta);
+
+        // Progress 0 at the base, 1 at the apex — used for the fallback Z estimate.
+        const double progress = (total_angle > 0.0) ? (theta / total_angle) : 1.0;
+        std::optional<double> surf = surface_z(Vec2d(x, y));
+        double z = surf ? *surf : region.base_z + (region.apex_z - region.base_z) * progress;
+
+        // Blend from the flat base Z up to the surface Z over the first transition revolutions
+        // so the spiral leaves the last flat ring without a vertical step.
+        if (trans_angle > 0.0 && theta < trans_angle) {
+            const double t = theta / trans_angle;   // 0 at base seam → 1 after the ramp
+            z = region.base_z + (z - region.base_z) * t;
+        }
+
+        pts.emplace_back(x, y, z);
+        if (r <= 0.0)
+            break;
+    }
+
+    return pts;
+}
+
 } // namespace Slic3r

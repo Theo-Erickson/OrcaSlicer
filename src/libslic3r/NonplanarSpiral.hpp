@@ -17,6 +17,7 @@
 
 #include <vector>
 #include <optional>
+#include <functional>
 
 namespace Slic3r {
 
@@ -58,6 +59,30 @@ struct NonplanarTopRegion {
 std::optional<NonplanarTopRegion> detect_nonplanar_region(
     const std::vector<NonplanarLayerSlice>& layers,
     const NonplanarRegionOverride&          ovr = {});
+
+// Parameters controlling spiral generation.
+struct NonplanarSpiralParams {
+    double line_width      = 0.42;  // mm, radial pitch between successive revolutions
+    int    points_per_rev  = 360;   // angular resolution (points per full turn)
+    double transition_revs = 0.5;   // revolutions to blend from flat base Z to surface Z
+};
+
+// Surface Z lookup: given an XY position in plate-space mm, returns the mesh surface Z
+// there (mm), or nullopt if the ray misses the mesh. Phase 4 supplies a lambda wrapping
+// NonplanarSurface; tests supply an analytic function.
+using SurfaceZFn = std::function<std::optional<double>(const Vec2d& xy_mm)>;
+
+// Generates a single continuous area-filling Archimedean spiral over the detected cap.
+// The spiral starts at the base seam (radius = region.base_radius, Z = region.base_z) and
+// winds inward to the apex, with a constant radial pitch equal to params.line_width so the
+// revolutions tile the cap. Each point's Z is taken from surface_z(); the first
+// params.transition_revs blend from the flat base Z up to the surface to avoid a step at
+// the join with the flat ring below. Points that miss the mesh fall back to a linear
+// base->apex Z estimate. Returns plate-space mm points; empty if the region is degenerate.
+std::vector<Vec3d> generate_spiral(
+    const NonplanarTopRegion&    region,
+    const NonplanarSpiralParams& params,
+    const SurfaceZFn&            surface_z);
 
 } // namespace Slic3r
 
