@@ -35,7 +35,7 @@
 #include <string>
 #include <cfloat>
 
-#include "slic3r/GUI/NonplanarSurface.hpp"
+#include "NonplanarSurface.hpp"
 
 namespace Slic3r {
 

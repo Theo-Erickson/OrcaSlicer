@@ -140,6 +140,7 @@ EMoveType convert(Slic3r::EMoveType type)
     case Slic3r::EMoveType::Travel:       { return EMoveType::Travel; }
     case Slic3r::EMoveType::Wipe:         { return EMoveType::Wipe; }
     case Slic3r::EMoveType::Extrude:      { return EMoveType::Extrude; }
+    case Slic3r::EMoveType::NonplanarExtrusion: { return EMoveType::Extrude; }
     default:                              { return EMoveType::COUNT; }
     }
 }

@@ -1420,7 +1420,25 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "flush_into_support") {
             invalidated |= m_print->invalidate_step(psWipeTower);
             invalidated |= m_print->invalidate_step(psGCodeExport);
-        } else {
+        } else if ( opt_key == "nonplanar_slicing"
+           || opt_key == "nonplanar_mode"
+           || opt_key == "nonplanar_max_angle"
+           || opt_key == "nonplanar_nozzle_aware_clamp"
+           || opt_key == "nonplanar_perimeters_only"
+           || opt_key == "nonplanar_z_scale"
+           || opt_key == "nonplanar_smoothing_strength"
+           || opt_key == "nonplanar_top_layers_only"
+           || opt_key == "nonplanar_top_layer_count"
+           || opt_key == "nonplanar_raycast_search_height"
+           || opt_key == "nonplanar_debug")
+        {
+            // Nonplanar Z-lifting / spiral is applied at G-code export from the
+            // already-sliced layers, so these options only invalidate the export
+            // step — not a full re-slice.
+            invalidated |= m_print->invalidate_step(psGCodeExport);
+        }
+        else
+        {
             // for legacy, if we can't handle this option let's invalidate all steps
             this->invalidate_all_steps();
             invalidated = true;

@@ -581,6 +581,11 @@ static const t_config_enum_values s_keys_map_FilamentMapMode = {
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(FilamentMapMode)
 
+static t_config_enum_values s_keys_map_NonplanarMode {
+        { "normal_interpolation", int(NonplanarMode::NormalInterpolation) },
+        { "surface_raycast",      int(NonplanarMode::SurfaceRaycast) }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(NonplanarMode)
 
 //BBS
 std::string get_extruder_variant_string(ExtruderType extruder_type, NozzleVolumeType nozzle_volume_type)
@@ -3229,41 +3234,160 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionPercent(50));
     
-    // Nonplanar slicing defaults
+    // ── Nonplanar slicing mode ────────────────────────────────────────────
+    def = this->add("nonplanar_mode", coEnum);
+    def->label = L("Nonplanar mode");
+    def->category = L("Experimental");
+    def->tooltip = L("None: Uses standard slicing logic (default).\n\n"
+                     "Normal interpolation: finds the closest mesh face and derives Z offset "
+                     "from its surface normal. Fast, smooth results on organic curves.\n\n"
+                     "Surface raycast: fires a downward ray to find the exact surface Z. "
+                     "More precise on hard architectural curves like rounded box tops.");
+    def->enum_keys_map = &ConfigOptionEnum<NonplanarMode>::get_enum_values();
+    def->enum_values.push_back("none");
+    def->enum_values.push_back("normal_interpolation");
+    def->enum_values.push_back("surface_raycast");
+    def->enum_labels.push_back(L("standard slicing mode"));
+    def->enum_labels.push_back(L("Normal interpolation"));
+    def->enum_labels.push_back(L("Surface raycast"));
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionEnum<NonplanarMode>(NonplanarMode::SurfaceRaycast));
+ 
+    // ── Master switch ─────────────────────────────────────────────────────
     def = this->add("nonplanar_slicing", coBool);
     def->label = L("Enable nonplanar slicing");
     def->category = L("Experimental");
-    def->tooltip = L("TOOLTIP");
+    def->tooltip = L("When enabled, perimeter toolpaths (and optionally all extrusions) will "
+                     "have their Z coordinate adjusted to follow the actual surface of the mesh "
+                     "rather than printing at a flat layer height. This reduces the staircase "
+                     "effect on curved surfaces and improves surface finish on sloped geometry.\n\n"
+                     "Start with the default Normal interpolation mode and perimeters-only "
+                     "enabled. Switch to Surface raycast mode for hard-edged curved geometry "
+                     "such as rounded box tops.");
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionBool(true));
-    
+ 
+    // ── Maximum slope angle ────────────────────────────────────────────────
     def = this->add("nonplanar_max_angle", coFloat);
-    def->label = L("Max angle");
+    def->label = L("Maximum slope angle");
     def->category = L("Experimental");
-    def->tooltip = L("TOOLTIP");
-    def->sidetext = L("degrees");	// millimeters, CIS languages need translation
+    def->tooltip = L("Maximum surface slope angle (in degrees from horizontal) that the "
+                     "nonplanar algorithm will attempt to follow. Slopes steeper than this "
+                     "value are clamped, preventing the nozzle from chasing near-vertical "
+                     "faces that could cause collisions.\n\n"
+                     "Recommended safe values by nozzle diameter:\n"
+                     "  0.4 mm: up to 30 degrees\n"
+                     "  0.6 mm: up to 40 degrees\n"
+                     "  0.8 mm: up to 45 degrees\n\n"
+                     "Enable 'Nozzle-aware angle clamp' to have this ceiling set automatically "
+                     "based on your configured nozzle diameter.");
+    def->sidetext = u8"°";
     def->min = 5.0f;
     def->max = 60.0f;
     def->mode = comExpert;
-    def->set_default_value(new ConfigOptionFloat(45.f));
-    
+    def->set_default_value(new ConfigOptionFloat(30.f));
+ 
+    // ── Nozzle-aware auto-clamp ────────────────────────────────────────────
+    def = this->add("nonplanar_nozzle_aware_clamp", coBool);
+    def->label = L("Nozzle-aware angle clamp");
+    def->category = L("Experimental");
+    def->tooltip = L("When enabled, the Maximum slope angle is automatically clamped to a "
+                     "safe ceiling determined by the configured nozzle diameter, overriding "
+                     "any manually entered value that exceeds the safe limit. Wider nozzles "
+                     "can safely follow steeper slopes because they bridge layer steps more "
+                     "easily. Disable this if you want to set the angle manually.");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(true));
+ 
+    // ── Perimeters only ────────────────────────────────────────────────────
     def = this->add("nonplanar_perimeters_only", coBool);
-    def->label = L("Enable nonplanar slicing only on perimeters only");
+    def->label = L("Perimeters only");
     def->category = L("Experimental");
-    def->tooltip = L("TOOLTIP");
+    def->tooltip = L("When enabled, nonplanar Z lifting is applied only to perimeter "
+                     "extrusions (outer and inner walls). Infill, support, and other "
+                     "extrusion roles remain at the flat layer Z.\n\n"
+                     "This is the recommended setting for most prints. Applying nonplanar "
+                     "lifting to infill can cause over-extrusion where infill paths run "
+                     "under flat perimeter regions, and may produce collisions on dense "
+                     "infill patterns with many direction changes.");
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionBool(false));
-    
-    // Nonplanar debug logging (experimental)
+ 
+    // ── Z scale ────────────────────────────────────────────────────────────
+    def = this->add("nonplanar_z_scale", coFloat);
+    def->label = L("Z lift strength");
+    def->category = L("Experimental");
+    def->tooltip = L("Scales the computed Z offset before applying it to the toolpath. "
+                     "1.0 applies full nonplanar correction; 0.5 applies half the computed "
+                     "offset. Use lower values when first testing a new model to verify the "
+                     "nonplanar paths are sensible before committing to full correction.");
+    def->min = 0.0f;
+    def->max = 1.0f;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloat(1.0f));
+ 
+    // ── Smoothing strength ─────────────────────────────────────────────────
+    def = this->add("nonplanar_smoothing_strength", coFloat);
+    def->label = L("Z transition smoothing");
+    def->category = L("Experimental");
+    def->tooltip = L("Controls how aggressively adjacent Z values are blended along the "
+                     "toolpath to prevent sharp Z jumps. 0.0 disables smoothing entirely "
+                     "(useful for debugging the raw computed offsets). 1.0 applies the "
+                     "maximum blend, clamping each Z step to 50% of the layer height.\n\n"
+                     "Lower values can expose Z discontinuities on high-frequency surface "
+                     "detail. Higher values produce smoother motion but may round off sharp "
+                     "surface features.");
+    def->min = 0.0f;
+    def->max = 1.0f;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloat(1.0f));
+ 
+    // ── Top layers only ────────────────────────────────────────────────────
+    def = this->add("nonplanar_top_layers_only", coBool);
+    def->label = L("Top layers only");
+    def->category = L("Experimental");
+    def->tooltip = L("When enabled, nonplanar treatment is restricted to the topmost N "
+                     "layers of the object (see 'Top layer count' below). This is the most "
+                     "common real-world use case: you want smooth curved top surfaces but do "
+                     "not want nonplanar paths touching the structural lower layers.\n\n"
+                     "Disable this to apply nonplanar slicing throughout the entire object.");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(false));
+ 
+    def = this->add("nonplanar_top_layer_count", coInt);
+    def->label = L("Top layer count");
+    def->category = L("Experimental");
+    def->tooltip = L("Number of layers from the top of the object to apply nonplanar "
+                     "treatment to, when 'Top layers only' is enabled. The default of 3 "
+                     "covers the visible top surface without affecting structural layers.");
+    def->min = 1;
+    def->max = 20;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionInt(3));
+ 
+    // ── Raycast search height ──────────────────────────────────────────────
+    def = this->add("nonplanar_raycast_search_height", coFloat);
+    def->label = L("Raycast search height");
+    def->category = L("Experimental");
+    def->tooltip = L("Used only in Surface raycast mode. The downward ray starts this many "
+                     "layer heights above the nominal layer Z. Increase this value if the "
+                     "raycast misses the surface on models with thick layers or steep "
+                     "overhangs. The default of 2.0 is safe for most geometry.");
+    def->min = 0.5f;
+    def->max = 10.0f;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloat(2.0f));
+ 
+    // ── Debug output ───────────────────────────────────────────────────────
     def = this->add("nonplanar_debug", coBool);
-    def->label = L("Enable nonplanar debug output");
+    def->label = L("Debug G-code comments");
     def->category = L("Experimental");
-    def->tooltip = L("When enabled, writes human-readable debug comments "
-                     "into the G-code output describing nonplanar Z lifting "
-                     "decisions. Intended for users without C++ access who "
-                     "need to diagnose nonplanar slicing behavior.");
+    def->tooltip = L("When enabled, writes human-readable comments into the G-code output "
+                     "describing nonplanar Z decisions at each toolpath point. Produces "
+                     "larger G-code files; disable for production prints. Intended for "
+                     "diagnosing unexpected nonplanar behavior without requiring a C++ build.");
     def->mode = comExpert;
-    def->set_default_value(new ConfigOptionBool(false));
+    def->set_default_value(new ConfigOptionBool(true));
     
     def = this->add("default_jerk", coFloat);
     def->label = L("Default");

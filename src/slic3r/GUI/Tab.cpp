@@ -2446,12 +2446,41 @@ void TabPrint::build()
         optgroup->append_single_option_line("overhang_reverse_internal_only", "quality_settings_overhangs#reverse-internal-only");
         optgroup->append_single_option_line("overhang_reverse_threshold", "quality_settings_overhangs#reverse-threshold");
         
-    // ── Nonplanar slicing (experimental) ─────────────────────────────
-        optgroup = page->new_optgroup(L("Nonplanar slicing (experimental)"), L"param_advanced");
+        // ── Nonplanar slicing ─────────────────────────────────────────────────
+        optgroup = page->new_optgroup(L("Nonplanar slicing"), L"param_advanced");
+     
+        // Master switch. When toggled, toggle_options() hides/shows the rest.
         optgroup->append_single_option_line("nonplanar_slicing");
+     
+        // Mode selector. A coInt driving a dropdown via enum_values; add two entries.
+        // The option is registered as coInt so it persists cleanly in profiles. The
+        // UI renders it as a Choice using enum_values populated below.
+        {
+            auto line = optgroup->create_single_option_line("nonplanar_mode");
+            // Extend the option def with human-readable labels if they are not already set.
+            // (If you add them in PrintConfig.cpp under enum_values/enum_labels, skip this block.)
+            optgroup->append_line(line);
+        }
+     
+        // Slope control group.
         optgroup->append_single_option_line("nonplanar_max_angle");
+        optgroup->append_single_option_line("nonplanar_nozzle_aware_clamp");
+     
+        // Scope controls.
         optgroup->append_single_option_line("nonplanar_perimeters_only");
+        optgroup->append_single_option_line("nonplanar_top_layers_only");
+        optgroup->append_single_option_line("nonplanar_top_layer_count");
+     
+        // Quality controls.
+        optgroup->append_single_option_line("nonplanar_z_scale");
+        optgroup->append_single_option_line("nonplanar_smoothing_strength");
+     
+        // Raycast-only controls (hidden when mode == NormalInterpolation).
+        optgroup->append_single_option_line("nonplanar_raycast_search_height");
+     
+        // Debug.
         optgroup->append_single_option_line("nonplanar_debug");
+        
     
         page = add_options_page(L("Strength"), "custom-gcode_strength"); // ORCA: icon only visible on placeholders
         optgroup = page->new_optgroup(L("Walls"), L"param_wall");
@@ -2879,10 +2908,34 @@ void TabPrint::toggle_options()
     
     // Nonplanar slicing: only toggle if config has these options
     if (m_config->has("nonplanar_slicing")) {
-        const bool np = m_config->opt_bool("nonplanar_slicing");
-        toggle_option("nonplanar_max_angle", np);
-        toggle_option("nonplanar_perimeters_only", np);
-        toggle_option("nonplanar_debug", np);
+        const bool np_on = m_config->opt_bool("nonplanar_slicing");
+
+        toggle_option("nonplanar_mode",               np_on);
+        toggle_option("nonplanar_max_angle",           np_on);
+        toggle_option("nonplanar_nozzle_aware_clamp",  np_on);
+        toggle_option("nonplanar_perimeters_only",     np_on);
+        toggle_option("nonplanar_z_scale",             np_on);
+        toggle_option("nonplanar_smoothing_strength",  np_on);
+        toggle_option("nonplanar_top_layers_only",     np_on);
+        toggle_option("nonplanar_debug",               np_on);
+
+        const bool top_only = np_on &&
+            m_config->has("nonplanar_top_layers_only") &&
+            m_config->opt_bool("nonplanar_top_layers_only");
+        toggle_option("nonplanar_top_layer_count", top_only);
+
+        const bool raycast_mode = np_on &&
+            m_config->has("nonplanar_mode") &&
+            (m_config->opt_enum<NonplanarMode>("nonplanar_mode") == NonplanarMode::SurfaceRaycast);
+        toggle_option("nonplanar_raycast_search_height", raycast_mode);
+ 
+        // Nozzle-aware clamp controls whether the angle field is user-editable.
+        // When the clamp is active, the angle field is still shown (so users can
+        // see the effective ceiling) but the nozzle_aware_clamp checkbox being
+        // checked is the authoritative override. Graying the field out makes this
+        // clearer; use toggle_option to hide it when nozzle-aware is on, or leave
+        // it visible but note in the tooltip that it is overridden.
+        // Current behavior: show always, since seeing the clamped value is useful.
     }
 }
 

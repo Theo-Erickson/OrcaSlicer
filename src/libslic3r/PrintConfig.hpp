@@ -428,6 +428,27 @@ enum FilamentMapMode {
     fmmDefault
 };
 
+// ─── Mode selection ────────────────────────────────────────────────────────
+
+// Controls which algorithm is used to compute the nonplanar Z offset at each
+// toolpath point.
+//
+// NormalInterpolation (Tier 1): finds the closest mesh face via the AABB tree,
+//   reads its precomputed normal, and derives a Z offset from the slope angle.
+//   Fast and produces smooth results on organic curves. Works well when the
+//   surface is gentle and the nozzle only needs to approximately follow it.
+//
+// SurfaceRaycast (Tier 2): fires a downward ray from above the nominal layer
+//   plane and finds the exact intersection with the mesh surface. The nozzle
+//   is placed at the true surface Z, clamped to within one layer height of the
+//   nominal Z. Produces precise results on hard architectural curves (rounded
+//   box tops, sharp ridges) where normal interpolation overshoots or undershoots.
+//   Slightly more expensive per query but still O(log n) via the AABB tree.
+enum class NonplanarMode {
+    NormalInterpolation = 0,
+    SurfaceRaycast      = 1,
+};
+
 extern std::string get_extruder_variant_string(ExtruderType extruder_type, NozzleVolumeType nozzle_volume_type);
 
 std::string get_nozzle_volume_type_string(NozzleVolumeType nozzle_volume_type);
@@ -551,6 +572,8 @@ CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(AuthorizationType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(WipeTowerWallType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PerimeterGeneratorType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PowerLossRecoveryMode)
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(NonplanarMode)
+
 
 #undef CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS
 
@@ -1650,10 +1673,17 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionFloat,               adaptive_bed_mesh_margin))
 
     // ── Nonplanar slicing (experimental) ────────────────────────────────
+    ((ConfigOptionEnum<NonplanarMode>, nonplanar_mode))
     ((ConfigOptionBool,               nonplanar_slicing))
     ((ConfigOptionFloat,              nonplanar_max_angle))
+    ((ConfigOptionBool,               nonplanar_nozzle_aware_clamp))
     ((ConfigOptionBool,               nonplanar_perimeters_only))
     ((ConfigOptionBool,               nonplanar_debug))
+    ((ConfigOptionFloat,              nonplanar_z_scale))      
+    ((ConfigOptionFloat,              nonplanar_smoothing_strength))      
+    ((ConfigOptionBool,               nonplanar_top_layers_only))  
+    ((ConfigOptionInt,                nonplanar_top_layer_count))  
+    ((ConfigOptionFloat,              nonplanar_raycast_search_height))      
 )
 
 // This object is mapped to Perl as Slic3r::Config::Full.

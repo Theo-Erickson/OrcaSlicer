@@ -3884,7 +3884,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
             m_end_position[Z] = m_height;
 
         if (origin == G1DiscretizationOrigin::G1)
-            m_extruded_last_z = m_end_position[Z];
+            m_extruded_last_z = m_is_nonplanar ? m_np_flat_z : m_end_position[Z];
         m_options_z_corrector.update(m_height);
 
         if (m_forced_width > 0.0f)
@@ -4190,7 +4190,11 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
     }
 
     // store move
-    store_move_vertex(type);
+    // Override type for nonplanar extrusion moves so the viewer can color them distinctly.
+    EMoveType final_type = type;
+    if (type == EMoveType::Extrude && m_is_nonplanar)
+        final_type = EMoveType::NonplanarExtrusion;
+    store_move_vertex(final_type);
 }
 
 void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)

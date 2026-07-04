@@ -49,11 +49,8 @@
 
 #include "SVG.hpp"
 
-#include "../slic3r/GUI/NonplanarSurface.hpp"
-
 #include <tbb/parallel_for.h>
 #include "calib.hpp"
-#include "slic3r/GUI/NonplanarSurface.hpp"
 // Intel redesigned some TBB interface considerably when merging TBB with their oneAPI set of libraries, see GH #7332.
 // We are using quite an old TBB 2017 U7. Before we update our build servers, let's use the old API, which is deprecated in up to date TBB.
 #if ! defined(TBB_VERSION_MAJOR)
@@ -3286,17 +3283,41 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
             }
             if (np_object) {
                 NonplanarConfig np_cfg;
-                np_cfg.enabled             = true;
-                np_cfg.max_slope_angle_deg = m_config.nonplanar_max_angle.value;
-                np_cfg.layer_height        = np_object->config().layer_height.value;
-                np_cfg.perimeters_only     = m_config.nonplanar_perimeters_only.value;
-                np_cfg.nozzle_diameter     = m_config.nozzle_diameter.get_at(0);
+                np_cfg.enabled               = m_config.nonplanar_slicing.value;
+                np_cfg.mode                  = static_cast<NonplanarMode>(m_config.nonplanar_mode.value);
+                np_cfg.max_slope_angle_deg   = m_config.nonplanar_max_angle.value;
+                np_cfg.layer_height          = m_config.layer_height.value;
+                np_cfg.nozzle_diameter       = print.config().nozzle_diameter.get_at(0);
+                np_cfg.perimeters_only       = m_config.nonplanar_perimeters_only.value;
+                np_cfg.z_scale               = m_config.nonplanar_z_scale.value;
+                np_cfg.smoothing_strength    = m_config.nonplanar_smoothing_strength.value;
+                np_cfg.top_layers_only       = m_config.nonplanar_top_layers_only.value;
+                np_cfg.top_layer_count       = m_config.nonplanar_top_layer_count.value;
+                np_cfg.raycast_search_height = m_config.nonplanar_raycast_search_height.value;
+                np_cfg.debug_output          = m_config.nonplanar_debug.value;
+                
+                /*
+                 *BOOST_LOG_TRIVIAL(warning) << "NP config: mode=" << (int)np_cfg.mode 
+                    << " enabled=" << np_cfg.enabled
+                    << " raw_mode_value=" << m_config.nonplanar_mode.value;
+                    */
+                
+               // Apply nozzle-aware clamp if requested.
+               if (m_config.nonplanar_nozzle_aware_clamp.value) {
+                   double safe_angle = nonplanar_safe_angle_for_nozzle(np_cfg.nozzle_diameter);
+                   np_cfg.max_slope_angle_deg = std::min(np_cfg.max_slope_angle_deg, safe_angle);
+               }
+    
+                
                 // raw_mesh() returns the mesh in object-local coordinates.
                 // The AABB tree is built over this mesh in NonplanarSurface's constructor.
-                TriangleMesh np_mesh = np_object->model_object()->raw_mesh(); 
-
+                TriangleMesh np_mesh = np_object->model_object()->raw_mesh();
+                // Do NOT call np_mesh.transform() — mesh stays in object-local coordinates.
+                // The inverse transform is applied to query points in lift_polyline instead.
+                np_mesh.transform(np_object->instances()[0].model_instance->get_matrix());
+                
                 Vec3d mesh_center = np_mesh.bounding_box().center();
-                BOOST_LOG_TRIVIAL(warning) << "NP mesh center" 
+                BOOST_LOG_TRIVIAL(debug) << "NP mesh center "
                     << mesh_center.x() << ", " << mesh_center.y() << ", " << mesh_center.z();
                 
                 if (m_config.nonplanar_debug.value) {
@@ -3312,6 +3333,8 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                         "; NP_DEBUG mesh: center=(%.3f, %.3f, %.3f) triangles=%zu\n",
                         mesh_center.x(), mesh_center.y(), mesh_center.z(),
                         np_mesh.its.indices.size());
+                    file.write_format("; NP_VERSION: 3.1 (vertical-query raycast)\n");
+
                 }
                 
                 m_nonplanar_surface = std::make_unique<NonplanarSurface>(np_mesh, np_cfg);
@@ -3319,6 +3342,8 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
         }
         else if (m_config.nonplanar_debug.value) {
             file.write_format("; NP_DEBUG init: no printable object found, nonplanar disabled\n");
+            file.write_format("; NP_VERSION: 3 (vertical-query raycast)\n");
+
         }
         // ─────────────────────────────────────────────────────────────────────────
         
@@ -6780,12 +6805,13 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         // can work on it. The first point of each line is skipped after the
         // first segment to avoid duplicating shared endpoints.
         Polyline full_pl;
+        std::vector<Vec2d> full_pts_mm;
         for (const Line3& l : path.polyline.lines()) {
-            if (full_pl.empty())
-                full_pl.points.push_back(l.a.to_point());
-            full_pl.points.push_back(l.b.to_point());
+            if (full_pts_mm.empty())
+                full_pts_mm.push_back(this->point_to_gcode(l.a.to_point()));
+            full_pts_mm.push_back(this->point_to_gcode(l.b.to_point()));
         }
-        all_lifted = m_nonplanar_surface->lift_polyline(full_pl, m_nominal_z);
+        all_lifted = m_nonplanar_surface->lift_polyline(full_pts_mm, m_nominal_z);
     }
     
     // Temporary diagnostic log: reports the Z range of the lifted points so
@@ -6796,7 +6822,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         min_z = std::min(min_z, p.z());
         max_z = std::max(max_z, p.z());
     }
-    BOOST_LOG_TRIVIAL(warning) << "NP all_lifted: size=" << all_lifted.size()
+    BOOST_LOG_TRIVIAL(trace) << "NP all_lifted: size=" << all_lifted.size()
         << " nominal=" << m_nominal_z
         << " min_z=" << min_z
         << " max_z=" << max_z
@@ -7178,10 +7204,18 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                     all_lifted[seg_idx + 1].z() - flat_layer_z);
                             }
                             
+                            // Compensate extrusion for the true 3D travel distance:
+                            // a lifted segment is longer than its flat XY projection, so
+                            // scale E by len3d/len2d to avoid under-extrusion on the climb
+                            // (parity with the z_contoured / sloped branches).
+                            const double np_dz    = all_lifted[seg_idx + 1].z() - all_lifted[seg_idx].z();
+                            const double np_len3d = std::sqrt(line_length * line_length + np_dz * np_dz);
+                            const double np_e     = (line_length > EPSILON)
+                                                    ? dE * (np_len3d / line_length) : dE;
                             gcode += m_writer.extrude_to_xyz(
-                                Vec3d(dest2d.x(), dest2d.y(), 
+                                Vec3d(dest2d.x(), dest2d.y(),
                                       all_lifted[seg_idx + 1].z()),
-                                dE,
+                                np_e,
                                 GCodeWriter::full_gcode_comment ? tempDescription : "");
                         } else {
                             // No lift available or not applicable: fall back to flat XY extrusion.

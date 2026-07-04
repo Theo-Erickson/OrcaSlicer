@@ -216,6 +216,10 @@ set(lisbslic3r_sources
     GCode/TimelapsePosPicker.cpp
     GCode/TimelapsePosPicker.hpp
     GCode.cpp
+    NonplanarSurface.cpp
+    NonplanarSurface.hpp
+    NonplanarSpiral.cpp
+    NonplanarSpiral.hpp
     GCode/ExtrusionProcessor.hpp
     GCode/FanMover.cpp
     GCode/FanMover.hpp

@@ -40,6 +40,7 @@ class Print;
         Travel,
         Wipe,
         Extrude,
+        NonplanarExtrusion,
         Count
     };
 
