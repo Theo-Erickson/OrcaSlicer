@@ -3408,6 +3408,30 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                                 m_spiral_layer_height = np_cfg.layer_height;
                                 m_spiral_points       = std::move(spiral);
                             }
+
+                            // Solid-backing check: the spiral is a single-pass skin, so the layer
+                            // just below it must be solid. That is governed by the object's
+                            // top_shell_layers; if it does not exceed the number of spiralized
+                            // layers there is no solid layer under the skin and it may sag.
+                            if (m_spiral_active && !np_object->layers().empty() &&
+                                !np_object->layers().front()->regions().empty()) {
+                                const int top_shell = np_object->layers().front()->regions()
+                                    .front()->region().config().top_shell_layers.value;
+                                const int spiral_n = (max_top > 0) ? max_top
+                                    : (region->last_layer - region->first_layer + 1);
+                                if (top_shell <= spiral_n) {
+                                    BOOST_LOG_TRIVIAL(warning) << "Nonplanar spiral: top_shell_layers ("
+                                        << top_shell << ") <= spiralized layers (" << spiral_n
+                                        << ") - the skin has no solid backing and may sag."
+                                        " Increase 'Top shell layers'.";
+                                    if (m_config.nonplanar_debug.value)
+                                        file.write_format(
+                                            "; NP_DEBUG spiral: WARNING top_shell_layers=%d <= "
+                                            "spiralized=%d, no solid backing (raise top shell layers)\n",
+                                            top_shell, spiral_n);
+                                }
+                            }
+
                             if (m_config.nonplanar_debug.value)
                                 file.write_format(
                                     "; NP_DEBUG spiral: base_z=%.3f apex_z=%.3f base_r=%.3f "

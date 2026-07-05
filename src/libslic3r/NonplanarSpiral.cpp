@@ -134,41 +134,62 @@ std::vector<Vec3d> generate_spiral(
         params.line_width <= 0.0 || params.points_per_rev < 3)
         return pts;
 
-    // Archimedean spiral r(theta) = base_radius - b*theta, with b chosen so the radius
-    // shrinks by exactly one line width per revolution (constant radial pitch → tiles the cap).
-    const double b            = params.line_width / (2.0 * M_PI);
-    const double total_angle  = region.base_radius / b;          // == 2*pi * revolutions
-    const double d_theta      = 2.0 * M_PI / params.points_per_rev;
-    const double trans_angle  = std::max(0.0, params.transition_revs) * 2.0 * M_PI;
+    const double d_theta     = 2.0 * M_PI / params.points_per_rev;
+    const double trans_angle = std::max(0.0, params.transition_revs) * 2.0 * M_PI;
 
-    // Guard against a runaway point count if line_width is set absurdly small.
+    // The radial pitch is adapted per revolution so the SURFACE spacing between consecutive
+    // passes stays ~one line width even on slopes: on a surface tilted by angle s, a radial
+    // step dr covers dr/cos(s) along the surface, so we advance radially by line_width*cos(s).
+    // A floor keeps near-vertical walls (which can't be tiled nonplanar-ly) from stalling it.
+    const double min_pitch_per_rev = params.line_width * 0.15;
+    const double probe_dr          = std::max(0.05, params.line_width);   // mm, slope probe
+
     const size_t max_points = 4'000'000;
-    const size_t n_steps    = std::min<size_t>(
-        max_points, static_cast<size_t>(total_angle / d_theta) + 1);
-    pts.reserve(n_steps + 1);
 
-    for (size_t i = 0; i <= n_steps; ++i) {
-        const double theta = std::min(i * d_theta, total_angle);
-        const double r     = std::max(0.0, region.base_radius - b * theta);
+    const auto point_at = [&](double r, double theta) {
+        return Vec2d(region.center.x() + r * std::cos(theta),
+                     region.center.y() + r * std::sin(theta));
+    };
 
-        const double x = region.center.x() + r * std::cos(theta);
-        const double y = region.center.y() + r * std::sin(theta);
+    double r     = region.base_radius;
+    double theta = 0.0;
+    while (r > 0.0 && pts.size() < max_points) {
+        const Vec2d                 xy   = point_at(r, theta);
+        const std::optional<double> surf = surface_z(xy);
 
-        // Progress 0 at the base, 1 at the apex — used for the fallback Z estimate.
-        const double progress = (total_angle > 0.0) ? (theta / total_angle) : 1.0;
-        std::optional<double> surf = surface_z(Vec2d(x, y));
+        // Fallback Z rises linearly base->apex with radial progress when the ray misses.
+        const double progress = 1.0 - r / region.base_radius;
         double z = surf ? *surf : region.base_z + (region.apex_z - region.base_z) * progress;
 
-        // Blend from the flat base Z up to the surface Z over the first transition revolutions
-        // so the spiral leaves the last flat ring without a vertical step.
+        // Blend flat base Z -> surface Z over the first transition revolutions so the spiral
+        // leaves the last flat ring without a vertical step.
         if (trans_angle > 0.0 && theta < trans_angle) {
-            const double t = theta / trans_angle;   // 0 at base seam → 1 after the ramp
+            const double t = theta / trans_angle;   // 0 at base seam -> 1 after the ramp
             z = region.base_z + (z - region.base_z) * t;
         }
 
-        pts.emplace_back(x, y, z);
-        if (r <= 0.0)
-            break;
+        pts.emplace_back(xy.x(), xy.y(), z);
+
+        // Estimate the local surface slope by probing one line width further in.
+        double cos_slope = 1.0;
+        if (surf) {
+            const double                r2 = std::max(0.0, r - probe_dr);
+            const std::optional<double> s2 = surface_z(point_at(r2, theta));
+            const double                dr = r - r2;
+            if (s2 && dr > 1e-9) {
+                const double dz = *s2 - *surf;
+                cos_slope = dr / std::sqrt(dr * dr + dz * dz);
+            }
+        }
+        const double pitch_per_rev = std::max(min_pitch_per_rev, params.line_width * cos_slope);
+        r     -= pitch_per_rev * (d_theta / (2.0 * M_PI));
+        theta += d_theta;
+    }
+
+    // Close on the apex.
+    if (!pts.empty()) {
+        const std::optional<double> surf = surface_z(region.center);
+        pts.emplace_back(region.center.x(), region.center.y(), surf ? *surf : region.apex_z);
     }
 
     return pts;

@@ -234,6 +234,51 @@ TEST_CASE("Nonplanar spiral: points ride an analytic hemisphere", "[Nonplanar][S
     }
 }
 
+TEST_CASE("Nonplanar spiral: pitch tightens on a slope (constant surface spacing)", "[Nonplanar][Spiral]")
+{
+    // 45-degree cone: z = H*(1 - d/R) with H == R. cos(slope) = 1/sqrt(2), so the adaptive
+    // radial pitch is line_width/sqrt(2) and the spiral must make ~sqrt(2)x more revolutions
+    // than a naive constant-radial-pitch spiral would.
+    const Vec2d  center(0.0, 0.0);
+    const double R = 20.0;
+    const double H = 20.0;
+
+    auto cone = [center, R, H](const Vec2d& xy) -> std::optional<double> {
+        const double d = std::hypot(xy.x() - center.x(), xy.y() - center.y());
+        if (d > R)
+            return std::nullopt;
+        return H * (1.0 - d / R);
+    };
+
+    NonplanarSpiralParams params;
+    params.line_width      = 1.0;
+    params.points_per_rev  = 90;
+    params.transition_revs = 0.0;
+
+    NonplanarTopRegion region;
+    region.first_layer = 0;
+    region.last_layer  = 99;
+    region.center      = center;
+    region.base_radius = R;
+    region.base_z      = 0.0;
+    region.apex_z      = H;
+
+    const auto pts = generate_spiral(region, params, cone);
+
+    // Naive count = (R/line_width) revolutions * points_per_rev = 20 * 90 = 1800.
+    // Adaptive should be ~sqrt(2)x more (~2547); require clearly more than the naive count.
+    REQUIRE(pts.size() > 2160);
+
+    // Points still sit on the cone surface (past the first revolution).
+    for (size_t i = params.points_per_rev; i < pts.size(); ++i) {
+        const double d = xy_radius(pts[i], center);
+        if (d <= R) {
+            const double expected = H * (1.0 - d / R);
+            REQUIRE_THAT(pts[i].z(), Catch::Matchers::WithinAbs(expected, 1e-4));
+        }
+    }
+}
+
 TEST_CASE("Nonplanar spiral: falls back to linear Z when the ray misses", "[Nonplanar][Spiral]")
 {
     const Vec2d center(0.0, 0.0);
