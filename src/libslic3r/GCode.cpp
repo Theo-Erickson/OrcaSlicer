@@ -6520,6 +6520,12 @@ std::string GCode::emit_surface_spiral()
     const double e_per_mm   = m_writer.filament()->e_per_mm3() * mm3_per_mm;
 
     char buf[128];
+    // Tag the spiral with its own extrusion role so the preview colours and labels it
+    // distinctly ("Nonplanar spiral" in the Line Type legend) instead of inheriting
+    // whatever role preceded it.
+    sprintf(buf, ";%s%s\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Role).c_str(),
+            ExtrusionEntity::role_to_string(erNonplanarSpiral).c_str());
+    gcode += buf;
     sprintf(buf, ";%s%g\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Width).c_str(), m_spiral_line_width);
     gcode += buf;
     sprintf(buf, ";%s%g\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Height).c_str(), m_spiral_layer_height);

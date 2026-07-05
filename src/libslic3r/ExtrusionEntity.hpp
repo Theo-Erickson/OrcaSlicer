@@ -37,6 +37,8 @@ enum ExtrusionRole : uint8_t {
     erSupportTransition,
     erWipeTower,
     erCustom,
+    // Nonplanar surface spiral (Tier A) — a surface-following top skin.
+    erNonplanarSpiral,
     // Extrusion role for a collection with multiple extrusion roles.
     erMixed,
     erCount
