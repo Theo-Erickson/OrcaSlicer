@@ -56,9 +56,14 @@ struct NonplanarTopRegion {
 // the base (which excludes a constant-radius cylinder below a domed top). Returns nullopt
 // when no such cap is found (e.g. a cube), in which case the caller falls back to normal
 // slicing. Optional overrides force part or all of the region.
+//
+// max_top_layers > 0 restricts an auto-detected cap to at most that many top layers, so the
+// spiral becomes a thin skin over a normally-filled body instead of a hollow shell. It has no
+// effect when an explicit layer-range override is supplied.
 std::optional<NonplanarTopRegion> detect_nonplanar_region(
     const std::vector<NonplanarLayerSlice>& layers,
-    const NonplanarRegionOverride&          ovr = {});
+    const NonplanarRegionOverride&          ovr = {},
+    int                                     max_top_layers = 0);
 
 // Parameters controlling spiral generation.
 struct NonplanarSpiralParams {

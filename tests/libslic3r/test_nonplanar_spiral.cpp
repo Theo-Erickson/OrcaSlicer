@@ -100,6 +100,29 @@ TEST_CASE("Nonplanar region: cap is bounded above a cylinder", "[Nonplanar][Spir
     REQUIRE_THAT(region->base_radius, Catch::Matchers::WithinAbs(Rc, 1.0));
 }
 
+TEST_CASE("Nonplanar region: top-N limit scopes the cap to a skin", "[Nonplanar][Spiral]")
+{
+    // A cone whose whole height is one big cap; the top-N limit must restrict it.
+    const Vec2d  center(0.0, 0.0);
+    const double R = 20.0;
+    const int    N = 100;
+    std::vector<NonplanarLayerSlice> layers;
+    for (int i = 0; i < N; ++i) {
+        const double frac = static_cast<double>(i) / (N - 1);
+        layers.push_back(slice_at(i, make_circle(center, R * (1.0 - 0.9 * frac))));
+    }
+
+    auto full = detect_nonplanar_region(layers);
+    REQUIRE(full.has_value());
+    REQUIRE(full->first_layer == 0);
+
+    auto scoped = detect_nonplanar_region(layers, {}, 5);
+    REQUIRE(scoped.has_value());
+    REQUIRE(scoped->last_layer == N - 1);
+    REQUIRE(scoped->first_layer == N - 5);
+    REQUIRE(scoped->layer_count() == 5);
+}
+
 TEST_CASE("Nonplanar region: a box has no cap", "[Nonplanar][Spiral]")
 {
     std::vector<NonplanarLayerSlice> layers;

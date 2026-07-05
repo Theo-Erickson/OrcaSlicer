@@ -1686,9 +1686,10 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionBool,               nonplanar_debug))
     ((ConfigOptionFloat,              nonplanar_z_scale))      
     ((ConfigOptionFloat,              nonplanar_smoothing_strength))      
-    ((ConfigOptionBool,               nonplanar_top_layers_only))  
-    ((ConfigOptionInt,                nonplanar_top_layer_count))  
-    ((ConfigOptionFloat,              nonplanar_raycast_search_height))      
+    ((ConfigOptionBool,               nonplanar_top_layers_only))
+    ((ConfigOptionInt,                nonplanar_top_layer_count))
+    ((ConfigOptionFloat,              nonplanar_raycast_search_height))
+    ((ConfigOptionBool,               nonplanar_spiral_accept_risk))
 )
 
 // This object is mapped to Perl as Slic3r::Config::Full.

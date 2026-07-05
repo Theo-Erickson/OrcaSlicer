@@ -52,7 +52,8 @@ LayerMetric metric_for_layer(const NonplanarLayerSlice& layer)
 
 std::optional<NonplanarTopRegion> detect_nonplanar_region(
     const std::vector<NonplanarLayerSlice>& layers,
-    const NonplanarRegionOverride&          ovr)
+    const NonplanarRegionOverride&          ovr,
+    int                                     max_top_layers)
 {
     const int n = static_cast<int>(layers.size());
     if (n < 3)
@@ -100,8 +101,13 @@ std::optional<NonplanarTopRegion> detect_nonplanar_region(
             first = i;
         }
 
-        if (last - first < 2)   // need at least 3 layers to be a meaningful cap
+        if (last - first < 2)   // detected cap must be at least 3 layers to be meaningful
             return std::nullopt;
+
+        // Restrict the spiral to the top N layers if requested, so it forms a thin skin
+        // over a normally-filled body rather than replacing the whole cap (a hollow shell).
+        if (max_top_layers > 0 && (last - first + 1) > max_top_layers)
+            first = last - max_top_layers + 1;
     }
 
     NonplanarTopRegion region;

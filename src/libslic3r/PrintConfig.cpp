@@ -3304,7 +3304,19 @@ void PrintConfigDef::init_fff_params()
                      "easily. Disable this if you want to set the angle manually.");
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionBool(true));
- 
+
+    // ── Surface-spiral: accept collision risk ──────────────────────────────
+    def = this->add("nonplanar_spiral_accept_risk", coBool);
+    def->label = L("Surface spiral: accept collision risk");
+    def->category = L("Experimental");
+    def->tooltip = L("Surface spiral mode only. When disabled (default), the spiral is skipped "
+                     "and the cap is sliced normally if the detected dome is steeper than the "
+                     "safe slope angle, to avoid crashing the nozzle on a 3-axis printer. Enable "
+                     "this to force the spiral on steep domes anyway - the nozzle may collide with "
+                     "the print, so watch it and keep the emergency stop ready.");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(false));
+
     // ── Perimeters only ────────────────────────────────────────────────────
     def = this->add("nonplanar_perimeters_only", coBool);
     def->label = L("Perimeters only");

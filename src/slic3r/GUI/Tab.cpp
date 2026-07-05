@@ -2470,6 +2470,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("nonplanar_perimeters_only");
         optgroup->append_single_option_line("nonplanar_top_layers_only");
         optgroup->append_single_option_line("nonplanar_top_layer_count");
+        optgroup->append_single_option_line("nonplanar_spiral_accept_risk");
      
         // Quality controls.
         optgroup->append_single_option_line("nonplanar_z_scale");
@@ -2928,6 +2929,12 @@ void TabPrint::toggle_options()
             m_config->has("nonplanar_mode") &&
             (m_config->opt_enum<NonplanarMode>("nonplanar_mode") == NonplanarMode::SurfaceRaycast);
         toggle_option("nonplanar_raycast_search_height", raycast_mode);
+
+        // The accept-collision-risk toggle only applies to Surface spiral mode.
+        const bool spiral_mode = np_on &&
+            m_config->has("nonplanar_mode") &&
+            (m_config->opt_enum<NonplanarMode>("nonplanar_mode") == NonplanarMode::SurfaceSpiral);
+        toggle_option("nonplanar_spiral_accept_risk", spiral_mode);
  
         // Nozzle-aware clamp controls whether the angle field is user-editable.
         // When the clamp is active, the angle field is still shown (so users can
