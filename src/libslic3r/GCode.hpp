@@ -649,6 +649,24 @@ private:
     // Nonplanar surface sampler — initialised once per object in do_export().
     std::unique_ptr<NonplanarSurface> m_nonplanar_surface;
 
+    // SurfaceSpiral (Tier A) state, built once per object in do_export() when the
+    // nonplanar_mode is SurfaceSpiral and a dome cap is detected. The precomputed spiral
+    // (plate-space mm) replaces the cap's normal perimeters/infill: while emitting the
+    // spiral object's layers at or above m_spiral_base_z, normal extrusion is suppressed
+    // and the spiral is emitted once (see emit_surface_spiral / _extrude).
+    bool                              m_spiral_active   = false;
+    bool                              m_spiral_emitted  = false;
+    const PrintObject*                m_spiral_object   = nullptr;
+    double                            m_spiral_base_z   = 0.0;
+    double                            m_spiral_apex_z   = 0.0;
+    double                            m_spiral_line_width   = 0.4;
+    double                            m_spiral_layer_height = 0.2;
+    std::vector<Vec3d>                m_spiral_points;
+
+    // Emits the precomputed surface spiral as one continuous extrusion block, bracketed
+    // by the NP tags so GCodeProcessor colours it. Called once, lazily, from _extrude().
+    std::string emit_surface_spiral();
+
     std::set<unsigned int>                  m_initial_layer_extruders;
     std::vector<std::vector<unsigned int>>  m_sorted_layer_filaments;
     // BBS

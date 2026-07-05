@@ -161,6 +161,12 @@ public:
     bool is_enabled() const { return m_cfg.enabled; }
     NonplanarMode mode() const { return m_cfg.mode; }
 
+    // Returns the mesh surface Z (mm, plate-space) directly above the given XY, found by
+    // firing a vertical ray downward from above the mesh's top. Unlike raycast_surface_z
+    // this has no layer-height search window, so it works for the full-height queries the
+    // SurfaceSpiral generator needs. Returns nullopt if the ray misses the mesh.
+    std::optional<double> surface_z_at(const Vec2d& xy_mm) const;
+
 private:
     // ── NormalInterpolation helpers ──────────────────────────────────────
 
@@ -199,6 +205,10 @@ private:
     // Spatial acceleration structure built over m_mesh at construction time.
     // Used to find the closest triangle face to any query point in O(log n) time.
     TreeType                                        m_tree;
+
+    // Z (mm) a little above the mesh's highest vertex — the origin height for the
+    // full-height downward ray in surface_z_at(). Computed once at construction.
+    float                                           m_mesh_top_z = 0.f;
 
     // Unit face normals, one per triangle in m_mesh.indices, precomputed in the
     // constructor so z_offset_at queries do not recompute cross-products at runtime.

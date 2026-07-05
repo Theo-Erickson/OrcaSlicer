@@ -59,6 +59,29 @@ NonplanarSurface::NonplanarSurface(const TriangleMesh& mesh, const NonplanarConf
     // run in O(log n) rather than O(n) per toolpath point.
     m_tree = AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(
         m_mesh.vertices, m_mesh.indices);
+
+    // Cache a ray-origin height just above the mesh top for surface_z_at().
+    float max_z = std::numeric_limits<float>::lowest();
+    for (const Vec3f& v : m_mesh.vertices)
+        max_z = std::max(max_z, v.z());
+    m_mesh_top_z = max_z + 1.0f;   // 1 mm margin above the highest vertex
+}
+
+// Full-height vertical ray: origin above the mesh top, straight down. Returns the Z of
+// the first (topmost) surface hit at the given XY, in the same plate-space mm as the mesh.
+std::optional<double> NonplanarSurface::surface_z_at(const Vec2d& xy) const
+{
+    if (m_tree.empty())
+        return std::nullopt;
+
+    const Vec3d origin(xy.x(), xy.y(), static_cast<double>(m_mesh_top_z));
+    const Vec3d dir(0.0, 0.0, -1.0);
+    igl::Hit<float> hit;
+    if (!AABBTreeIndirect::intersect_ray_first_hit(
+            m_mesh.vertices, m_mesh.indices, m_tree, origin, dir, hit))
+        return std::nullopt;
+
+    return static_cast<double>(m_mesh_top_z) - static_cast<double>(hit.t);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────

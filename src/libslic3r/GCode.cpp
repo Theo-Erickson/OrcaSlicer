@@ -51,6 +51,7 @@
 
 #include <tbb/parallel_for.h>
 #include "calib.hpp"
+#include "NonplanarSpiral.hpp"
 // Intel redesigned some TBB interface considerably when merging TBB with their oneAPI set of libraries, see GH #7332.
 // We are using quite an old TBB 2017 U7. Before we update our build servers, let's use the old API, which is deprecated in up to date TBB.
 #if ! defined(TBB_VERSION_MAJOR)
@@ -3268,8 +3269,12 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
 
         // ── Nonplanar: init surface sampler ──────────────────────────────────────
         // Reset any surface sampler from a previous export. This must happen before
-        // any _extrude call so that m_nonplanar_surface is never stale.        
+        // any _extrude call so that m_nonplanar_surface is never stale.
         m_nonplanar_surface.reset();
+        m_spiral_active  = false;
+        m_spiral_emitted = false;
+        m_spiral_object  = nullptr;
+        m_spiral_points.clear();
         if (m_config.nonplanar_slicing.value) {
             // Use the first printable object's mesh as the reference surface.
             // Only one mesh is used for the whole print; multi-object prints are
@@ -3309,11 +3314,11 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                }
     
                 
-                // raw_mesh() returns the mesh in object-local coordinates.
-                // The AABB tree is built over this mesh in NonplanarSurface's constructor.
+                // raw_mesh() returns the mesh in object-local coordinates; transform it into
+                // plate-space so it shares the coordinate system of point_to_gcode() output
+                // (which is what lift_polyline / the spiral query against). The AABB tree is
+                // built over this plate-space mesh in NonplanarSurface's constructor.
                 TriangleMesh np_mesh = np_object->model_object()->raw_mesh();
-                // Do NOT call np_mesh.transform() — mesh stays in object-local coordinates.
-                // The inverse transform is applied to query points in lift_polyline instead.
                 np_mesh.transform(np_object->instances()[0].model_instance->get_matrix());
                 
                 Vec3d mesh_center = np_mesh.bounding_box().center();
@@ -3338,6 +3343,49 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                 }
                 
                 m_nonplanar_surface = std::make_unique<NonplanarSurface>(np_mesh, np_cfg);
+
+                // ── SurfaceSpiral (Tier A): detect the dome cap, precompute the spiral ──
+                if (np_cfg.mode == NonplanarMode::SurfaceSpiral) {
+                    std::vector<NonplanarLayerSlice> np_layers;
+                    np_layers.reserve(np_object->layers().size());
+                    for (const Layer* layer : np_object->layers()) {
+                        NonplanarLayerSlice s;
+                        s.print_z = layer->print_z;   // plate-space Z
+                        s.islands = layer->lslices;    // object-local outlines (radius is translation-invariant)
+                        np_layers.push_back(std::move(s));
+                    }
+                    std::optional<NonplanarTopRegion> region = detect_nonplanar_region(np_layers);
+                    if (region) {
+                        // For a rotationally-symmetric cap the XY centre is the mesh centre in
+                        // plate-space, so the spiral shares the mesh / g-code coordinate system.
+                        region->center = Vec2d(mesh_center.x(), mesh_center.y());
+
+                        NonplanarSpiralParams params;
+                        params.line_width      = np_cfg.nozzle_diameter;
+                        params.points_per_rev  = 360;
+                        params.transition_revs = 0.5;
+
+                        NonplanarSurface* surf = m_nonplanar_surface.get();
+                        std::vector<Vec3d> spiral = generate_spiral(*region, params,
+                            [surf](const Vec2d& xy) { return surf->surface_z_at(xy); });
+
+                        if (spiral.size() >= 2) {
+                            m_spiral_active       = true;
+                            m_spiral_object       = np_object;
+                            m_spiral_base_z       = region->base_z;
+                            m_spiral_apex_z       = region->apex_z;
+                            m_spiral_line_width   = params.line_width;
+                            m_spiral_layer_height = np_cfg.layer_height;
+                            m_spiral_points       = std::move(spiral);
+                        }
+                        if (m_config.nonplanar_debug.value)
+                            file.write_format(
+                                "; NP_DEBUG spiral: base_z=%.3f apex_z=%.3f base_r=%.3f pts=%zu\n",
+                                region->base_z, region->apex_z, region->base_radius, m_spiral_points.size());
+                    } else if (m_config.nonplanar_debug.value) {
+                        file.write_format("; NP_DEBUG spiral: no dome cap detected, normal slicing\n");
+                    }
+                }
             }
         }
         else if (m_config.nonplanar_debug.value) {
@@ -6401,19 +6449,64 @@ double GCode::calc_max_volumetric_speed(const double layer_height, const double 
     return res;
 }
 
+// Emits the precomputed SurfaceSpiral as a single continuous extrusion block. Each segment's
+// extrusion is derived from its true 3D length. Bracketed by NP tags so GCodeProcessor colours
+// the moves as NonplanarExtrusion and attributes them to the flat base Z.
+std::string GCode::emit_surface_spiral()
+{
+    std::string gcode;
+    if (m_spiral_points.size() < 2)
+        return gcode;
+
+    // Bead cross-section approximated as line_width x layer_height (Tier A approximation).
+    const double mm3_per_mm = m_spiral_line_width * m_spiral_layer_height;
+    const double e_per_mm   = m_writer.filament()->e_per_mm3() * mm3_per_mm;
+
+    char buf[128];
+    sprintf(buf, ";%s%g\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Width).c_str(), m_spiral_line_width);
+    gcode += buf;
+    sprintf(buf, ";%s%g\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Height).c_str(), m_spiral_layer_height);
+    gcode += buf;
+
+    gcode += "; NP flatZ=";
+    gcode += Slic3r::float_to_string_decimal_point(float(m_spiral_base_z), 2);
+    gcode += "\n";
+
+    // Travel to the base seam, then extrude along the climbing path.
+    gcode += m_writer.travel_to_xyz(m_spiral_points.front(), "nonplanar spiral start");
+    for (size_t i = 1; i < m_spiral_points.size(); ++i) {
+        const double len = (m_spiral_points[i] - m_spiral_points[i - 1]).norm();
+        gcode += m_writer.extrude_to_xyz(m_spiral_points[i], e_per_mm * len,
+                                         GCodeWriter::full_gcode_comment ? "nonplanar spiral" : "");
+    }
+
+    gcode += "; NP end\n";
+    return gcode;
+}
+
 std::string GCode::_extrude(const ExtrusionPath &path, std::string description, double speed)
 {
-    
-    // Temporary diagnostic log: reports whether the surface sampler is valid
-    // and which role this path has. Remove before shipping.
     if (m_config.nonplanar_slicing.value) {
-        BOOST_LOG_TRIVIAL(warning) << "NP _extrude: m_nonplanar_surface="
+        BOOST_LOG_TRIVIAL(trace) << "NP _extrude: m_nonplanar_surface="
             << (m_nonplanar_surface ? "valid" : "NULL")
             << " role=" << path.role()
             << " apply_np=" << (m_nonplanar_surface && m_nonplanar_surface->is_enabled());
     }
-    
+
     std::string gcode;
+
+    // SurfaceSpiral: for the spiral object's cap (layers at/above the spiral base) the
+    // normal perimeters/infill are replaced by the precomputed climbing spiral. Emit the
+    // spiral once (lazily, on the first suppressed path) and suppress everything else here.
+    if (m_spiral_active && m_layer != nullptr &&
+        m_layer->object() == m_spiral_object &&
+        m_layer->print_z >= m_spiral_base_z - EPSILON) {
+        if (!m_spiral_emitted) {
+            gcode += emit_surface_spiral();
+            m_spiral_emitted = true;
+        }
+        return gcode;
+    }
 
     if (is_bridge(path.role()))
         description += " (bridge)";
@@ -6428,6 +6521,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     // variable-speed loops below.
     const bool apply_np_this_path = m_nonplanar_surface &&
         m_nonplanar_surface->is_enabled() &&
+        m_nonplanar_surface->mode() != NonplanarMode::SurfaceSpiral &&
         (!m_config.nonplanar_perimeters_only.value ||
          path.role() == erExternalPerimeter ||
          path.role() == erPerimeter);

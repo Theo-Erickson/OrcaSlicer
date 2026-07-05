@@ -444,9 +444,14 @@ enum FilamentMapMode {
 //   nominal Z. Produces precise results on hard architectural curves (rounded
 //   box tops, sharp ridges) where normal interpolation overshoots or undershoots.
 //   Slightly more expensive per query but still O(log n) via the AABB tree.
+// SurfaceSpiral (Tier A): replaces the top perimeters of a rotationally-symmetric
+//   dome cap with a single continuous Archimedean spiral that climbs the surface.
+//   Unlike the warp modes above (which only lift existing planar rings), this mode
+//   generates new surface-following toolpaths. See NonplanarSpiral.hpp.
 enum class NonplanarMode {
     NormalInterpolation = 0,
     SurfaceRaycast      = 1,
+    SurfaceSpiral       = 2,
 };
 
 extern std::string get_extruder_variant_string(ExtruderType extruder_type, NozzleVolumeType nozzle_volume_type);

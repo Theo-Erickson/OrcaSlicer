@@ -583,7 +583,8 @@ CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(FilamentMapMode)
 
 static t_config_enum_values s_keys_map_NonplanarMode {
         { "normal_interpolation", int(NonplanarMode::NormalInterpolation) },
-        { "surface_raycast",      int(NonplanarMode::SurfaceRaycast) }
+        { "surface_raycast",      int(NonplanarMode::SurfaceRaycast) },
+        { "surface_spiral",       int(NonplanarMode::SurfaceSpiral) }
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(NonplanarMode)
 
@@ -3244,12 +3245,17 @@ void PrintConfigDef::init_fff_params()
                      "Surface raycast: fires a downward ray to find the exact surface Z. "
                      "More precise on hard architectural curves like rounded box tops.");
     def->enum_keys_map = &ConfigOptionEnum<NonplanarMode>::get_enum_values();
-    def->enum_values.push_back("none");
+    // NOTE: enum_values / enum_labels must stay aligned 1:1 with s_keys_map_NonplanarMode
+    // and the NonplanarMode enum (index == enum value). The GUI Choice field sets the combo
+    // selection directly from the stored int (Field.cpp), so any extra/missing entry here
+    // shifts every option and yields the wrong mode. Do not add a dummy "none" entry — the
+    // nonplanar_slicing master switch handles enable/disable.
     def->enum_values.push_back("normal_interpolation");
     def->enum_values.push_back("surface_raycast");
-    def->enum_labels.push_back(L("standard slicing mode"));
+    def->enum_values.push_back("surface_spiral");
     def->enum_labels.push_back(L("Normal interpolation"));
     def->enum_labels.push_back(L("Surface raycast"));
+    def->enum_labels.push_back(L("Surface spiral"));
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionEnum<NonplanarMode>(NonplanarMode::SurfaceRaycast));
  
