@@ -3314,15 +3314,13 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                }
     
                 
-                // Transform raw_mesh() into the SAME coordinate system as the emitted
-                // toolpaths: the object's centered slice space (trafo_centered) plus the
-                // instance shift, which is exactly what point_to_gcode() produces
-                // (unscale(object-local point) + unscale(shift)). Using the model-instance
-                // matrix here instead put the mesh in a different origin and offset the spiral.
-                const Vec2d np_shift_mm = unscaled<double>(np_object->instances()[0].shift);
+                // Transform raw_mesh() into the object's centered slice frame (trafo_centered),
+                // which is the SAME frame the sliced layers (lslices) and toolpath points live
+                // in — before point_to_gcode() adds m_origin. The spiral is generated in this
+                // frame too, and emit_surface_spiral() applies the live m_origin at emission so
+                // it aligns with the body exactly (see point_to_gcode).
                 TriangleMesh np_mesh = np_object->model_object()->raw_mesh();
                 np_mesh.transform(np_object->trafo_centered());
-                np_mesh.translate(float(np_shift_mm.x()), float(np_shift_mm.y()), 0.f);
 
                 Vec3d mesh_center = np_mesh.bounding_box().center();
                 BOOST_LOG_TRIVIAL(debug) << "NP mesh center "
@@ -3365,10 +3363,10 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                     std::optional<NonplanarTopRegion> region =
                         detect_nonplanar_region(np_layers, {}, max_top);
                     if (region) {
-                        // Spiral centre in toolpath (point_to_gcode) space: detect() returns the
-                        // centre in the object's centered slice space, so add the instance shift
-                        // to match the mesh and the emitted g-code (fixes a horizontal offset).
-                        region->center += np_shift_mm;
+                        // region->center from detect() is already in the object's centered slice
+                        // frame (from the layer outlines) — the same frame as the mesh above. The
+                        // live m_origin is applied later, in emit_surface_spiral(), so the spiral
+                        // lands in the same place as the body toolpaths.
 
                         // Average cap slope (for the warning message only).
                         const double cap_h = region->apex_z - region->base_z;
@@ -6538,11 +6536,25 @@ std::string GCode::emit_surface_spiral()
     gcode += Slic3r::float_to_string_decimal_point(float(m_spiral_base_z), 2);
     gcode += "\n";
 
+    // The spiral points are in the object's centered slice frame. Map them to g-code
+    // coordinates exactly like point_to_gcode() does for the body: + m_origin - extruder_offset.
+    // This keeps the spiral aligned with the rest of the object regardless of plate offset.
+    const Vec2d np_origin = m_origin - Vec2d(EXTRUDER_CONFIG(extruder_offset));
+    const auto to_gcode = [&np_origin](const Vec3d& p) {
+        return Vec3d(p.x() + np_origin.x(), p.y() + np_origin.y(), p.z());
+    };
+
+    if (m_config.nonplanar_debug.value)
+        gcode += Slic3r::format("; NP_DEBUG spiral emit: origin=(%.3f,%.3f) first=(%.3f,%.3f,%.3f)\n",
+            np_origin.x(), np_origin.y(),
+            to_gcode(m_spiral_points.front()).x(), to_gcode(m_spiral_points.front()).y(),
+            m_spiral_points.front().z());
+
     // Travel to the base seam, then extrude along the climbing path.
-    gcode += m_writer.travel_to_xyz(m_spiral_points.front(), "nonplanar spiral start");
+    gcode += m_writer.travel_to_xyz(to_gcode(m_spiral_points.front()), "nonplanar spiral start");
     for (size_t i = 1; i < m_spiral_points.size(); ++i) {
         const double len = (m_spiral_points[i] - m_spiral_points[i - 1]).norm();
-        gcode += m_writer.extrude_to_xyz(m_spiral_points[i], e_per_mm * len,
+        gcode += m_writer.extrude_to_xyz(to_gcode(m_spiral_points[i]), e_per_mm * len,
                                          GCodeWriter::full_gcode_comment ? "nonplanar spiral" : "");
     }
 
