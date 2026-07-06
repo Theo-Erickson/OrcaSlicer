@@ -178,16 +178,30 @@ std::vector<Vec3d> NonplanarSurface::project_polyline_to_surface(
     const std::vector<Vec2d>& pts_mm,
     double                    layer_z) const
 {
+    // Conformal top-shell band: a solid-infill point at flat Z=layer_z that lies within
+    // top_layer_count layers below the mesh surface S(xy) is lifted so the top shell curves
+    // *parallel* to the surface. Its integer depth k = floor((S - layer_z)/layer_height) picks
+    // which parallel offset it belongs to, and it is moved to S - k*layer_height. The resulting
+    // per-point lift is the fractional depth (< one layer height), which smooths the staircase
+    // while keeping the layers self-supporting. Points deeper than the shell, or off the mesh,
+    // stay flat.
     std::vector<Vec3d> result;
     result.reserve(pts_mm.size());
 
+    const double lh = m_cfg.layer_height;
+    const int    n  = std::max(1, m_cfg.top_layer_count);
+
     for (const Vec2d& xy : pts_mm) {
         double z = layer_z;
-        if (const std::optional<double> sz = surface_z_at(xy)) {
-            // The exposed top surface sits at or just above the layer plane; project up to it
-            // (never below), attenuated by z_scale. No per-layer clamp — this is the full lift.
-            const double target = std::max(layer_z, *sz);
-            z = layer_z + (target - layer_z) * m_cfg.z_scale;
+        if (lh > 1e-6) {
+            if (const std::optional<double> sz = surface_z_at(xy)) {
+                const double depth = (*sz - layer_z) / lh;   // layers below the surface
+                if (depth >= -0.01 && depth < static_cast<double>(n)) {
+                    const int    k      = std::max(0, static_cast<int>(std::floor(depth)));
+                    const double target = *sz - k * lh;      // >= layer_z by construction
+                    z = layer_z + (target - layer_z) * m_cfg.z_scale;
+                }
+            }
         }
         result.emplace_back(xy.x(), xy.y(), z);
     }

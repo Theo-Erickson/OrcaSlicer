@@ -157,10 +157,10 @@ public:
         const std::vector<Vec2d>& pts_mm,
         double                    layer_z) const;
 
-    // SurfaceProjection (Tier B): projects each point (mesh/slice-frame mm) onto the mesh
-    // surface using the full-height vertical ray, with no per-layer clamp, so the top surface
-    // follows the true geometry. Points that miss the mesh, or whose surface is below layer_z,
-    // stay at layer_z. z_scale attenuates the projection.
+    // SurfaceProjection (Tier B): conformal top-shell band. Each solid-infill point (mesh/
+    // slice-frame mm) within top_layer_count layers below the mesh surface is lifted so the top
+    // shell curves parallel to the surface (anti-staircase, self-supporting). Points deeper than
+    // the shell or off the mesh stay at layer_z. z_scale attenuates the lift. See the .cpp.
     std::vector<Vec3d> project_polyline_to_surface(
         const std::vector<Vec2d>& pts_mm,
         double                    layer_z) const;

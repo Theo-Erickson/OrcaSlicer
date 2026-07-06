@@ -6606,7 +6606,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     if (m_nonplanar_surface && m_nonplanar_surface->is_enabled()) {
         switch (m_nonplanar_surface->mode()) {
         case NonplanarMode::SurfaceProjection:
-            apply_np_this_path = (path.role() == erTopSolidInfill);
+            apply_np_this_path = (path.role() == erTopSolidInfill || path.role() == erSolidInfill);
             break;
         case NonplanarMode::SurfaceSpiral:
             break;
@@ -7310,7 +7310,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
             bool apply_np_this_path = false;
             if (m_nonplanar_surface && m_nonplanar_surface->is_enabled()) {
                 switch (m_nonplanar_surface->mode()) {
-                case NonplanarMode::SurfaceProjection: apply_np_this_path = (path.role() == erTopSolidInfill); break;
+                case NonplanarMode::SurfaceProjection: apply_np_this_path = (path.role() == erTopSolidInfill || path.role() == erSolidInfill); break;
                 case NonplanarMode::SurfaceSpiral:     break;
                 default: apply_np_this_path = (!m_config.nonplanar_perimeters_only.value
                     || path.role() == erExternalPerimeter || path.role() == erPerimeter); break;
