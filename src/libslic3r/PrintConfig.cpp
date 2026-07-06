@@ -584,7 +584,8 @@ CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(FilamentMapMode)
 static t_config_enum_values s_keys_map_NonplanarMode {
         { "normal_interpolation", int(NonplanarMode::NormalInterpolation) },
         { "surface_raycast",      int(NonplanarMode::SurfaceRaycast) },
-        { "surface_spiral",       int(NonplanarMode::SurfaceSpiral) }
+        { "surface_spiral",       int(NonplanarMode::SurfaceSpiral) },
+        { "surface_projection",   int(NonplanarMode::SurfaceProjection) }
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(NonplanarMode)
 
@@ -3253,9 +3254,11 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("normal_interpolation");
     def->enum_values.push_back("surface_raycast");
     def->enum_values.push_back("surface_spiral");
+    def->enum_values.push_back("surface_projection");
     def->enum_labels.push_back(L("Normal interpolation"));
     def->enum_labels.push_back(L("Surface raycast"));
     def->enum_labels.push_back(L("Surface spiral"));
+    def->enum_labels.push_back(L("Surface projection"));
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionEnum<NonplanarMode>(NonplanarMode::SurfaceRaycast));
  

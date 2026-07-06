@@ -448,10 +448,14 @@ enum FilamentMapMode {
 //   dome cap with a single continuous Archimedean spiral that climbs the surface.
 //   Unlike the warp modes above (which only lift existing planar rings), this mode
 //   generates new surface-following toolpaths. See NonplanarSpiral.hpp.
+// SurfaceProjection (Tier B): projects the object's existing top-surface toolpaths onto
+//   the mesh (full-height raycast), making the top surface of ANY model follow its real
+//   curved geometry instead of a flat staircase. Works on arbitrary shapes (not just domes).
 enum class NonplanarMode {
     NormalInterpolation = 0,
     SurfaceRaycast      = 1,
     SurfaceSpiral       = 2,
+    SurfaceProjection   = 3,
 };
 
 extern std::string get_extruder_variant_string(ExtruderType extruder_type, NozzleVolumeType nozzle_volume_type);

@@ -157,6 +157,14 @@ public:
         const std::vector<Vec2d>& pts_mm,
         double                    layer_z) const;
 
+    // SurfaceProjection (Tier B): projects each point (mesh/slice-frame mm) onto the mesh
+    // surface using the full-height vertical ray, with no per-layer clamp, so the top surface
+    // follows the true geometry. Points that miss the mesh, or whose surface is below layer_z,
+    // stay at layer_z. z_scale attenuates the projection.
+    std::vector<Vec3d> project_polyline_to_surface(
+        const std::vector<Vec2d>& pts_mm,
+        double                    layer_z) const;
+
     // Returns true if nonplanar slicing is active (cfg.enabled was set).
     bool is_enabled() const { return m_cfg.enabled; }
     NonplanarMode mode() const { return m_cfg.mode; }

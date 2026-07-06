@@ -174,6 +174,27 @@ std::vector<Vec3d> NonplanarSurface::lift_polyline(
     return result;
 }
 
+std::vector<Vec3d> NonplanarSurface::project_polyline_to_surface(
+    const std::vector<Vec2d>& pts_mm,
+    double                    layer_z) const
+{
+    std::vector<Vec3d> result;
+    result.reserve(pts_mm.size());
+
+    for (const Vec2d& xy : pts_mm) {
+        double z = layer_z;
+        if (const std::optional<double> sz = surface_z_at(xy)) {
+            // The exposed top surface sits at or just above the layer plane; project up to it
+            // (never below), attenuated by z_scale. No per-layer clamp — this is the full lift.
+            const double target = std::max(layer_z, *sz);
+            z = layer_z + (target - layer_z) * m_cfg.z_scale;
+        }
+        result.emplace_back(xy.x(), xy.y(), z);
+    }
+
+    return result;
+}
+
 // ─── NormalInterpolation helpers ───────────────────────────────────────────
 
 // Finds the mesh face closest to pt using the AABB tree and returns its

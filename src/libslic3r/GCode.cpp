@@ -6598,12 +6598,25 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     //   - perimeters_only is set and this is not an inner or outer perimeter
     // This flag is evaluated once per path and reused in both the non-arc and
     // variable-speed loops below.
-    const bool apply_np_this_path = m_nonplanar_surface &&
-        m_nonplanar_surface->is_enabled() &&
-        m_nonplanar_surface->mode() != NonplanarMode::SurfaceSpiral &&
-        (!m_config.nonplanar_perimeters_only.value ||
-         path.role() == erExternalPerimeter ||
-         path.role() == erPerimeter);
+    // Decide whether this path's Z is warped/projected onto the mesh.
+    //   SurfaceProjection (Tier B): project the top-surface infill onto the mesh.
+    //   NormalInterpolation / SurfaceRaycast (Tier 1): warp perimeters (or all) toward it.
+    //   SurfaceSpiral (Tier A): handled separately (suppress + inject), never here.
+    bool apply_np_this_path = false;
+    if (m_nonplanar_surface && m_nonplanar_surface->is_enabled()) {
+        switch (m_nonplanar_surface->mode()) {
+        case NonplanarMode::SurfaceProjection:
+            apply_np_this_path = (path.role() == erTopSolidInfill);
+            break;
+        case NonplanarMode::SurfaceSpiral:
+            break;
+        default:
+            apply_np_this_path = (!m_config.nonplanar_perimeters_only.value ||
+                path.role() == erExternalPerimeter ||
+                path.role() == erPerimeter);
+            break;
+        }
+    }
     
     const auto get_sloped_z = [&sloped, this](double z_ratio) {
         const auto height = sloped->height;
@@ -6977,14 +6990,20 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         // Reconstruct a flat Polyline from the Line3 segments so lift_polyline
         // can work on it. The first point of each line is skipped after the
         // first segment to avoid duplicating shared endpoints.
+        // Build the query points in the object's slice frame (unscaled, NOT point_to_gcode),
+        // which is the frame the mesh lives in. Only the Z of the result is used downstream;
+        // the emitted XY comes from point_to_gcode(), so this keeps the surface query aligned
+        // with the mesh regardless of plate offset.
         Polyline full_pl;
         std::vector<Vec2d> full_pts_mm;
         for (const Line3& l : path.polyline.lines()) {
             if (full_pts_mm.empty())
-                full_pts_mm.push_back(this->point_to_gcode(l.a.to_point()));
-            full_pts_mm.push_back(this->point_to_gcode(l.b.to_point()));
+                full_pts_mm.push_back(unscaled<double>(l.a.to_point()));
+            full_pts_mm.push_back(unscaled<double>(l.b.to_point()));
         }
-        all_lifted = m_nonplanar_surface->lift_polyline(full_pts_mm, m_nominal_z);
+        all_lifted = (m_nonplanar_surface->mode() == NonplanarMode::SurfaceProjection)
+            ? m_nonplanar_surface->project_polyline_to_surface(full_pts_mm, m_nominal_z)
+            : m_nonplanar_surface->lift_polyline(full_pts_mm, m_nominal_z);
     }
     
     // Temporary diagnostic log: reports the Z range of the lifted points so
@@ -7288,9 +7307,15 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
             // Re-evaluate apply_np_this_path in this inner scope because arc fitting
             // is bypassed when nonplanar is active: this guard mirrors the outer flag
             // and also prevents arc G2/G3 from being emitted for nonplanar paths.
-            const bool apply_np_this_path = m_nonplanar_surface && m_nonplanar_surface->is_enabled() && 
-                (!m_config.nonplanar_perimeters_only.value 
-                || path.role() == erExternalPerimeter || path.role() == erPerimeter);
+            bool apply_np_this_path = false;
+            if (m_nonplanar_surface && m_nonplanar_surface->is_enabled()) {
+                switch (m_nonplanar_surface->mode()) {
+                case NonplanarMode::SurfaceProjection: apply_np_this_path = (path.role() == erTopSolidInfill); break;
+                case NonplanarMode::SurfaceSpiral:     break;
+                default: apply_np_this_path = (!m_config.nonplanar_perimeters_only.value
+                    || path.role() == erExternalPerimeter || path.role() == erPerimeter); break;
+                }
+            }
             
             // BBS: use G1 if not enable arc fitting or has no arc fitting result or in spiral_mode mode or we are doing sloped extrusion or we are using nonplanar slicing for this path
             // Attention: G2 and G3 is not supported in spiral_mode mode
