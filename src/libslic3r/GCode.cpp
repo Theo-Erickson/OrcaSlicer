@@ -7102,8 +7102,14 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     char buf[64];
     assert(is_decimal_separator_point());
 
-    if (path.role() != m_last_processor_extrusion_role) {
-        m_last_processor_extrusion_role = path.role();
+    // Projected (SurfaceProjection) paths are tagged with the dedicated Nonplanar role so the
+    // preview colours them distinctly, like the spiral. Other paths keep their real role.
+    const ExtrusionRole np_effective_role =
+        (apply_np_this_path && m_nonplanar_surface &&
+         m_nonplanar_surface->mode() == NonplanarMode::SurfaceProjection)
+        ? erNonplanarSpiral : path.role();
+    if (np_effective_role != m_last_processor_extrusion_role) {
+        m_last_processor_extrusion_role = np_effective_role;
         sprintf(buf, ";%s%s\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Role).c_str(), ExtrusionEntity::role_to_string(m_last_processor_extrusion_role).c_str());
         gcode += buf;
     }

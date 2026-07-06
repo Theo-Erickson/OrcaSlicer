@@ -317,7 +317,7 @@ static std::string to_string(libvgcode::EGCodeExtrusionRole role)
     case libvgcode::EGCodeExtrusionRole::InternalBridgeInfill:     { return _u8L("Internal bridge"); } // ORCA
     case libvgcode::EGCodeExtrusionRole::Brim:                     { return _u8L("Brim"); }
     case libvgcode::EGCodeExtrusionRole::SupportTransition:        { return _u8L("Support transition"); }
-    case libvgcode::EGCodeExtrusionRole::NonplanarSpiral:          { return _u8L("Nonplanar spiral"); }
+    case libvgcode::EGCodeExtrusionRole::NonplanarSpiral:          { return _u8L("Nonplanar"); }
     case libvgcode::EGCodeExtrusionRole::Mixed:                    { return _u8L("Mixed"); }
     default:                                                       { return _u8L("Unknown"); }
     }
