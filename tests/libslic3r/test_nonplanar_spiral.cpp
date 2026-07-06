@@ -279,6 +279,36 @@ TEST_CASE("Nonplanar spiral: pitch tightens on a slope (constant surface spacing
     }
 }
 
+TEST_CASE("Nonplanar spiral: slope limit keeps only the shallow top", "[Nonplanar][Spiral]")
+{
+    const Vec2d  center(0.0, 0.0);
+    const double R = 20.0;
+
+    auto hemi = [center, R](const Vec2d& xy) -> std::optional<double> {
+        const double dx = xy.x() - center.x();
+        const double dy = xy.y() - center.y();
+        const double d2 = dx * dx + dy * dy;
+        if (d2 > R * R)
+            return std::nullopt;
+        return std::sqrt(std::max(0.0, R * R - d2));
+    };
+
+    NonplanarSpiralParams params;
+    params.line_width      = 0.5;
+    params.points_per_rev  = 90;
+    params.transition_revs = 0.0;
+    params.max_slope_deg   = 30.0;   // a hemisphere reaches 30 deg at r = 0.5R = 10 mm
+
+    const auto pts = generate_spiral(hemi_region(center, R), params, hemi);
+
+    REQUIRE(pts.size() > 20);
+    // Nothing on the steep flank (r > ~10) should be spiralized.
+    double max_r = 0.0;
+    for (const auto& p : pts)
+        max_r = std::max(max_r, xy_radius(p, center));
+    REQUIRE(max_r < 11.5);
+}
+
 TEST_CASE("Nonplanar spiral: falls back to linear Z when the ray misses", "[Nonplanar][Spiral]")
 {
     const Vec2d center(0.0, 0.0);

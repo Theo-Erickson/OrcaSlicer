@@ -143,6 +143,8 @@ std::vector<Vec3d> generate_spiral(
     // A floor keeps near-vertical walls (which can't be tiled nonplanar-ly) from stalling it.
     const double min_pitch_per_rev = params.line_width * 0.15;
     const double probe_dr          = std::max(0.05, params.line_width);   // mm, slope probe
+    const double cos_max_slope     = std::cos(std::clamp(params.max_slope_deg, 0.0, 90.0)
+                                              * M_PI / 180.0);
 
     const size_t max_points = 4'000'000;
 
@@ -157,19 +159,6 @@ std::vector<Vec3d> generate_spiral(
         const Vec2d                 xy   = point_at(r, theta);
         const std::optional<double> surf = surface_z(xy);
 
-        // Fallback Z rises linearly base->apex with radial progress when the ray misses.
-        const double progress = 1.0 - r / region.base_radius;
-        double z = surf ? *surf : region.base_z + (region.apex_z - region.base_z) * progress;
-
-        // Blend flat base Z -> surface Z over the first transition revolutions so the spiral
-        // leaves the last flat ring without a vertical step.
-        if (trans_angle > 0.0 && theta < trans_angle) {
-            const double t = theta / trans_angle;   // 0 at base seam -> 1 after the ramp
-            z = region.base_z + (z - region.base_z) * t;
-        }
-
-        pts.emplace_back(xy.x(), xy.y(), z);
-
         // Estimate the local surface slope by probing one line width further in.
         double cos_slope = 1.0;
         if (surf) {
@@ -181,12 +170,28 @@ std::vector<Vec3d> generate_spiral(
                 cos_slope = dr / std::sqrt(dr * dr + dz * dz);
             }
         }
-        const double pitch_per_rev = std::max(min_pitch_per_rev, params.line_width * cos_slope);
+
+        // Only emit where the surface is shallow enough. The steeper outer part is skipped
+        // (and skipped fast, at a full line-width pitch) so normal perimeters print it.
+        const bool within_slope = cos_slope >= cos_max_slope - 1e-9;
+        if (within_slope) {
+            const double progress = 1.0 - r / region.base_radius;
+            double z = surf ? *surf : region.base_z + (region.apex_z - region.base_z) * progress;
+            if (trans_angle > 0.0 && theta < trans_angle) {
+                const double t = theta / trans_angle;   // 0 at base seam -> 1 after the ramp
+                z = region.base_z + (z - region.base_z) * t;
+            }
+            pts.emplace_back(xy.x(), xy.y(), z);
+        }
+
+        const double pitch_per_rev = within_slope
+            ? std::max(min_pitch_per_rev, params.line_width * cos_slope)
+            : params.line_width;
         r     -= pitch_per_rev * (d_theta / (2.0 * M_PI));
         theta += d_theta;
     }
 
-    // Close on the apex.
+    // Close on the apex (only meaningful if we emitted the shallow top at all).
     if (!pts.empty()) {
         const std::optional<double> surf = surface_z(region.center);
         pts.emplace_back(region.center.x(), region.center.y(), surf ? *surf : region.apex_z);

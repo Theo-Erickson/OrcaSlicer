@@ -3314,13 +3314,16 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                }
     
                 
-                // raw_mesh() returns the mesh in object-local coordinates; transform it into
-                // plate-space so it shares the coordinate system of point_to_gcode() output
-                // (which is what lift_polyline / the spiral query against). The AABB tree is
-                // built over this plate-space mesh in NonplanarSurface's constructor.
+                // Transform raw_mesh() into the SAME coordinate system as the emitted
+                // toolpaths: the object's centered slice space (trafo_centered) plus the
+                // instance shift, which is exactly what point_to_gcode() produces
+                // (unscale(object-local point) + unscale(shift)). Using the model-instance
+                // matrix here instead put the mesh in a different origin and offset the spiral.
+                const Vec2d np_shift_mm = unscaled<double>(np_object->instances()[0].shift);
                 TriangleMesh np_mesh = np_object->model_object()->raw_mesh();
-                np_mesh.transform(np_object->instances()[0].model_instance->get_matrix());
-                
+                np_mesh.transform(np_object->trafo_centered());
+                np_mesh.translate(float(np_shift_mm.x()), float(np_shift_mm.y()), 0.f);
+
                 Vec3d mesh_center = np_mesh.bounding_box().center();
                 BOOST_LOG_TRIVIAL(debug) << "NP mesh center "
                     << mesh_center.x() << ", " << mesh_center.y() << ", " << mesh_center.z();
@@ -3362,83 +3365,83 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                     std::optional<NonplanarTopRegion> region =
                         detect_nonplanar_region(np_layers, {}, max_top);
                     if (region) {
-                        // For a rotationally-symmetric cap the XY centre is the mesh centre in
-                        // plate-space, so the spiral shares the mesh / g-code coordinate system.
-                        region->center = Vec2d(mesh_center.x(), mesh_center.y());
+                        // Spiral centre in toolpath (point_to_gcode) space: detect() returns the
+                        // centre in the object's centered slice space, so add the instance shift
+                        // to match the mesh and the emitted g-code (fixes a horizontal offset).
+                        region->center += np_shift_mm;
 
-                        // Collision-risk gate: estimate the cap's average slope. On a 3-axis
-                        // printer a steep cap can crash the nozzle, so unless the user accepts
-                        // the risk we skip the spiral and let the cap slice normally.
+                        // Average cap slope (for the warning message only).
                         const double cap_h = region->apex_z - region->base_z;
                         const double cap_slope_deg = (region->base_radius > 1e-6)
                             ? std::atan2(cap_h, region->base_radius) * 180.0 / M_PI : 90.0;
                         const bool accept_risk = m_config.nonplanar_spiral_accept_risk.value;
-                        const bool too_steep   = cap_slope_deg > np_cfg.max_slope_angle_deg;
 
-                        if (too_steep && !accept_risk) {
-                            if (m_config.nonplanar_debug.value)
-                                file.write_format(
-                                    "; NP_DEBUG spiral: cap slope %.1f deg > safe %.1f deg, skipped "
-                                    "(enable 'accept collision risk' to force)\n",
-                                    cap_slope_deg, np_cfg.max_slope_angle_deg);
-                            BOOST_LOG_TRIVIAL(warning) << "Nonplanar spiral skipped: cap slope "
-                                << cap_slope_deg << " deg exceeds safe " << np_cfg.max_slope_angle_deg
-                                << " deg. Enable 'Surface spiral: accept collision risk' to force.";
-                        } else {
-                            if (too_steep)
-                                BOOST_LOG_TRIVIAL(warning) << "Nonplanar spiral: steep cap ("
-                                    << cap_slope_deg << " deg) printed anyway (accept risk enabled)"
-                                    " - the nozzle may collide with the print.";
+                        // Cautious (default): spiralize only where the surface is shallower than the
+                        // safe angle; the steeper flank prints as normal perimeters (avoids un-bondable
+                        // gaps and nozzle collisions). Accept-risk removes the limit (whole cap).
+                        NonplanarSpiralParams params;
+                        params.line_width      = np_cfg.nozzle_diameter;
+                        params.points_per_rev  = 360;
+                        params.transition_revs = 0.5;
+                        params.max_slope_deg   = accept_risk ? 90.0 : np_cfg.max_slope_angle_deg;
 
-                            NonplanarSpiralParams params;
-                            params.line_width      = np_cfg.nozzle_diameter;
-                            params.points_per_rev  = 360;
-                            params.transition_revs = 0.5;
+                        if (cap_slope_deg > np_cfg.max_slope_angle_deg)
+                            BOOST_LOG_TRIVIAL(warning) << "Nonplanar spiral: cap slope "
+                                << cap_slope_deg << " deg exceeds the safe " << np_cfg.max_slope_angle_deg
+                                << " deg; " << (accept_risk
+                                    ? "spiralizing the whole cap anyway (accept risk) - the nozzle may collide."
+                                    : "spiralizing only the shallow top (enable 'accept collision risk' for the whole cap).");
 
-                            NonplanarSurface* surf = m_nonplanar_surface.get();
-                            std::vector<Vec3d> spiral = generate_spiral(*region, params,
-                                [surf](const Vec2d& xy) { return surf->surface_z_at(xy); });
+                        NonplanarSurface* surf = m_nonplanar_surface.get();
+                        std::vector<Vec3d> spiral = generate_spiral(*region, params,
+                            [surf](const Vec2d& xy) { return surf->surface_z_at(xy); });
 
-                            if (spiral.size() >= 2) {
-                                m_spiral_active       = true;
-                                m_spiral_object       = np_object;
-                                m_spiral_base_z       = region->base_z;
-                                m_spiral_apex_z       = region->apex_z;
-                                m_spiral_line_width   = params.line_width;
-                                m_spiral_layer_height = np_cfg.layer_height;
-                                m_spiral_points       = std::move(spiral);
-                            }
+                        if (spiral.size() >= 2) {
+                            // Suppress only the layers the spiral actually covers: slope-limiting
+                            // may start the spiral above region.base_z, and the steep ring below it
+                            // must still print as normal planar perimeters.
+                            double spiral_min_z = region->apex_z;
+                            for (const Vec3d& p : spiral)
+                                spiral_min_z = std::min(spiral_min_z, p.z());
 
-                            // Solid-backing check: the spiral is a single-pass skin, so the layer
-                            // just below it must be solid. That is governed by the object's
-                            // top_shell_layers; if it does not exceed the number of spiralized
-                            // layers there is no solid layer under the skin and it may sag.
-                            if (m_spiral_active && !np_object->layers().empty() &&
-                                !np_object->layers().front()->regions().empty()) {
-                                const int top_shell = np_object->layers().front()->regions()
-                                    .front()->region().config().top_shell_layers.value;
-                                const int spiral_n = (max_top > 0) ? max_top
-                                    : (region->last_layer - region->first_layer + 1);
-                                if (top_shell <= spiral_n) {
-                                    BOOST_LOG_TRIVIAL(warning) << "Nonplanar spiral: top_shell_layers ("
-                                        << top_shell << ") <= spiralized layers (" << spiral_n
-                                        << ") - the skin has no solid backing and may sag."
-                                        " Increase 'Top shell layers'.";
-                                    if (m_config.nonplanar_debug.value)
-                                        file.write_format(
-                                            "; NP_DEBUG spiral: WARNING top_shell_layers=%d <= "
-                                            "spiralized=%d, no solid backing (raise top shell layers)\n",
-                                            top_shell, spiral_n);
-                                }
-                            }
-
-                            if (m_config.nonplanar_debug.value)
-                                file.write_format(
-                                    "; NP_DEBUG spiral: base_z=%.3f apex_z=%.3f base_r=%.3f "
-                                    "slope=%.1f risk=%d pts=%zu\n",
-                                    region->base_z, region->apex_z, region->base_radius,
-                                    cap_slope_deg, (int)accept_risk, m_spiral_points.size());
+                            m_spiral_active       = true;
+                            m_spiral_object       = np_object;
+                            m_spiral_base_z       = spiral_min_z;
+                            m_spiral_apex_z       = region->apex_z;
+                            m_spiral_line_width   = params.line_width;
+                            m_spiral_layer_height = np_cfg.layer_height;
+                            m_spiral_points       = std::move(spiral);
                         }
+
+                        // Solid-backing check: the spiral is a single-pass skin, so the layer just
+                        // below it must be solid. That is governed by the object's top_shell_layers;
+                        // if it does not exceed the number of spiralized layers there is no solid
+                        // layer under the skin and it may sag.
+                        if (m_spiral_active && !np_object->layers().empty() &&
+                            !np_object->layers().front()->regions().empty()) {
+                            const int top_shell = np_object->layers().front()->regions()
+                                .front()->region().config().top_shell_layers.value;
+                            const int spiral_n = (max_top > 0) ? max_top
+                                : (region->last_layer - region->first_layer + 1);
+                            if (top_shell <= spiral_n) {
+                                BOOST_LOG_TRIVIAL(warning) << "Nonplanar spiral: top_shell_layers ("
+                                    << top_shell << ") <= spiralized layers (" << spiral_n
+                                    << ") - the skin has no solid backing and may sag."
+                                    " Increase 'Top shell layers'.";
+                                if (m_config.nonplanar_debug.value)
+                                    file.write_format(
+                                        "; NP_DEBUG spiral: WARNING top_shell_layers=%d <= "
+                                        "spiralized=%d, no solid backing (raise top shell layers)\n",
+                                        top_shell, spiral_n);
+                            }
+                        }
+
+                        if (m_config.nonplanar_debug.value)
+                            file.write_format(
+                                "; NP_DEBUG spiral: base_z=%.3f apex_z=%.3f base_r=%.3f "
+                                "slope=%.1f risk=%d pts=%zu\n",
+                                m_spiral_base_z, region->apex_z, region->base_radius,
+                                cap_slope_deg, (int)accept_risk, m_spiral_points.size());
                     } else if (m_config.nonplanar_debug.value) {
                         file.write_format("; NP_DEBUG spiral: no dome cap detected, normal slicing\n");
                     }

@@ -67,9 +67,13 @@ std::optional<NonplanarTopRegion> detect_nonplanar_region(
 
 // Parameters controlling spiral generation.
 struct NonplanarSpiralParams {
-    double line_width      = 0.42;  // mm, radial pitch between successive revolutions
+    double line_width      = 0.42;  // mm, base radial pitch between successive revolutions
     int    points_per_rev  = 360;   // angular resolution (points per full turn)
     double transition_revs = 0.5;   // revolutions to blend from flat base Z to surface Z
+    // Only spiralize where the local surface slope is <= this (deg). The steeper outer
+    // part of the cap is left for normal planar perimeters, which both prevents un-bondable
+    // gaps and stops the spiral crawling on near-vertical flanks. 90 = no limit (full cap).
+    double max_slope_deg   = 90.0;
 };
 
 // Surface Z lookup: given an XY position in plate-space mm, returns the mesh surface Z
