@@ -21,6 +21,8 @@
 #include "Notebook.hpp"
 #include "UnitConversion.hpp"
 #include "PrintStatusCustomizationPanel.hpp"
+#include "Splash/SplashThemes.hpp"
+#include "Splash/SplashPreviewPanel.hpp"
 #include "GUI_Factories.hpp"
 
 #ifdef __WINDOWS__
@@ -2271,73 +2273,133 @@ void PreferencesDialog::create_items()
 
     
     //////////////////////////
-//// CUSTOMIZATION TAB                                                             
-//////////////////////////
-m_pref_tabs->AppendItem(_L("Customization"));                                    
-f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));                        
-g_sizer = f_sizers.back();                                                       
-g_sizer->AddGrowableCol(0, 1);                                                   
+    //// CUSTOMIZATION TAB                                                             
+    //////////////////////////
+    m_pref_tabs->AppendItem(_L("Customization"));                                    
+    f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));                        
+    g_sizer = f_sizers.back();                                                       
+    g_sizer->AddGrowableCol(0, 1);                                                   
 
-    //// CUSTOMIZATION > UserQuickModels Menu                                                    
-create_userQuickModels_tab(g_sizer);
+        //// CUSTOMIZATION > UserQuickModels Menu                                                    
+    create_userQuickModels_tab(g_sizer);
+        
+    //// CUSTOMIZATION > Tab Icons                                                    
+    g_sizer->Add(create_item_title(_L("Tab Icons")), 1, wxEXPAND);                  
+
+    // Map AppConfig string values to combobox indices                               
+    // Matches TabAnimMode enum order in Notebook.hpp                                
+    {                                                                                
+        // Build index from current AppConfig value, defaulting to 0 (Always)       
+        const std::vector<wxString> anim_labels = {                                 
+            _L("Always (active + hover)"),                                           
+            _L("Active tab only"),                                                   
+            _L("Hover only"),                                                        
+            _L("Never (static icons)"),                                              
+        };                                                                           
+        const std::vector<std::string> anim_values = {                              
+            "always", "active_only", "hover_only", "never"                          
+        };                                                                           
+
+        // Resolve current index safely, defaults to 0 if key is missing           
+        std::string cur = app_config->get("tab_icon_anim_mode");                   
+        unsigned int cur_idx = 0;                                                   
+        for (unsigned int i = 0; i < anim_values.size(); ++i) {                    
+            if (anim_values[i] == cur) { cur_idx = i; break; }                     
+        }                                                                            
+
+        // Use the base helper directly so we control the initial index             
+        auto [sizer_anim, combo_anim] = create_item_combobox_base(                 
+            _L("Animated tab icons"),                                               
+            _L("Controls when tab bar icons animate.\n"                             
+               "Always: animates on the active tab and when hovering.\n"            
+               "Active only: only the selected tab animates.\n"                     
+               "Hover only: animates while hovering over a tab.\n"                  
+               "Never: icons are always static."),                                  
+            "tab_icon_anim_mode",                                                   
+            anim_labels,                                                            
+            cur_idx);                                                               
+
+        // Save to AppConfig and apply live when selection changes                  
+        combo_anim->GetDropDown().Bind(wxEVT_COMBOBOX,                             
+            [anim_values](wxCommandEvent& e) {                                      
+                int sel = e.GetSelection();                                         
+                if (sel < 0 || sel >= (int)anim_values.size()) return;            
+                wxGetApp().app_config->set("tab_icon_anim_mode",                  
+                                           anim_values[sel]);                      
+                // Apply live, no restart needed                                   
+                if (auto* nb = dynamic_cast<Notebook*>(                            
+                        wxGetApp().mainframe->m_tabpanel))                         
+                    nb->GetBtnsListCtrl()->RefreshAnimMode();                        
+                e.Skip();                                                           
+            });                                                                     
+
+        combo_anim->SetMinSize(wxSize(FromDIP(220), -1));
+        g_sizer->Add(sizer_anim);                                                  
+    }                                                                               
+
+    // Splash theme selector + live preview. Writes app/splash_theme (takes
+    // effect next launch). The preview animates live because the Preferences
+    // dialog runs a normal event loop.
+    {
+        g_sizer->Add(create_item_title(_L("Splash Screen")), 1, wxEXPAND);
+
+        // First two entries are special: classic static splash, and "follow the
+        // active print-status icon theme". The rest are the animated themes.
+        std::vector<wxString>    splashThemeLabels = { _L("Default (classic)"), _L("Match print status theme"),
+                                                       _L("Circuit"), _L("Makerspace"), _L("CRASH Space"),
+                                                       _L("Synthwave"), _L("Cyberpunk"), _L("Deep Sea"),
+                                                       _L("Retro Gaming"), _L("Fantasy"), _L("Techs-alotl") };
+        std::vector<std::string> splashThemeKeys   = { kSplashClassicKey(), kSplashMatchStatusKey(),
+                                                       "circuit", "makerspace", "crashspace",
+                                                       "synthwave", "cyberpunk", "deepsea",
+                                                       "retro", "fantasy", "techsalotl" };
+        std::string cur = app_config->get("splash_theme");
+        if (cur.empty())
+            cur = "circuit";
+        unsigned int cur_idx = 2;   // default to Circuit
+        for (size_t i = 0; i < splashThemeKeys.size(); ++i)
+            if (splashThemeKeys[i] == cur) { cur_idx = (unsigned int) i; break; }
+
+        auto [splash_theme_sizer, splash_theme_combo] = create_item_combobox_base(
+            _L("Splash theme"),
+            _L("Choose the splash screen shown at startup. Takes effect on next launch."),
+            "splash_theme", splashThemeLabels, cur_idx);
+        splash_theme_combo->SetMinSize(wxSize(FromDIP(220), -1));
+        g_sizer->Add(splash_theme_sizer);
+
+        auto* splash_preview = new SplashPreviewPanel(m_parent, theme_from_key(cur));
+        // Point the preview at whatever key is currently selected.
+        auto apply_preview = [splash_preview](const std::string& key) {
+            if (key == kSplashClassicKey())
+                splash_preview->SetClassic();
+            else if (key == kSplashMatchStatusKey())
+                splash_preview->SetTheme(theme_from_status_id(
+                    wxGetApp().app_config->get("print_status_active_theme")));
+            else
+                splash_preview->SetTheme(theme_from_key(key));
+        };
+        apply_preview(cur);
+
+        auto* preview_row = new wxBoxSizer(wxHORIZONTAL);
+        preview_row->AddSpacer(FromDIP(DESIGN_LEFT_MARGIN));
+        preview_row->Add(splash_preview, 0, wxTOP | wxBOTTOM, FromDIP(6));
+        g_sizer->Add(preview_row);
+
+        splash_theme_combo->GetDropDown().Bind(wxEVT_COMBOBOX,
+            [this, splashThemeKeys, apply_preview](wxCommandEvent& e) {
+                int sel = e.GetSelection();
+                if (sel >= 0 && sel < (int) splashThemeKeys.size()) {
+                    app_config->set("splash_theme", splashThemeKeys[sel]);
+                    apply_preview(splashThemeKeys[sel]);
+                }
+                e.Skip();
+            });
+    }
+
     
-//// CUSTOMIZATION > Tab Icons                                                    
-g_sizer->Add(create_item_title(_L("Tab Icons")), 1, wxEXPAND);                  
-
-// Map AppConfig string values to combobox indices                               
-// Matches TabAnimMode enum order in Notebook.hpp                                
-{                                                                                
-    // Build index from current AppConfig value, defaulting to 0 (Always)       
-    const std::vector<wxString> anim_labels = {                                 
-        _L("Always (active + hover)"),                                           
-        _L("Active tab only"),                                                   
-        _L("Hover only"),                                                        
-        _L("Never (static icons)"),                                              
-    };                                                                           
-    const std::vector<std::string> anim_values = {                              
-        "always", "active_only", "hover_only", "never"                          
-    };                                                                           
-
-    // Resolve current index safely, defaults to 0 if key is missing           
-    std::string cur = app_config->get("tab_icon_anim_mode");                   
-    unsigned int cur_idx = 0;                                                   
-    for (unsigned int i = 0; i < anim_values.size(); ++i) {                    
-        if (anim_values[i] == cur) { cur_idx = i; break; }                     
-    }                                                                            
-
-    // Use the base helper directly so we control the initial index             
-    auto [sizer_anim, combo_anim] = create_item_combobox_base(                 
-        _L("Animated tab icons"),                                               
-        _L("Controls when tab bar icons animate.\n"                             
-           "Always: animates on the active tab and when hovering.\n"            
-           "Active only: only the selected tab animates.\n"                     
-           "Hover only: animates while hovering over a tab.\n"                  
-           "Never: icons are always static."),                                  
-        "tab_icon_anim_mode",                                                   
-        anim_labels,                                                            
-        cur_idx);                                                               
-
-    // Save to AppConfig and apply live when selection changes                  
-    combo_anim->GetDropDown().Bind(wxEVT_COMBOBOX,                             
-        [anim_values](wxCommandEvent& e) {                                      
-            int sel = e.GetSelection();                                         
-            if (sel < 0 || sel >= (int)anim_values.size()) return;            
-            wxGetApp().app_config->set("tab_icon_anim_mode",                  
-                                       anim_values[sel]);                      
-            // Apply live, no restart needed                                   
-            if (auto* nb = dynamic_cast<Notebook*>(                            
-                    wxGetApp().mainframe->m_tabpanel))                         
-                nb->GetBtnsListCtrl()->RefreshAnimMode();                        
-            e.Skip();                                                           
-        });                                                                     
-
-    combo_anim->SetMinSize(wxSize(FromDIP(220), -1));
-    g_sizer->Add(sizer_anim);                                                  
-}                                                                               
-
-//// CUSTOMIZATION > Realistic View
+//// CUSTOMIZATION > Print Status Customization
 // NOTE: no new f_sizers.push_back here, we stay on the same g_sizer as Tab Icons above
-g_sizer->Add(create_item_title(_L("Realistic View")), 1, wxEXPAND);
+g_sizer->Add(create_item_title(_L("Print Status Customization")), 1, wxEXPAND);
 
 auto* custom_panel = new PrintStatusCustomizationPanel(m_parent);
 g_sizer->Add(custom_panel, 1, wxEXPAND);
