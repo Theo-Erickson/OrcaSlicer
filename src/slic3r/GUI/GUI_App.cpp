@@ -120,6 +120,9 @@
 
 #include "BitmapCache.hpp"
 #include "Notebook.hpp"
+#include "Splash/SplashFrame.hpp"
+#include "Splash/SplashThemes.hpp"
+#include "Splash/NativeSplash.hpp"
 #include "Widgets/Label.hpp"
 #include "Widgets/ProgressDialog.hpp"
 
@@ -2781,8 +2784,14 @@ bool GUI_App::on_init_inner()
         app_config->set("version", SLIC3R_VERSION);
     }
 
-    // Orca: use wxWeakRef to provent wild pointer.
-    wxWeakRef<SplashScreen> scrn = nullptr;
+    // The splash may be one of three things: the Windows native animated splash
+    // (its own thread/window, animates during the blocking startup), the wx
+    // SplashFrame (stepped animation on Mac/Linux), or the legacy static
+    // SplashScreen. They have no common base, so drive them through two
+    // type-erased callbacks captured at creation: splash_set_text / splash_destroy.
+    bool                                 has_splash      = false;
+    std::function<void(const wxString&)> splash_set_text = [](const wxString&) {};
+    std::function<void()>                splash_destroy  = [] {};
     if (app_config->get("show_splash_screen") == "true") {
         // Detect position (display) to show the splash screen
         // Now this position is equal to the mainframe position
@@ -2794,10 +2803,49 @@ bool GUI_App::on_init_inner()
         }
 
         BOOST_LOG_TRIVIAL(info) << "begin to show the splash screen...";
-        //BBS use BBL splashScreen
-        scrn = new SplashScreen(splashscreen_pos);
+
+        // The app/splash_theme value selects one of the 9 animated themes, or a
+        // sentinel: "classic" (legacy static splash) / "match_status" (follow the
+        // active print-status icon theme). The legacy app/splash_animated=="false"
+        // is still honoured as a classic override for backward compatibility.
+        std::string theme_key = app_config->get("app", "splash_theme");
+        if (theme_key.empty()) {
+            // Empty-string fallback default (not a registered default).
+            theme_key = "circuit";
+            app_config->set("app", "splash_theme", theme_key);
+        }
+        const bool use_classic = theme_key == kSplashClassicKey()
+                              || app_config->get("app", "splash_animated") == "false";
+        if (!use_classic) {
+            SplashTheme theme = (theme_key == kSplashMatchStatusKey())
+                                    ? theme_from_status_id(app_config->get("print_status_active_theme"))
+                                    : theme_from_key(theme_key);
+#ifdef _WIN32
+            // Native background-thread splash: keeps animating while the main
+            // thread is blocked in synchronous init (no wx event loop yet).
+            auto* native = new NativeSplash(theme, format_display_version(), "CrashSlicer", splashscreen_pos);
+            native->Start();
+            has_splash      = true;
+            splash_set_text = [native](const wxString& t) { native->SetStatus(t); };
+            splash_destroy  = [native] { native->Stop(); delete native; };
+#else
+            auto* frame = new SplashFrame(theme, splashscreen_pos);
+            frame->Show();
+            has_splash = true;
+            wxWeakRef<SplashFrame> ref = frame;
+            splash_set_text = [ref](const wxString& t) { if (ref) ref->SetText(t); };
+            splash_destroy  = [ref] { if (ref) ref->Destroy(); };
+#endif
+        } else {
+            //BBS use BBL splashScreen
+            auto* ss = new SplashScreen(splashscreen_pos);
+            has_splash = true;
+            wxWeakRef<SplashScreen> ref = ss;
+            splash_set_text = [ref](const wxString& t) { if (ref) ref->SetText(t); };
+            splash_destroy  = [ref] { if (ref) ref->Destroy(); };
+        }
         wxYield();
-        scrn->SetText(_L("Loading configuration") + dots);
+        splash_set_text(_L("Loading configuration") + dots);
     }
 
     BOOST_LOG_TRIVIAL(info) << "loading systen presets...";
@@ -2976,7 +3024,7 @@ bool GUI_App::on_init_inner()
             // Enable all substitutions (in both user and system profiles), but log the substitutions in user profiles only.
             // If there are substitutions in system profiles, then a "reconfigure" event shall be triggered, which will force
             // installation of a compatible system preset, thus nullifying the system preset substitutions.
-            if (scrn) { scrn->SetText(_L("Loading printer & filament profiles") + dots); wxYield(); }
+            if (has_splash) { splash_set_text(_L("Loading printer & filament profiles") + dots); wxYield(); }
             init_params->preset_substitutions = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
         }
         catch (const std::exception& ex) {
@@ -3005,9 +3053,9 @@ bool GUI_App::on_init_inner()
     }
 #endif
 
-    if (scrn) {
+    if (has_splash) {
         const auto scrn_txt = _L("Creating main window") + dots;
-        scrn->SetText(scrn_txt);
+        splash_set_text(scrn_txt);
         wxYield();
     }
     BOOST_LOG_TRIVIAL(info) << "create the main window";
@@ -3035,7 +3083,7 @@ bool GUI_App::on_init_inner()
             plater_->set_printer_technology(ptFFF);
     }
     else {
-        if (scrn) { scrn->SetText(_L("Loading current preset") + dots); wxYield(); }
+        if (has_splash) { splash_set_text(_L("Loading current preset") + dots); wxYield(); }
         load_current_presets();
     }
 
@@ -3049,10 +3097,10 @@ bool GUI_App::on_init_inner()
 #ifdef __WINDOWS__
     mainframe->topbar()->SaveNormalRect();
 #endif
-    if (scrn) { scrn->SetText(_L("Showing main window") + dots); wxYield(); }
+    if (has_splash) { splash_set_text(_L("Showing main window") + dots); wxYield(); }
     mainframe->Show(true);
     // Close the splash now that the main UI is visible.
-    if (scrn) { scrn->Destroy(); scrn = nullptr; }
+    if (has_splash) { splash_destroy(); has_splash = false; }
     BOOST_LOG_TRIVIAL(info) << "main frame firstly shown";
 
 //#if BBL_HAS_FIRST_PAGE

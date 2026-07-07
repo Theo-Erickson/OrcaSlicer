@@ -455,6 +455,18 @@ set(SLIC3R_GUI_SOURCES
     GUI/PrinterStatusPoller.hpp
     GUI/PrintStatusThemeManager.cpp
     GUI/PrintStatusThemeManager.hpp
+    GUI/Splash/SplashFrame.cpp
+    GUI/Splash/SplashFrame.hpp
+    GUI/Splash/SplashThemes.cpp
+    GUI/Splash/SplashThemes.hpp
+    GUI/Splash/SplashRenderers.cpp
+    GUI/Splash/SplashRenderers.hpp
+    GUI/Splash/SplashCompose.cpp
+    GUI/Splash/SplashCompose.hpp
+    GUI/Splash/SplashPreviewPanel.cpp
+    GUI/Splash/SplashPreviewPanel.hpp
+    GUI/Splash/NativeSplash.cpp
+    GUI/Splash/NativeSplash.hpp
     GUI/PrintStatusCustomizationPanel.hpp
     GUI/PrintStatusCustomizationPanel.cpp
     GUI/SkipPartCanvas.cpp
