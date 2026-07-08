@@ -7,12 +7,14 @@
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
 #include <wx/mstream.h>
+#include <wx/menu.h>
 
 namespace Slic3r {
 namespace GUI {
 
 wxBEGIN_EVENT_TABLE(PrintStatusIcon, wxPanel)
     EVT_LEFT_UP(PrintStatusIcon::OnClick)
+    EVT_RIGHT_UP(PrintStatusIcon::OnRightClick)
 wxEND_EVENT_TABLE()
 
 // ---------------------------------------------------------------------------
@@ -42,6 +44,8 @@ void PrintStatusIcon::Build()
         wxAC_DEFAULT_STYLE | wxAC_NO_AUTORESIZE | wxBORDER_NONE);
     m_anim->SetBackgroundColour(GetBackgroundColour());
     m_anim->Bind(wxEVT_LEFT_UP, &PrintStatusIcon::OnClick, this);
+    // Child controls swallow mouse events, so forward right-clicks too.
+    m_anim->Bind(wxEVT_RIGHT_UP, &PrintStatusIcon::OnRightClick, this);
     row->Add(m_anim, 0, wxALIGN_CENTER_VERTICAL);
 
     // ── Debug label ───────────────────────────────────────────────────────
@@ -60,6 +64,7 @@ void PrintStatusIcon::Build()
     m_text->SetMinSize(wxSize(best.GetWidth() + 4, best.GetHeight()));
 
     m_text->Bind(wxEVT_LEFT_UP, &PrintStatusIcon::OnClick, this);
+    m_text->Bind(wxEVT_RIGHT_UP, &PrintStatusIcon::OnRightClick, this);
     row->Add(m_text, 0, wxALIGN_CENTER_VERTICAL);
 
     SetSizerAndFit(row);
@@ -87,6 +92,11 @@ void PrintStatusIcon::SetStatusLabel(const wxString& label)
 void PrintStatusIcon::BindClickHandler(std::function<void()> handler)
 {
     m_on_click = std::move(handler);
+}
+
+void PrintStatusIcon::BindOpenPreferencesHandler(std::function<void()> handler)
+{
+    m_on_open_prefs = std::move(handler);
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +264,48 @@ void PrintStatusIcon::OnClick(wxMouseEvent& evt)
 {
     if (m_on_click) m_on_click();
     evt.Skip();
+}
+
+void PrintStatusIcon::OnRightClick(wxMouseEvent& /*evt*/)
+{
+    ShowThemeMenu();
+}
+
+// ---------------------------------------------------------------------------
+// Right-click theme menu
+// ---------------------------------------------------------------------------
+void PrintStatusIcon::ShowThemeMenu()
+{
+    auto&       mgr    = PrintStatusThemeManager::Get();
+    const auto& themes = mgr.Themes();
+    const int   active = mgr.ActiveIndex();
+
+    // ID ranges: themes occupy [ID_THEME_BASE, ID_THEME_BASE + count).
+    static constexpr int ID_THEME_BASE = wxID_HIGHEST + 1;
+    static constexpr int ID_OPEN_PREFS = wxID_HIGHEST + 500;
+    const int count = static_cast<int>(themes.size());
+
+    wxMenu menu;
+    for (int i = 0; i < count; ++i) {
+        wxString name = wxString::FromUTF8(themes[i].display_name.c_str());
+        wxMenuItem* it = menu.AppendRadioItem(ID_THEME_BASE + i, name);
+        if (i == active) it->Check(true);
+    }
+    menu.AppendSeparator();
+    menu.Append(ID_OPEN_PREFS, "Print Status Theme Settings...");
+
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED,
+        [this, count](wxCommandEvent& e) {
+            const int id = e.GetId();
+            if (id >= ID_THEME_BASE && id < ID_THEME_BASE + count) {
+                PrintStatusThemeManager::Get().SetActiveTheme(id - ID_THEME_BASE);
+                ForceRefresh();
+            } else if (id == ID_OPEN_PREFS) {
+                if (m_on_open_prefs) m_on_open_prefs();
+            }
+        });
+
+    PopupMenu(&menu);
 }
 
 } // namespace GUI

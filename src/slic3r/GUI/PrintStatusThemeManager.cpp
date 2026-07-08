@@ -118,6 +118,25 @@ wxFileName PrintStatusThemeManager::UserThemesDir() const
     return m_user_themes_dir;
 }
 
+std::vector<wxFileName> PrintStatusThemeManager::DefaultThemeZips()
+{
+    std::vector<wxFileName> zips;
+    wxFileName backup = ResourcesThemesDir();
+    backup.AppendDir("_DEFAULT BACKUP");
+    if (!backup.DirExists()) return zips;
+
+    wxDir dir(backup.GetPath());
+    if (!dir.IsOpened()) return zips;
+
+    wxString name;
+    bool ok = dir.GetFirst(&name, "*.zip", wxDIR_FILES);
+    while (ok) {
+        zips.emplace_back(backup.GetPath(), name);
+        ok = dir.GetNext(&name);
+    }
+    return zips;
+}
+
 bool PrintStatusThemeManager::IsLocked(int index) const
 {
     if (index < 0 || index >= (int)m_themes.size()) return true;

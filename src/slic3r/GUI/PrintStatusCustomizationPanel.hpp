@@ -43,6 +43,7 @@ private:
     void OnImportZip   (wxCommandEvent& evt);
     void OnExportZip   (wxCommandEvent& evt);
     void OnDeleteTheme (wxCommandEvent& evt);
+    void OnRestoreDefaults(wxCommandEvent& evt);
     void OnApply       (wxCommandEvent& evt);
     void OnCancel      (wxCommandEvent& evt);
     
@@ -56,6 +57,7 @@ private:
     wxButton*     m_btn_import     { nullptr };
     wxButton*     m_btn_export     { nullptr };
     wxButton*     m_btn_delete     { nullptr };
+    wxButton*     m_btn_restore    { nullptr };
     wxStaticText* m_footer_label   { nullptr };
     wxButton*     m_btn_apply      { nullptr };
  

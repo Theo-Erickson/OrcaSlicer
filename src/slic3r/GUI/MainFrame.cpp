@@ -1894,6 +1894,13 @@ wxBoxSizer* MainFrame::create_side_tools()
         select_tab(size_t(TabPosition::tpMonitor));
     });
 
+    // Right-click "Print Status Theme Settings…" opens Preferences at the
+    // Customization tab (index 5: General, Control, Graphics, Online,
+    // Associate, Customization).
+    m_print_status_icon->BindOpenPreferencesHandler([]() {
+        wxGetApp().open_preferences(5);
+    });
+
     // default to Idle
     m_print_status_icon->SetState(PrintState::IDLE);
 

@@ -152,6 +152,11 @@ public:
     wxFileName                            ResourcesThemesDir();
     wxFileName                            UserThemesDir() const;
 
+    // Absolute paths to the pristine factory-default theme zips bundled under
+    // resources/.../themes/_DEFAULT BACKUP/.  Used by the "Restore Defaults"
+    // UI to re-import factory themes (overwriting user copies of the same id).
+    std::vector<wxFileName>               DefaultThemeZips();
+
     // Root folder for all themes.
     wxFileName ThemesDir() const { return m_themes_dir; }
 

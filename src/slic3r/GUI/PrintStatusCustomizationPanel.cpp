@@ -8,6 +8,7 @@
 #include <wx/textdlg.h>
 #include <wx/msgdlg.h>
 #include <wx/image.h>
+#include <wx/choicdlg.h>
  
 namespace Slic3r {
 namespace GUI {
@@ -121,7 +122,14 @@ void PrintStatusCustomizationPanel::BuildTopBar(wxSizer* root)
     m_btn_delete = new wxButton(this, wxID_ANY, "Delete",
                                 wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     m_btn_delete->Bind(wxEVT_BUTTON, &PrintStatusCustomizationPanel::OnDeleteTheme, this);
-    row->Add(m_btn_delete, 0, wxALIGN_CENTER_VERTICAL);
+    row->Add(m_btn_delete, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+
+    m_btn_restore = new wxButton(this, wxID_ANY, "Restore defaults...",
+                                 wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    m_btn_restore->SetToolTip("Re-import factory default themes, overwriting "
+                              "existing copies of the same name.");
+    m_btn_restore->Bind(wxEVT_BUTTON, &PrintStatusCustomizationPanel::OnRestoreDefaults, this);
+    row->Add(m_btn_restore, 0, wxALIGN_CENTER_VERTICAL);
  
     row->AddSpacer(8);
     root->Add(row, 0, wxEXPAND);
@@ -197,22 +205,24 @@ void PrintStatusCustomizationPanel::BuildGrid(wxSizer* root)
         auto* pick_sizer = new wxBoxSizer(wxHORIZONTAL);
  
         int idx = i;  // capture for lambdas
-        //Fixed width so all Browse buttons are the same size across all rows.
-        //// FromDIP(220) scales correctly on HiDPI displays.
+        // Fixed, compact width so the Browse control stays small instead of
+        // stretching across the whole row. FromDIP scales on HiDPI displays;
+        // the chosen filename is shown as a hover tooltip, not in the field.
         row.file_picker = new wxFilePickerCtrl(
             pick_panel, wxID_ANY,
             wxEmptyString,
             "Choose icon file",
             "Image files (*.gif;*.png)|*.gif;*.png",
-            wxDefaultPosition, wxDefaultSize,
+            wxDefaultPosition, wxSize(FromDIP(120), -1),
             wxFLP_OPEN | wxFLP_FILE_MUST_EXIST);
-        
+
         row.file_picker->Bind(wxEVT_FILEPICKER_CHANGED,
             [this, idx](wxFileDirPickerEvent& e) {
                 OnFileChosen(idx, e.GetPath());
             });
-        
-        pick_sizer->Add(row.file_picker, 1, wxALIGN_CENTER_VERTICAL);
+
+        // proportion 0: keep the picker at its fixed width (do not stretch).
+        pick_sizer->Add(row.file_picker, 0, wxALIGN_CENTER_VERTICAL);
  
         // Badge is hidden filename shown as tooltip instead.
         // We keep the pointer alive for RefreshRowLabel() logic but
@@ -701,6 +711,72 @@ void PrintStatusCustomizationPanel::OnImportZip(wxCommandEvent& /*evt*/)
     UpdateFooterLabel();
 }
  
+void PrintStatusCustomizationPanel::OnRestoreDefaults(wxCommandEvent& /*evt*/)
+{
+    auto& mgr = PrintStatusThemeManager::Get();
+    std::vector<wxFileName> zips = mgr.DefaultThemeZips();
+    if (zips.empty()) {
+        wxMessageBox("No default themes were found to restore.\n\nExpected them "
+                     "under resources/images/print_status/gifs/themes/_DEFAULT BACKUP/.",
+                     "Restore Defaults", wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+
+    // Checklist of default themes (by zip name, which becomes the theme id).
+    wxArrayString names;
+    for (auto& z : zips) names.Add(z.GetName());
+
+    wxMultiChoiceDialog dlg(this,
+        "Select the default themes to restore. Any existing theme with the "
+        "same name will be overwritten with the factory version.",
+        "Restore Default Themes", names);
+    if (dlg.ShowModal() != wxID_OK) return;
+
+    wxArrayInt sel = dlg.GetSelections();
+    if (sel.empty()) return;
+
+    int      ok_count = 0;
+    wxString errors;
+    for (size_t i = 0; i < sel.size(); ++i) {
+        const int idx = sel[i];
+        wxString err;
+        // rescan=false: batch import, rescan once at the end.
+        if (mgr.ImportZip(zips[idx].GetFullPath(), err,
+                          /*rescan=*/false, /*switch_to_new=*/false))
+            ++ok_count;
+        else
+            errors += "\n- " + names[idx] + ": " + err;
+    }
+
+    mgr.Rescan();
+
+    // Sync the panel UI to the refreshed theme list.
+    m_pending.clear();
+    m_editing_index = mgr.ActiveIndex();
+    RebuildThemeDropdown();
+    m_theme_dropdown->SetSelection(m_editing_index);
+
+    const auto& states = PrintStatusThemeManager::AllStates();
+    for (int i = 0; i < (int)states.size(); ++i) {
+        RefreshPreview(i);
+        RefreshRowLabel(i);
+    }
+    RefreshEditableState();
+    UpdateFooterLabel();
+
+    // Refresh the header status icon in case the active theme's assets changed.
+    if (wxGetApp().mainframe) {
+        wxCommandEvent evt(EVT_PRINT_STATUS_THEME_CHANGED);
+        evt.SetEventObject(this);
+        wxPostEvent(wxGetApp().mainframe->GetEventHandler(), evt);
+    }
+
+    wxString msg = wxString::Format("Restored %d default theme(s).", ok_count);
+    if (!errors.empty())
+        msg += "\n\nSome themes could not be restored:" + errors;
+    wxMessageBox(msg, "Restore Defaults", wxOK | wxICON_INFORMATION, this);
+}
+
 void PrintStatusCustomizationPanel::OnExportZip(wxCommandEvent& /*evt*/)
 {
     const auto& themes = PrintStatusThemeManager::Get().Themes();

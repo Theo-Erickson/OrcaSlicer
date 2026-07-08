@@ -1564,9 +1564,18 @@ void MenuFactory::init_user_models_submenu(wxMenu* parent_menu, ModelVolumeType 
         }
     }
 
-    // Bind to the SUBMENU opening, not the parent menu opening.
-    // This fires only when the user hovers over "Add User Models",
-    // which is the right time to refresh the file list.
+    // Refresh the file list when the "Add User Models" submenu itself opens.
+    //
+    // IMPORTANT: only rebuild on the SUBMENU's open event, never on the parent
+    // (containing) menu's open. rebuild_user_models_submenu() swaps in a fresh
+    // submenu and deletes the old one via CallAfter; if that fires while the
+    // parent popup is still displayed, the deferred delete runs inside the
+    // popup's nested event loop and destroys the live submenu — wiping its
+    // item icons and click handlers. The submenu's own open event fires only
+    // as it is about to be shown, after the parent has finished, so the swap
+    // is safe there. (On Windows this event is unreliable, so the explicit
+    // "Refresh List" item is provided as a manual fallback — it runs after the
+    // menu is dismissed and is therefore always safe.)
     m_parent->Bind(wxEVT_MENU_OPEN, [this, parent_menu](wxMenuEvent& e) {
         // Find the current submenu for this parent (may have been rebuilt)
         for (int i = 0; i < (int)m_user_models_parent_menus.size(); i++) {
@@ -1683,7 +1692,13 @@ wxMenu* MenuFactory::build_user_models_submenu(wxMenu* parent, ModelVolumeType t
     append_menu_item(sub_menu, wxID_ANY, _L("Open Models Folder..."), "",
         [folder_str](wxCommandEvent&) {
             open_folder_in_explorer(folder_str);
-        }, "menu_open_folder", parent);      
+        }, "menu_open_folder", parent);
+
+    // Manual refresh — rescans the folder and rebuilds this list.
+    append_menu_item(sub_menu, wxID_ANY, _L("Refresh List"), "",
+        [this, parent](wxCommandEvent&) {
+            rebuild_user_models_submenu(parent);
+        }, "", parent);
 
     // Settings
     append_menu_item(sub_menu, wxID_ANY, _L("Settings..."), "",

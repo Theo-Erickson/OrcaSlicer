@@ -59,12 +59,20 @@ public:
     // Called when user clicks the icon.
     void BindClickHandler(std::function<void()> handler);
 
+    // Called when the user picks "Print Status Theme Settings…" from the
+    // right-click menu (MainFrame wires this to open the Preferences dialog).
+    void BindOpenPreferencesHandler(std::function<void()> handler);
+
     // Force a refresh of the Icon
     void ForceRefresh();
-    
+
 private:
     void Build();
     void Apply(PrintState state, int progress_pct);
+
+    // Build and pop up the right-click menu: a radio list of installed
+    // print-status themes plus an entry to open the preferences page.
+    void ShowThemeMenu();
 
     static wxAnimation LoadAnim(PrintState state);
     static wxString    gif_name (PrintState state);
@@ -72,6 +80,7 @@ private:
     static wxColour    LabelColour(PrintState state);
 
     void OnClick(wxMouseEvent& evt);
+    void OnRightClick(wxMouseEvent& evt);
 
     int              m_icon_size;
     PrintState       m_state    { PrintState::OFFLINE };
@@ -81,6 +90,7 @@ private:
     wxStaticText*    m_text  { nullptr };
 
     std::function<void()> m_on_click;
+    std::function<void()> m_on_open_prefs;
 
     wxDECLARE_EVENT_TABLE();
 };

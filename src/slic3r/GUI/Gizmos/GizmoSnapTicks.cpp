@@ -156,6 +156,11 @@ void GizmoSnapTicks::build_move_ticks(const BoundingBoxf3&    bbox,
             // Use PlateCenter category so X/Y center spines are also cyan
             add_single(TickCategory::PlateCenter, 0, cx, "Plate center X");
             add_single(TickCategory::PlateCenter, 1, cy, "Plate center Y");
+            // Plate bottom (Z): a cyan tick sitting on the bed directly below
+            // the object.  Snapping drops the object so its base rests on the
+            // plate (bottom at Z=0, i.e. Z position reads 0.0).  The special
+            // "drop-to-bed" handling lives in GLGizmoMove's snap application.
+            add_single(TickCategory::PlateCenter, 2, 0.0, "Plate bottom Z");
             // XY center: snaps both axes simultaneously
             SnapTick t;
             t.category      = TickCategory::PlateCenter;
@@ -360,6 +365,18 @@ void GizmoSnapTicks::rebuild_models_if_needed()
             g.add_vertex(Vec3f(0, -s*0.6f, 0)); // 6
             g.add_vertex(Vec3f(0,  s*0.6f, 0)); // 7
             g.add_line(4,5); g.add_line(6,7);
+
+        } else if (t.category == TickCategory::PlateCenter && t.axes_count == 1 &&
+                   t.axes[0] == 2) {
+            // Plate bottom Z: flat cross marker lying on the bed (XY plane),
+            // marking the drop-to-bed target directly under the object.
+            const float s = CTR_S;
+            g.reserve_vertices(4); g.reserve_indices(4);
+            g.add_vertex(Vec3f(-s, 0, 0)); // 0
+            g.add_vertex(Vec3f( s, 0, 0)); // 1
+            g.add_vertex(Vec3f( 0,-s, 0)); // 2
+            g.add_vertex(Vec3f( 0, s, 0)); // 3
+            g.add_line(0, 1); g.add_line(2, 3);
 
         } else if (t.category == TickCategory::PlateCenter && t.axes_count == 1) {
             // Single-axis center (X-only or Y-only): spine perpendicular to that axis

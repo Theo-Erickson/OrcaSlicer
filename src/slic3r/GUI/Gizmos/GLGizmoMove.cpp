@@ -207,6 +207,11 @@ bool GLGizmoMove3D::on_mouse(const wxMouseEvent &mouse_event)
                     if (a >= 0 && a <= 2)
                         target(a) = clicked->world_pos(a);
                 }
+                // Plate bottom Z tick: drop the object so its base rests on
+                // the bed (bottom at Z=0) instead of sinking its center to 0.
+                if (clicked->category == TickCategory::PlateCenter &&
+                    clicked->axes_count == 1 && clicked->axes[0] == 2)
+                    target.z() = sel.get_bounding_box().size().z() * 0.5;
                 // Translate by the displacement in world coordinates
                 TransformationType tt;
                 tt.set_relative();

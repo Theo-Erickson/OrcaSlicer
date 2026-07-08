@@ -781,20 +781,25 @@ void PathPreviewPlayer::tick(float dt)
                 m_state.playing = false;
         }
     } else {
-        // Layers mode: each layer appears fully formed, one at a time.
+        // Layers mode: reveal one whole completed layer at a time at a constant
+        // rate of one layer per (1 / speed) seconds (1x = 1 s/layer, 2x = 0.5 s,
+        // …). Accumulate elapsed time and step whole layers, subtracting the
+        // slice (rather than zeroing) to preserve the remainder so the cadence
+        // stays even; the while-loop keeps the rate accurate if a frame is long
+        // or the speed is high enough to need more than one layer per frame.
         m_state.layer_timer += dt;
         const float secs_per_layer = k_spl_layers / spd;
-        if (m_state.layer_timer >= secs_per_layer) {
-            m_state.layer_timer = 0.f;
-            if (m_state.current_layer < m_state.total_layers) 
-            {
+        while (m_state.layer_timer >= secs_per_layer) {
+            m_state.layer_timer -= secs_per_layer;
+            if (m_state.current_layer < m_state.total_layers) {
                 ++m_state.current_layer;
-            }
-            else
-            {
-                m_state.playing = false;
+            } else {
+                m_state.playing     = false;
+                m_state.layer_timer = 0.f;
+                break;
             }
         }
+        m_state.move_progress = 0.f; // whole-layer look: no intra-layer animation
     }
 
     apply_to_viewer();
@@ -1266,18 +1271,14 @@ void PathPreviewPlayer::apply_to_viewer()
         moves_slider->set_as_dirty(true);
 
     } else {
-        // Layers mode: animate the layer slider incrementally.
-        // The layer_timer in tick() already handles the per-layer timing.
-        // Here we show all moves for the current layer fully (completed layer look).
-        // The layer_timer fraction gives us a smooth 0..1 within the current layer
-        // dwell period — we use it to smoothly step the layers slider so the
-        // viewer reveals each completed layer as a whole unit, advancing the
-        // vertical (Z) position of the toolpath display without X/Y move animation.
+        // Layers mode: reveal each completed layer as a whole unit. Pin the
+        // layer slider to the current layer and show all of its moves; the
+        // steady vertical motion comes from the constant-rate layer advance in
+        // tick(), one whole layer per (1 / speed) seconds.
         if (layers_slider->GetHigherValue() != layer_idx) {
             layers_slider->SetHigherValue(layer_idx);
             layers_slider->set_as_dirty(true);
         }
-        // Always show all moves in the current layer range (completed layers).
         moves_slider->SetHigherValue(moves_slider->GetMaxValue());
         moves_slider->set_as_dirty(true);
     }
