@@ -6606,7 +6606,10 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     if (m_nonplanar_surface && m_nonplanar_surface->is_enabled()) {
         switch (m_nonplanar_surface->mode()) {
         case NonplanarMode::SurfaceProjection:
-            apply_np_this_path = (path.role() == erTopSolidInfill || path.role() == erSolidInfill);
+            // Conform the top-shell solid infill AND the walls; the per-point slope gate in
+            // project_polyline_to_surface() keeps near-vertical walls planar.
+            apply_np_this_path = (path.role() == erTopSolidInfill || path.role() == erSolidInfill ||
+                                  path.role() == erExternalPerimeter || path.role() == erPerimeter);
             break;
         case NonplanarMode::SurfaceSpiral:
             break;
@@ -7019,7 +7022,13 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         << " min_z=" << min_z
         << " max_z=" << max_z
         << " delta=" << (max_z - min_z);
-    
+
+    // A path only counts as nonplanar if the projection/warp actually moved a point off the
+    // flat layer plane. Candidate paths whose points all stayed flat (deep walls below the
+    // conforming top region, or steep walls rejected by the slope gate) are emitted normally
+    // -- not coloured "Nonplanar" and not routed through the lifted-emission path.
+    apply_np_this_path = apply_np_this_path && !all_lifted.empty() && (max_z - m_nominal_z) > 1e-4;
+
     // G-code debug comment: written once per path when debug is enabled,
     // giving non-C++ users visibility into what the lifter computed.
     if (m_config.nonplanar_debug.value && apply_np_this_path && !all_lifted.empty()) {
@@ -7310,19 +7319,10 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
                 apply_role_based_fan_speed();
             }
-            // Re-evaluate apply_np_this_path in this inner scope because arc fitting
-            // is bypassed when nonplanar is active: this guard mirrors the outer flag
-            // and also prevents arc G2/G3 from being emitted for nonplanar paths.
-            bool apply_np_this_path = false;
-            if (m_nonplanar_surface && m_nonplanar_surface->is_enabled()) {
-                switch (m_nonplanar_surface->mode()) {
-                case NonplanarMode::SurfaceProjection: apply_np_this_path = (path.role() == erTopSolidInfill || path.role() == erSolidInfill); break;
-                case NonplanarMode::SurfaceSpiral:     break;
-                default: apply_np_this_path = (!m_config.nonplanar_perimeters_only.value
-                    || path.role() == erExternalPerimeter || path.role() == erPerimeter); break;
-                }
-            }
-            
+            // Use the outer apply_np_this_path, which is already narrowed to paths that
+            // actually got lifted off the flat plane: arc fitting is bypassed and G1 forced
+            // only for real nonplanar paths (candidate-but-flat paths keep their arcs).
+
             // BBS: use G1 if not enable arc fitting or has no arc fitting result or in spiral_mode mode or we are doing sloped extrusion or we are using nonplanar slicing for this path
             // Attention: G2 and G3 is not supported in spiral_mode mode
             if (!m_config.enable_arc_fitting || path.polyline.fitting_result.empty() || m_config.spiral_mode || sloped != nullptr || path.z_contoured || apply_np_this_path) {

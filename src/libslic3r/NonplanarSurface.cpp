@@ -191,15 +191,30 @@ std::vector<Vec3d> NonplanarSurface::project_polyline_to_surface(
     const double lh = m_cfg.layer_height;
     const int    n  = std::max(1, m_cfg.top_layer_count);
 
+    const double probe    = std::max(0.1, m_cfg.nozzle_diameter);   // mm, for the slope estimate
+    const double max_slope = m_cfg.max_slope_angle_deg;
+
     for (const Vec2d& xy : pts_mm) {
         double z = layer_z;
         if (lh > 1e-6) {
             if (const std::optional<double> sz = surface_z_at(xy)) {
                 const double depth = (*sz - layer_z) / lh;   // layers below the surface
                 if (depth >= -0.01 && depth < static_cast<double>(n)) {
-                    const int    k      = std::max(0, static_cast<int>(std::floor(depth)));
-                    const double target = *sz - k * lh;      // >= layer_z by construction
-                    z = layer_z + (target - layer_z) * m_cfg.z_scale;
+                    // Slope gate: leave near-vertical surfaces planar (a wall can't be
+                    // diagonalised). Estimate the surface gradient from two side probes.
+                    const auto sx = surface_z_at(Vec2d(xy.x() + probe, xy.y()));
+                    const auto sy = surface_z_at(Vec2d(xy.x(), xy.y() + probe));
+                    double slope_deg = 0.0;
+                    if (sx && sy) {
+                        const double gx = (*sx - *sz) / probe;
+                        const double gy = (*sy - *sz) / probe;
+                        slope_deg = std::atan(std::sqrt(gx * gx + gy * gy)) * 180.0 / M_PI;
+                    }
+                    if (slope_deg <= max_slope) {
+                        const int    k      = std::max(0, static_cast<int>(std::floor(depth)));
+                        const double target = *sz - k * lh;      // >= layer_z by construction
+                        z = layer_z + (target - layer_z) * m_cfg.z_scale;
+                    }
                 }
             }
         }
