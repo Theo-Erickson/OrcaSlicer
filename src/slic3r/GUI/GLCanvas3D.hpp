@@ -20,6 +20,7 @@
 #include "IMToolbar.hpp"
 #include "slic3r/GUI/3DBed.hpp"
 #include "libslic3r/Slicing.hpp"
+#include "libslic3r/AlignmentSnap.hpp"
 
 #include <float.h>
 
@@ -628,6 +629,9 @@ private:
     ArrangeSettings m_arrange_settings_fff, m_arrange_settings_sla,
         m_arrange_settings_fff_seq_print;
 
+    // Orca: alignment-snap settings (persisted to AppConfig, mirrors ArrangeSettings).
+    AlignmentSnap::SnapSettings m_snap_settings;
+
     PrinterTechnology current_printer_technology() const;
 
     bool        m_show_world_axes{true};
@@ -658,6 +662,10 @@ public:
     }
 
     void load_arrange_settings();
+    // Orca: alignment-snap settings persistence + accessor.
+    void load_snap_settings();
+    void save_snap_settings();
+    AlignmentSnap::SnapSettings& get_snap_settings() { return m_snap_settings; }
     ArrangeSettings& get_arrange_settings();// { return get_arrange_settings(this); }
     ArrangeSettings& get_arrange_settings(PrintSequence print_seq) {
         return (print_seq == PrintSequence::ByObject) ? m_arrange_settings_fff_seq_print

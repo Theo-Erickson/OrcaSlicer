@@ -1129,6 +1129,39 @@ void GLCanvas3D::load_arrange_settings()
     m_arrange_settings_fff_seq_print.is_seq_print = true;
 }
 
+// Orca: alignment-snap settings, persisted under the "snap_align" AppConfig group.
+void GLCanvas3D::load_snap_settings()
+{
+    auto* cfg = wxGetApp().app_config;
+    auto getf = [&](const char* k, double def) {
+        std::string v = cfg->get("snap_align", k);
+        return v.empty() ? def : std::stod(v);
+    };
+    auto getb = [&](const char* k, bool def) {
+        std::string v = cfg->get("snap_align", k);
+        return v.empty() ? def : (v == "1" || v == "true");
+    };
+    m_snap_settings.enabled             = getb("enabled", false);
+    m_snap_settings.sensitivity_px      = getf("sensitivity_px", 8.0);
+    m_snap_settings.strength_px         = getf("strength_px", 6.0);
+    m_snap_settings.edge_align          = getb("edge_align", true);
+    m_snap_settings.center_align        = getb("center_align", true);
+    m_snap_settings.contact             = getb("contact", true);
+    m_snap_settings.spacing_propagation = getb("spacing_propagation", true);
+}
+
+void GLCanvas3D::save_snap_settings()
+{
+    auto* cfg = wxGetApp().app_config;
+    cfg->set("snap_align", "enabled",             m_snap_settings.enabled ? "1" : "0");
+    cfg->set("snap_align", "sensitivity_px",      float_to_string_decimal_point(m_snap_settings.sensitivity_px));
+    cfg->set("snap_align", "strength_px",         float_to_string_decimal_point(m_snap_settings.strength_px));
+    cfg->set("snap_align", "edge_align",          m_snap_settings.edge_align ? "1" : "0");
+    cfg->set("snap_align", "center_align",        m_snap_settings.center_align ? "1" : "0");
+    cfg->set("snap_align", "contact",             m_snap_settings.contact ? "1" : "0");
+    cfg->set("snap_align", "spacing_propagation", m_snap_settings.spacing_propagation ? "1" : "0");
+}
+
 GLCanvas3D::ArrangeSettings& GLCanvas3D::get_arrange_settings()
 {
     PrinterTechnology ptech = current_printer_technology();
@@ -1206,6 +1239,7 @@ GLCanvas3D::GLCanvas3D(wxGLCanvas* canvas, Bed3D &bed)
     }
     m_timer_set_color.Bind(wxEVT_TIMER, &GLCanvas3D::on_set_color_timer, this);
     load_arrange_settings();
+    load_snap_settings();
 
     m_preview_anim_timer.Bind(wxEVT_TIMER, [this](wxTimerEvent&) {
         if (m_path_player.is_playing()) {
