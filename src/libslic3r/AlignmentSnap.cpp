@@ -66,7 +66,9 @@ SnapResult compute_snap(const BoundingBoxf& mover_start,
                 r.engaged[a] = true;
                 continue;
             }
-            state.engaged[a] = false; // drifted past the margin -> fresh search
+            state.engaged[a]      = false; // drifted past the margin -> fresh search
+            state.from_spacing[a] = false;
+            state.badge_cache[a].clear();
         }
 
         Cand   best { 0.0, s.sensitivity_px + 1.0 };
@@ -96,9 +98,11 @@ SnapResult compute_snap(const BoundingBoxf& mover_start,
         }
         if (found) {
             if (a == 0) r.corrected_delta.x() += best.correction; else r.corrected_delta.y() += best.correction;
-            r.engaged[a]     = true;
-            state.engaged[a] = true;
-            state.coord[a]   = engaged_line;
+            r.engaged[a]          = true;
+            state.engaged[a]      = true;
+            state.coord[a]        = engaged_line;
+            state.from_spacing[a] = false; // a hard edge/center/contact snap, not a row
+            state.badge_cache[a].clear();
         }
     }
 
@@ -124,19 +128,22 @@ SnapResult compute_snap(const BoundingBoxf& mover_start,
                 if (std::abs(slot - mover_c) * px_per_mm <= s.sensitivity_px) {
                     const double correction = slot - mover_c;
                     if (a == 0) r.corrected_delta.x() += correction; else r.corrected_delta.y() += correction;
-                    r.engaged[a]     = true;
-                    state.engaged[a] = true;
-                    state.coord[a]   = slot;
+                    r.engaged[a]          = true;
+                    state.engaged[a]      = true;
+                    state.coord[a]        = slot;
+                    state.from_spacing[a] = true;
 
-                    // Badges: existing gap, then the new gap being created.
+                    // Cache badges (existing gap, then the new gap) so they persist every frame
+                    // the row snap is held; emitted from the cache in the guide phase below.
+                    state.badge_cache[a].clear();
                     if (a == 0) {
                         const double y = ctr(row[i]->bbox, 1);
-                        r.badges.push_back(SpacingBadge{ Vec2d(ctr(row[i]->bbox, 0), y),     Vec2d(ctr(row[i + 1]->bbox, 0), y), spacing });
-                        r.badges.push_back(SpacingBadge{ Vec2d(ctr(row[i + 1]->bbox, 0), y), Vec2d(slot, y),                     spacing });
+                        state.badge_cache[a].push_back(SpacingBadge{ Vec2d(ctr(row[i]->bbox, 0), y),     Vec2d(ctr(row[i + 1]->bbox, 0), y), spacing });
+                        state.badge_cache[a].push_back(SpacingBadge{ Vec2d(ctr(row[i + 1]->bbox, 0), y), Vec2d(slot, y),                     spacing });
                     } else {
                         const double x = ctr(row[i]->bbox, 0);
-                        r.badges.push_back(SpacingBadge{ Vec2d(x, ctr(row[i]->bbox, 1)),     Vec2d(x, ctr(row[i + 1]->bbox, 1)), spacing });
-                        r.badges.push_back(SpacingBadge{ Vec2d(x, ctr(row[i + 1]->bbox, 1)), Vec2d(x, slot),                     spacing });
+                        state.badge_cache[a].push_back(SpacingBadge{ Vec2d(x, ctr(row[i]->bbox, 1)),     Vec2d(x, ctr(row[i + 1]->bbox, 1)), spacing });
+                        state.badge_cache[a].push_back(SpacingBadge{ Vec2d(x, ctr(row[i + 1]->bbox, 1)), Vec2d(x, slot),                     spacing });
                     }
                     break;
                 }
@@ -167,6 +174,10 @@ SnapResult compute_snap(const BoundingBoxf& mover_start,
             span_hi = std::max(span_hi, (p == 0 ? n.bbox.max.x() : n.bbox.max.y()));
         }
         r.lines.push_back(GuideLine{ a == 0 ? Axis::X : Axis::Y, state.coord[a], span_lo, span_hi });
+
+        // Row-spacing badges persist from the cache for as long as the row snap is held.
+        if (state.from_spacing[a])
+            r.badges.insert(r.badges.end(), state.badge_cache[a].begin(), state.badge_cache[a].end());
     }
 
     return r;

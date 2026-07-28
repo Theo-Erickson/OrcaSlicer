@@ -33,7 +33,15 @@ struct SnapResult {
     bool engaged[2] = { false, false };
 };
 
-struct SnapState { bool engaged[2] = { false, false }; double coord[2] = { 0.0, 0.0 }; };
+struct SnapState {
+    bool   engaged[2]      = { false, false };
+    double coord[2]        = { 0.0, 0.0 };
+    // Row-spacing engagements cache their badges so they persist across frames
+    // (including while the snap is held via hysteresis), instead of vanishing after
+    // the frame that first engaged them.
+    bool   from_spacing[2] = { false, false };
+    std::vector<SpacingBadge> badge_cache[2];
+};
 
 // Returns raw_delta corrected so the moved bbox snaps to targets, plus guides to draw.
 SnapResult compute_snap(const BoundingBoxf& mover_start,

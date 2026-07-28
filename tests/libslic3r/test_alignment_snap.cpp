@@ -189,6 +189,22 @@ TEST_CASE("row spacing propagates to the next slot", "[AlignmentSnap]") {
     REQUIRE(r.badges.size() >= 1);
 }
 
+TEST_CASE("row badges persist while the snap is held (hysteresis)", "[AlignmentSnap]") {
+    SnapSettings s; s.enabled = true; s.sensitivity_px = 5.0; s.strength_px = 6.0;
+    s.edge_align = false; s.center_align = false; s.contact = false;
+    s.spacing_propagation = true;
+    SnapState st;
+    std::vector<Neighbor> t = { { box(0,0,10,10), 1 }, { box(20,0,30,10), 2 } };
+    // frame 1: center 43 -> snaps to slot 45, badges emitted
+    SnapResult r1 = compute_snap(box(0,0,10,10), Vec2d(38.0, 0.0), t, s, 1.0, st);
+    REQUIRE(r1.engaged[0]);
+    REQUIRE(r1.badges.size() >= 1);
+    // frame 2: center drifts to 46, still within break-away -> badges MUST still be present
+    SnapResult r2 = compute_snap(box(0,0,10,10), Vec2d(41.0, 0.0), t, s, 1.0, st);
+    REQUIRE(r2.engaged[0]);
+    REQUIRE(r2.badges.size() >= 1);
+}
+
 TEST_CASE("row propagation requires perpendicular alignment", "[AlignmentSnap]") {
     SnapSettings s; s.enabled = true; s.sensitivity_px = 5.0;
     s.edge_align = false; s.center_align = false; s.contact = false;
