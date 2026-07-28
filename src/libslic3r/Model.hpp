@@ -387,6 +387,9 @@ public:
 
     BrimPoints              brim_points;
 
+    // Orca: participate in alignment snapping while dragging (GUI). Default true; persisted in 3mf metadata.
+    bool                    snap_alignment_enabled { true };
+
     /* This vector accumulates the total translation applied to the object by the
         center_around_origin() method. Callers might want to apply the same translation
         to new volumes before adding them to this object in order to preserve alignment

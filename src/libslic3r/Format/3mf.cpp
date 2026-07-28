@@ -900,6 +900,8 @@ ModelVolumeType type_from_string(const std::string &s)
                 for (const Metadata& metadata : obj_metadata->second.metadata) {
                     if (metadata.key == "name")
                         model_object->name = metadata.value;
+                    else if (metadata.key == "snap_alignment_enabled")
+                        model_object->snap_alignment_enabled = !(metadata.value == "0" || metadata.value == "false");
                     else
                         model_object->config.set_deserialize(metadata.key, metadata.value, config_substitutions);
                 }
@@ -3102,6 +3104,11 @@ ModelVolumeType type_from_string(const std::string &s)
                 // stores object's name
                 if (!obj->name.empty())
                     stream << "  <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << OBJECT_TYPE << "\" " << KEY_ATTR << "=\"name\" " << VALUE_ATTR << "=\"" << xml_escape(obj->name) << "\"/>\n";
+
+                // Orca: alignment-snap opt-out. Only written when disabled so default-true objects and
+                // legacy files stay clean/backward-compatible (absent key => enabled on load).
+                if (!obj->snap_alignment_enabled)
+                    stream << "  <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << OBJECT_TYPE << "\" " << KEY_ATTR << "=\"snap_alignment_enabled\" " << VALUE_ATTR << "=\"0\"/>\n";
 
                 // stores object's config data
                 for (const std::string& key : obj->config.keys()) {
