@@ -149,3 +149,54 @@ TEST_CASE("breaks away beyond margin", "[AlignmentSnap]") {
     REQUIRE_THAT(r.corrected_delta.x(), WithinAbs(12.0, 1e-6));
     REQUIRE_FALSE(st.engaged[0]);
 }
+
+// ---- Task 7: guides (alignment lines + ghost boxes) ------------------------
+
+TEST_CASE("emits an alignment line for an engaged axis", "[AlignmentSnap]") {
+    SnapSettings s; s.enabled = true; s.sensitivity_px = 5.0;
+    s.center_align = false; s.contact = false; s.spacing_propagation = false;
+    SnapState st;
+    std::vector<Neighbor> t = { { box(0,40,10,50), 1 } };
+    SnapResult r = compute_snap(box(0,0,10,10), Vec2d(2.0,0.0), t, s, 1.0, st);
+    REQUIRE(r.lines.size() >= 1);
+    REQUIRE(static_cast<int>(r.lines[0].axis) == static_cast<int>(AlignmentSnap::Axis::X));
+    REQUIRE_THAT(r.lines[0].coord, WithinAbs(0.0, 1e-6)); // the aligned x line
+}
+
+TEST_CASE("emits ghost boxes for nearby targets", "[AlignmentSnap]") {
+    SnapSettings s; s.enabled = true; s.sensitivity_px = 5.0;
+    SnapState st;
+    // near target (within reveal radius, should ghost) and a far one (should not)
+    std::vector<Neighbor> t = { { box(0,15,10,25), 1 }, { box(900,900,910,910), 2 } };
+    SnapResult r = compute_snap(box(0,0,10,10), Vec2d(2.0,0.0), t, s, 1.0, st);
+    REQUIRE(r.ghosts.size() == 1);
+}
+
+// ---- Task 8: spacing propagation (row extend) ------------------------------
+
+TEST_CASE("row spacing propagates to the next slot", "[AlignmentSnap]") {
+    SnapSettings s; s.enabled = true; s.sensitivity_px = 5.0;
+    s.edge_align = false; s.center_align = false; s.contact = false;
+    s.spacing_propagation = true;
+    SnapState st;
+    // Two aligned boxes: centers at x=5 and x=25 (spacing 20), same y-band. Next slot center = 45.
+    std::vector<Neighbor> t = { { box(0,0,10,10), 1 }, { box(20,0,30,10), 2 } };
+    // mover width 10 -> center offset 5; start center 5, raw +38 -> center 43, snaps to 45.
+    BoundingBoxf mover = box(0,0,10,10);
+    SnapResult r = compute_snap(mover, Vec2d(38.0, 0.0), t, s, 1.0, st);
+    REQUIRE(r.engaged[0]);
+    REQUIRE_THAT(r.corrected_delta.x(), WithinAbs(40.0, 1e-6)); // center -> 45
+    REQUIRE(r.badges.size() >= 1);
+}
+
+TEST_CASE("row propagation requires perpendicular alignment", "[AlignmentSnap]") {
+    SnapSettings s; s.enabled = true; s.sensitivity_px = 5.0;
+    s.edge_align = false; s.center_align = false; s.contact = false;
+    s.spacing_propagation = true;
+    SnapState st;
+    // Same spacing but staggered in Y (not a row) -> no propagation.
+    std::vector<Neighbor> t = { { box(0,0,10,10), 1 }, { box(20,50,30,60), 2 } };
+    SnapResult r = compute_snap(box(0,0,10,10), Vec2d(38.0, 0.0), t, s, 1.0, st);
+    REQUIRE_FALSE(r.engaged[0]);
+    REQUIRE_THAT(r.corrected_delta.x(), WithinAbs(38.0, 1e-6));
+}

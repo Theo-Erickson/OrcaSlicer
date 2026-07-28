@@ -15,6 +15,14 @@ namespace {
         int p = axis ^ 1;
         return lo(m, p) < hi(t, p) && lo(t, p) < hi(m, p);
     }
+
+    // Are two boxes aligned along the axis perpendicular to `axis` (share an edge or center)?
+    inline bool perp_aligned(const BoundingBoxf& x, const BoundingBoxf& y, int axis, double tol) {
+        int p = axis ^ 1;
+        return std::abs(lo(x, p)  - lo(y, p))  <= tol
+            || std::abs(ctr(x, p) - ctr(y, p)) <= tol
+            || std::abs(hi(x, p)  - hi(y, p))  <= tol;
+    }
 }
 
 SnapResult compute_snap(const BoundingBoxf& mover_start,
@@ -28,6 +36,8 @@ SnapResult compute_snap(const BoundingBoxf& mover_start,
     r.corrected_delta = raw_delta;
     if (!s.enabled || targets.empty() || px_per_mm <= 0.0)
         return r;
+
+    const double thresh_mm = s.sensitivity_px / px_per_mm;
 
     // Mover box at the raw (unsnapped) position.
     BoundingBoxf mover = mover_start;
@@ -90,6 +100,73 @@ SnapResult compute_snap(const BoundingBoxf& mover_start,
             state.engaged[a] = true;
             state.coord[a]   = engaged_line;
         }
+    }
+
+    // Spacing propagation: continue an existing evenly spaced, aligned row.
+    if (s.spacing_propagation) {
+        for (int a = 0; a < 2; ++a) {
+            if (r.engaged[a]) continue; // don't override a hard alignment
+
+            std::vector<const Neighbor*> row;
+            row.reserve(targets.size());
+            for (const Neighbor& n : targets) row.push_back(&n);
+            std::sort(row.begin(), row.end(), [&](const Neighbor* p, const Neighbor* q) {
+                return ctr(p->bbox, a) < ctr(q->bbox, a);
+            });
+
+            for (size_t i = 0; i + 1 < row.size(); ++i) {
+                if (!perp_aligned(row[i]->bbox, row[i + 1]->bbox, a, thresh_mm)) continue;
+                const double spacing = ctr(row[i + 1]->bbox, a) - ctr(row[i]->bbox, a);
+                if (spacing <= thresh_mm) continue;
+
+                const double slot    = ctr(row[i + 1]->bbox, a) + spacing; // next slot beyond the row
+                const double mover_c = (a == 0 ? mover.center().x() : mover.center().y());
+                if (std::abs(slot - mover_c) * px_per_mm <= s.sensitivity_px) {
+                    const double correction = slot - mover_c;
+                    if (a == 0) r.corrected_delta.x() += correction; else r.corrected_delta.y() += correction;
+                    r.engaged[a]     = true;
+                    state.engaged[a] = true;
+                    state.coord[a]   = slot;
+
+                    // Badges: existing gap, then the new gap being created.
+                    if (a == 0) {
+                        const double y = ctr(row[i]->bbox, 1);
+                        r.badges.push_back(SpacingBadge{ Vec2d(ctr(row[i]->bbox, 0), y),     Vec2d(ctr(row[i + 1]->bbox, 0), y), spacing });
+                        r.badges.push_back(SpacingBadge{ Vec2d(ctr(row[i + 1]->bbox, 0), y), Vec2d(slot, y),                     spacing });
+                    } else {
+                        const double x = ctr(row[i]->bbox, 0);
+                        r.badges.push_back(SpacingBadge{ Vec2d(x, ctr(row[i]->bbox, 1)),     Vec2d(x, ctr(row[i + 1]->bbox, 1)), spacing });
+                        r.badges.push_back(SpacingBadge{ Vec2d(x, ctr(row[i + 1]->bbox, 1)), Vec2d(x, slot),                     spacing });
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // Guides: ghost boxes for nearby neighbors + alignment lines for engaged axes.
+    BoundingBoxf mv = mover_start;
+    mv.min += r.corrected_delta;
+    mv.max += r.corrected_delta;
+
+    const double reveal_mm = 3.0 * thresh_mm;
+    for (const Neighbor& n : targets) {
+        const double dx = std::max({ 0.0, n.bbox.min.x() - mv.max.x(), mv.min.x() - n.bbox.max.x() });
+        const double dy = std::max({ 0.0, n.bbox.min.y() - mv.max.y(), mv.min.y() - n.bbox.max.y() });
+        if (std::sqrt(dx * dx + dy * dy) <= reveal_mm)
+            r.ghosts.push_back(GhostBox{ n.bbox });
+    }
+
+    for (int a = 0; a < 2; ++a) {
+        if (!r.engaged[a]) continue;
+        const int p = a ^ 1;
+        double span_lo = (p == 0 ? mv.min.x() : mv.min.y());
+        double span_hi = (p == 0 ? mv.max.x() : mv.max.y());
+        for (const Neighbor& n : targets) {
+            span_lo = std::min(span_lo, (p == 0 ? n.bbox.min.x() : n.bbox.min.y()));
+            span_hi = std::max(span_hi, (p == 0 ? n.bbox.max.x() : n.bbox.max.y()));
+        }
+        r.lines.push_back(GuideLine{ a == 0 ? Axis::X : Axis::Y, state.coord[a], span_lo, span_hi });
     }
 
     return r;
