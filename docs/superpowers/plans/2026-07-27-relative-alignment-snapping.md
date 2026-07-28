@@ -66,6 +66,19 @@ SnapResult compute_snap(const BoundingBoxf& mover_start,
 
 **Conventions used by every test:** boxes are given in mm; tests pass `px_per_mm = 1.0` so pixel thresholds equal mm thresholds and assertions stay readable. `BoundingBoxf` has `Vec2d min, max`; `bbox.center()` returns the midpoint.
 
+### ⚠️ Test-code conventions for THIS repo (READ BEFORE COPYING ANY TEST)
+
+This project is **Catch2 v3** and forbids `Approx` (see `tests/CLAUDE.md` rule #4). The task test blocks below are written with `Approx(x)` purely for readability. When you implement, apply these two mechanical substitutions to every test:
+
+1. **Include** — use `#include <catch2/catch_all.hpp>` (NOT `<catch2/catch.hpp>`). Add `using Catch::Matchers::WithinAbs;` after the `using namespace` lines.
+2. **Assertions** — replace every `REQUIRE(<expr> == Approx(<v>));` with:
+   ```cpp
+   REQUIRE_THAT(<expr>, WithinAbs(<v>, 1e-6));
+   ```
+   Boolean assertions like `REQUIRE(r.engaged[0] == true);` stay as-is (write `REQUIRE(r.engaged[0]);` / `REQUIRE_FALSE(r.engaged[0]);`). Do not combine comparisons with `&&` in one `REQUIRE` (rule #3) — keep them on separate lines as written.
+
+The canonical corrected form is shown in Task 1 Step 5; mirror it everywhere.
+
 ---
 
 ## Task 1: Core header + skeleton + build wiring
@@ -171,13 +184,14 @@ In `tests/libslic3r/CMakeLists.txt`, find the `add_executable(${_TEST_NAME}_test
 
 - [ ] **Step 5: Write the first (smoke) test**
 
-`tests/libslic3r/test_alignment_snap.cpp`:
+`tests/libslic3r/test_alignment_snap.cpp` (this is the canonical form — note the include and `WithinAbs` matcher; apply the same style to every later task's tests):
 ```cpp
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include "libslic3r/AlignmentSnap.hpp"
 
 using namespace Slic3r;
 using namespace Slic3r::AlignmentSnap;
+using Catch::Matchers::WithinAbs;
 
 static BoundingBoxf box(double x0, double y0, double x1, double y1) {
     return BoundingBoxf(Vec2d(x0, y0), Vec2d(x1, y1));
@@ -187,8 +201,8 @@ TEST_CASE("no targets returns raw delta unchanged", "[AlignmentSnap]") {
     SnapSettings s; s.enabled = true;
     SnapState st;
     SnapResult r = compute_snap(box(0,0,10,10), Vec2d(3.0, 4.0), {}, s, 1.0, st);
-    REQUIRE(r.corrected_delta.x() == Approx(3.0));
-    REQUIRE(r.corrected_delta.y() == Approx(4.0));
+    REQUIRE_THAT(r.corrected_delta.x(), WithinAbs(3.0, 1e-6));
+    REQUIRE_THAT(r.corrected_delta.y(), WithinAbs(4.0, 1e-6));
 }
 ```
 
