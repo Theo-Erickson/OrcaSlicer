@@ -5689,9 +5689,14 @@ void GLCanvas3D::mouse_up_cleanup()
     m_moving = false;
     m_camera_movement = false;
     m_mouse.drag.move_volume_idx = -1;
-    // Orca: end-of-drag snap cleanup.
+    // Orca: end-of-drag snap cleanup. Keep the guides and fade them out over ~0.6s
+    // instead of clearing instantly, so the alignment/row lines linger briefly.
     m_snap_neighbors.clear();
-    m_snap_guides = AlignmentSnap::SnapResult{};
+    if (!m_snap_guides.lines.empty() || !m_snap_guides.ghosts.empty() || !m_snap_guides.badges.empty()) {
+        m_snap_fading     = true;
+        m_snap_fade_start = std::chrono::steady_clock::now();
+    }
+    m_snap_state = AlignmentSnap::SnapState{};
     m_mouse.set_start_position_3D_as_invalid();
     m_mouse.set_start_position_2D_as_invalid();
     m_mouse.dragging = false;
@@ -6047,23 +6052,45 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
     imgui->begin(_L("Snap options"), ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize
                  | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
+    // Show a hover tooltip for the widget just submitted (works even when greyed out).
+    auto tip = [](const std::string& s) {
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", s.c_str());
+    };
+
     bool dirty = false;
     dirty |= imgui->bbl_checkbox(_L("Enable snap alignment"), m_snap_settings.enabled);
+    tip(_utf8(L("Master switch for bounding-box snapping while dragging objects on the plate.\nHold Alt during a drag to suppress it temporarily.")));
     ImGui::Separator();
 
+    // The sub-options only apply when snapping is enabled -> grey them out and make them
+    // inert when it isn't. (This ImGui build predates BeginDisabled, so dim via alpha and
+    // guard each commit on `en`.)
+    const bool en = m_snap_settings.enabled;
+    if (!en) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
     float sens = (float)m_snap_settings.sensitivity_px;
-    if (imgui->slider_float(_L("Sensitivity (px)"), &sens, 2.0f, 30.0f, "%.0f")) {
+    if (imgui->slider_float(_L("Sensitivity (px)"), &sens, 2.0f, 30.0f, "%.0f") && en) {
         m_snap_settings.sensitivity_px = sens; dirty = true;
     }
+    tip(_utf8(L("How close (in screen pixels) an edge or center must get before it snaps.\nHigher = snaps from farther away.")));
     float strength = (float)m_snap_settings.strength_px;
-    if (imgui->slider_float(_L("Strength (px)"), &strength, 0.0f, 30.0f, "%.0f")) {
+    if (imgui->slider_float(_L("Strength (px)"), &strength, 0.0f, 30.0f, "%.0f") && en) {
         m_snap_settings.strength_px = strength; dirty = true;
     }
+    tip(_utf8(L("Extra distance you must drag to pull out of an engaged snap (stickiness).\nHigher = harder to break away.")));
     ImGui::Separator();
-    dirty |= imgui->bbl_checkbox(_L("Edge alignment"),          m_snap_settings.edge_align);
-    dirty |= imgui->bbl_checkbox(_L("Center alignment"),        m_snap_settings.center_align);
-    dirty |= imgui->bbl_checkbox(_L("Contact"),                 m_snap_settings.contact);
-    dirty |= imgui->bbl_checkbox(_L("Propagate spacing (row)"), m_snap_settings.spacing_propagation);
+    { bool v = m_snap_settings.edge_align;          if (imgui->bbl_checkbox(_L("Edge alignment"), v)          && en) { m_snap_settings.edge_align = v; dirty = true; } }
+    tip(_utf8(L("Snap when an edge lines up flush with a neighbor's matching edge (left/right/top/bottom).")));
+    { bool v = m_snap_settings.center_align;        if (imgui->bbl_checkbox(_L("Center alignment"), v)        && en) { m_snap_settings.center_align = v; dirty = true; } }
+    tip(_utf8(L("Snap when centers line up, so two objects share a common centerline.")));
+    { bool v = m_snap_settings.contact;             if (imgui->bbl_checkbox(_L("Contact"), v)                 && en) { m_snap_settings.contact = v; dirty = true; } }
+    tip(_utf8(L("Snap objects so their edges just touch, with no gap and no overlap.")));
+    { bool v = m_snap_settings.spacing_propagation; if (imgui->bbl_checkbox(_L("Propagate spacing (row)"), v) && en) { m_snap_settings.spacing_propagation = v; dirty = true; } }
+    tip(_utf8(L("Detect an evenly spaced, aligned row of objects and snap the dragged one to continue the same spacing.")));
+
+    if (!en) ImGui::PopStyleVar();
+
     ImGui::Separator();
     imgui->text(_L("Hold Alt while dragging to disable snapping."));
 
@@ -6084,11 +6111,37 @@ void GLCanvas3D::render_snap_guides()
     static const ImU32 SNAP_BADGE_COLOR  = IM_COL32(230,  79, 128, 255); // pink spacing badges
     static const float SNAP_LINE_WIDTH   = 2.0f;
     static const float SNAP_GHOST_WIDTH  = 1.5f;
+    static const float SNAP_FADE_SECONDS = 0.6f; // linger + fade-out after release
 
-    if (!m_mouse.dragging)
+    // Opacity: full while dragging; ramps down over SNAP_FADE_SECONDS after release.
+    float alpha = 1.0f;
+    if (m_mouse.dragging) {
+        m_snap_fading = false;
+    }
+    else if (m_snap_fading) {
+        const float elapsed = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_snap_fade_start).count();
+        if (elapsed >= SNAP_FADE_SECONDS) {
+            m_snap_fading = false;
+            m_snap_guides = AlignmentSnap::SnapResult{};
+            return;
+        }
+        alpha = 1.0f - elapsed / SNAP_FADE_SECONDS;
+        m_dirty = true;                     // keep repainting so the fade animates
+        if (m_canvas != nullptr) m_canvas->Refresh(false);
+    }
+    else
         return;
+
     if (m_snap_guides.lines.empty() && m_snap_guides.ghosts.empty() && m_snap_guides.badges.empty())
         return;
+
+    auto with_alpha = [alpha](ImU32 c) -> ImU32 {
+        const int a = (int)(((c >> IM_COL32_A_SHIFT) & 0xFF) * alpha);
+        return (c & ~IM_COL32_A_MASK) | ((ImU32)a << IM_COL32_A_SHIFT);
+    };
+    const ImU32 line_col  = with_alpha(SNAP_LINE_COLOR);
+    const ImU32 ghost_col = with_alpha(SNAP_GHOST_COLOR);
+    const ImU32 badge_col = with_alpha(SNAP_BADGE_COLOR);
 
     const Camera& camera = wxGetApp().plater()->get_camera();
     ImDrawList* dl = ImGui::GetForegroundDrawList();
@@ -6102,23 +6155,23 @@ void GLCanvas3D::render_snap_guides()
         const ImVec2 c1 = to_screen(g.bbox.max.x(), g.bbox.min.y());
         const ImVec2 c2 = to_screen(g.bbox.max.x(), g.bbox.max.y());
         const ImVec2 c3 = to_screen(g.bbox.min.x(), g.bbox.max.y());
-        dl->AddLine(c0, c1, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
-        dl->AddLine(c1, c2, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
-        dl->AddLine(c2, c3, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
-        dl->AddLine(c3, c0, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
+        dl->AddLine(c0, c1, ghost_col, SNAP_GHOST_WIDTH);
+        dl->AddLine(c1, c2, ghost_col, SNAP_GHOST_WIDTH);
+        dl->AddLine(c2, c3, ghost_col, SNAP_GHOST_WIDTH);
+        dl->AddLine(c3, c0, ghost_col, SNAP_GHOST_WIDTH);
     }
     for (const auto& gl : m_snap_guides.lines) {
         const ImVec2 a = (gl.axis == AlignmentSnap::Axis::X) ? to_screen(gl.coord, gl.span_lo) : to_screen(gl.span_lo, gl.coord);
         const ImVec2 b = (gl.axis == AlignmentSnap::Axis::X) ? to_screen(gl.coord, gl.span_hi) : to_screen(gl.span_hi, gl.coord);
-        dl->AddLine(a, b, SNAP_LINE_COLOR, SNAP_LINE_WIDTH);
+        dl->AddLine(a, b, line_col, SNAP_LINE_WIDTH);
     }
     for (const auto& bd : m_snap_guides.badges) {
-        dl->AddLine(to_screen(bd.a.x(), bd.a.y()), to_screen(bd.b.x(), bd.b.y()), SNAP_BADGE_COLOR, SNAP_GHOST_WIDTH);
+        dl->AddLine(to_screen(bd.a.x(), bd.a.y()), to_screen(bd.b.x(), bd.b.y()), badge_col, SNAP_GHOST_WIDTH);
         const Vec2d mid = 0.5 * (bd.a + bd.b);
         char buf[32];
         snprintf(buf, sizeof(buf), "%.2f", bd.value_mm);
         const ImVec2 mp = to_screen(mid.x(), mid.y());
-        dl->AddText(ImVec2(mp.x + 4.0f, mp.y - 6.0f), SNAP_BADGE_COLOR, buf);
+        dl->AddText(ImVec2(mp.x + 4.0f, mp.y - 6.0f), badge_col, buf);
     }
 }
 

@@ -636,6 +636,8 @@ private:
     BoundingBoxf                m_snap_mover_start;           // dragged selection XY bbox at drag start
     std::vector<AlignmentSnap::Neighbor> m_snap_neighbors;   // neighbor boxes gathered at drag start
     AlignmentSnap::SnapResult   m_snap_guides;                // guides to draw for the current frame
+    bool                        m_snap_fading = false;        // guides fading out after drag release
+    std::chrono::steady_clock::time_point m_snap_fade_start;  // when the fade began
 
     PrinterTechnology current_printer_technology() const;
 
