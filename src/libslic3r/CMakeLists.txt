@@ -29,6 +29,8 @@ set(lisbslic3r_sources
     Algorithm/LineSplit.hpp
     Algorithm/RegionExpansion.cpp
     Algorithm/RegionExpansion.hpp
+    AlignmentSnap.cpp
+    AlignmentSnap.hpp
     AnyPtr.hpp
     AppConfig.cpp
     AppConfig.hpp

@@ -4,6 +4,7 @@ add_executable(${_TEST_NAME}_tests
     ${_TEST_NAME}_tests.cpp
     test_3mf.cpp
     test_aabbindirect.cpp
+    test_alignment_snap.cpp
     test_appconfig.cpp
     test_arachne_walls.cpp
     test_bambu_networking.cpp
