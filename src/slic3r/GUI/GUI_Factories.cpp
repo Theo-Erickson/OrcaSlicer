@@ -528,6 +528,33 @@ void MenuFactory::append_menu_item_set_visible(wxMenu* menu)
         []() { return true; }, m_parent);
 }
 
+// Orca: per-object opt-out of alignment snapping. Checked = object participates (default).
+void MenuFactory::append_menu_item_snap_alignment(wxMenu* menu)
+{
+    append_menu_check_item(menu, wxID_ANY, _L("Enable snap alignment"),
+        _L("Include this object in alignment snapping while dragging"),
+        [](wxCommandEvent&) {
+            const Selection& sel = plater()->canvas3D()->get_selection();
+            Model& model = plater()->model();
+            bool any_off = false;
+            for (const auto& kv : sel.get_content())
+                if ((size_t)kv.first < model.objects.size() && !model.objects[kv.first]->snap_alignment_enabled) { any_off = true; break; }
+            // If any selected object is opted out, turn all on; otherwise turn all off.
+            for (const auto& kv : sel.get_content())
+                if ((size_t)kv.first < model.objects.size())
+                    model.objects[kv.first]->snap_alignment_enabled = any_off;
+        }, nullptr,
+        []() { return true; },
+        []() -> bool {
+            const Selection& sel = plater()->canvas3D()->get_selection();
+            Model& model = plater()->model();
+            for (const auto& kv : sel.get_content())
+                if ((size_t)kv.first < model.objects.size() && !model.objects[kv.first]->snap_alignment_enabled)
+                    return false;
+            return true;
+        }, m_parent);
+}
+
 void MenuFactory::append_menu_item_delete(wxMenu* menu)
 {
 #ifdef __WINDOWS__
@@ -2140,6 +2167,7 @@ void MenuFactory::create_common_object_menu(wxMenu* menu)
 
     append_menu_item_fix_through_cgal(menu);
     append_menu_items_mirror(menu);
+    append_menu_item_snap_alignment(menu);
 }
 
 void MenuFactory::create_object_menu()
