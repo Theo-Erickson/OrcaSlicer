@@ -631,6 +631,11 @@ private:
 
     // Orca: alignment-snap settings (persisted to AppConfig, mirrors ArrangeSettings).
     AlignmentSnap::SnapSettings m_snap_settings;
+    // Orca: alignment-snap runtime state (not serialized).
+    AlignmentSnap::SnapState    m_snap_state;                 // hysteresis across drag frames
+    BoundingBoxf                m_snap_mover_start;           // dragged selection XY bbox at drag start
+    std::vector<AlignmentSnap::Neighbor> m_snap_neighbors;   // neighbor boxes gathered at drag start
+    AlignmentSnap::SnapResult   m_snap_guides;                // guides to draw for the current frame
 
     PrinterTechnology current_printer_technology() const;
 
@@ -1275,6 +1280,8 @@ private:
     void _render_plane() const;
     void _render_selection();
     void _render_sequential_clearance();
+    // Orca: draw alignment-snap guides (lines, ghost boxes, spacing badges) during a drag.
+    void render_snap_guides();
 #if ENABLE_RENDER_SELECTION_CENTER
     void _render_selection_center() { m_selection.render_center(m_gizmos.is_dragging()); }
 #endif // ENABLE_RENDER_SELECTION_CENTER
@@ -1306,6 +1313,7 @@ private:
     //BBS: GUI refactor: adjust main toolbar position
     bool _render_orient_menu(float left, float right, float bottom, float top);
     bool _render_arrange_menu(float left, float right, float bottom, float top);
+    bool _render_snap_menu(float left, float right, float bottom, float top);
     void _render_3d_navigator();
 
     void _update_volumes_hover_state();

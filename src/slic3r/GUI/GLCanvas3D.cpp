@@ -37,6 +37,7 @@
 #include "Gizmos/GLGizmoUtils.hpp"
 
 #include "slic3r/GUI/Gizmos/GLGizmoPainterBase.hpp"
+#include "slic3r/GUI/CameraUtils.hpp"
 #include "slic3r/Utils/UndoRedo.hpp"
 #include "slic3r/Utils/MacDarkMode.hpp"
 
@@ -2192,6 +2193,7 @@ void GLCanvas3D::render(bool only_init)
 
     // draw overlays
     _render_overlays();
+    render_snap_guides(); // Orca: alignment-snap overlay (drawn within the active ImGui frame)
 
     const int current_fps = m_render_stats.get_fps_and_reset_if_needed();
     if (_is_fps_overlay_enabled())
@@ -4587,6 +4589,29 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
                             m_mouse.drag.start_position_3D = m_mouse.scene_position;
                             m_sequential_print_clearance_first_displacement = true;
                             m_moving = true;
+
+                            // Orca: cache mover footprint + neighbor XY bounding boxes for alignment snapping.
+                            m_snap_neighbors.clear();
+                            m_snap_state  = AlignmentSnap::SnapState{};
+                            m_snap_guides = AlignmentSnap::SnapResult{};
+                            if (m_snap_settings.enabled && m_model != nullptr) {
+                                const BoundingBoxf3 sel_bb = m_selection.get_bounding_box();
+                                m_snap_mover_start = BoundingBoxf(Vec2d(sel_bb.min.x(), sel_bb.min.y()),
+                                                                  Vec2d(sel_bb.max.x(), sel_bb.max.y()));
+                                std::set<unsigned int> selected_objs;
+                                for (const auto& kv : m_selection.get_content())
+                                    selected_objs.insert(kv.first);
+                                for (int oi = 0; oi < (int)m_model->objects.size(); ++oi) {
+                                    if (selected_objs.count((unsigned int)oi)) continue; // don't snap to self
+                                    ModelObject* mo = m_model->objects[oi];
+                                    if (mo == nullptr || !mo->snap_alignment_enabled) continue;
+                                    for (size_t ii = 0; ii < mo->instances.size(); ++ii) {
+                                        BoundingBoxf3 bb = mo->instance_bounding_box(ii, false);
+                                        m_snap_neighbors.push_back(AlignmentSnap::Neighbor{
+                                            BoundingBoxf(Vec2d(bb.min.x(), bb.min.y()), Vec2d(bb.max.x(), bb.max.y())), oi });
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -4634,7 +4659,19 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
 
                 TransformationType trafo_type;
                 trafo_type.set_relative();
-                m_selection.translate(cur_pos - m_mouse.drag.start_position_3D, trafo_type);
+                Vec3d snap_delta = cur_pos - m_mouse.drag.start_position_3D;
+                // Orca: apply alignment snapping (Alt held suppresses it; feature inert when disabled).
+                if (m_snap_settings.enabled && !wxGetKeyState(WXK_ALT) && !m_snap_neighbors.empty()) {
+                    const double px_per_mm = wxGetApp().plater()->get_camera().get_zoom();
+                    m_snap_guides = AlignmentSnap::compute_snap(
+                        m_snap_mover_start, Vec2d(snap_delta.x(), snap_delta.y()),
+                        m_snap_neighbors, m_snap_settings, px_per_mm, m_snap_state);
+                    snap_delta.x() = m_snap_guides.corrected_delta.x();
+                    snap_delta.y() = m_snap_guides.corrected_delta.y();
+                }
+                else
+                    m_snap_guides = AlignmentSnap::SnapResult{};
+                m_selection.translate(snap_delta, trafo_type);
                 if (current_printer_technology() == ptFFF && (fff_print()->config().print_sequence == PrintSequence::ByObject))
                     update_sequential_clearance();
                 // BBS
@@ -5652,6 +5689,9 @@ void GLCanvas3D::mouse_up_cleanup()
     m_moving = false;
     m_camera_movement = false;
     m_mouse.drag.move_volume_idx = -1;
+    // Orca: end-of-drag snap cleanup.
+    m_snap_neighbors.clear();
+    m_snap_guides = AlignmentSnap::SnapResult{};
     m_mouse.set_start_position_3D_as_invalid();
     m_mouse.set_start_position_2D_as_invalid();
     m_mouse.dragging = false;
@@ -5994,6 +6034,94 @@ bool GLCanvas3D::_render_orient_menu(float left, float right, float bottom, floa
 }
 
 //BBS: GUI refactor: adjust main toolbar position
+// Orca: alignment-snap settings panel, opened by the "snap_align" toolbar button.
+bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float top)
+{
+    ImGuiWrapper* imgui = wxGetApp().imgui();
+    auto  canvas_w  = float(get_canvas_size().get_width());
+    float left_pos  = m_main_toolbar.get_item("snap_align")->render_left_pos;
+    const float x   = (1 + left_pos) * canvas_w / 2;
+    imgui->set_next_window_pos(x, m_main_toolbar.get_height(), ImGuiCond_Always, 0.0f, 0.0f);
+
+    ImGuiWrapper::push_toolbar_style(get_scale());
+    imgui->begin(_L("Snap options"), ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize
+                 | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+
+    bool dirty = false;
+    dirty |= imgui->bbl_checkbox(_L("Enable snap alignment"), m_snap_settings.enabled);
+    ImGui::Separator();
+
+    float sens = (float)m_snap_settings.sensitivity_px;
+    if (imgui->slider_float(_L("Sensitivity (px)"), &sens, 2.0f, 30.0f, "%.0f")) {
+        m_snap_settings.sensitivity_px = sens; dirty = true;
+    }
+    float strength = (float)m_snap_settings.strength_px;
+    if (imgui->slider_float(_L("Strength (px)"), &strength, 0.0f, 30.0f, "%.0f")) {
+        m_snap_settings.strength_px = strength; dirty = true;
+    }
+    ImGui::Separator();
+    dirty |= imgui->bbl_checkbox(_L("Edge alignment"),          m_snap_settings.edge_align);
+    dirty |= imgui->bbl_checkbox(_L("Center alignment"),        m_snap_settings.center_align);
+    dirty |= imgui->bbl_checkbox(_L("Contact"),                 m_snap_settings.contact);
+    dirty |= imgui->bbl_checkbox(_L("Propagate spacing (row)"), m_snap_settings.spacing_propagation);
+    ImGui::Separator();
+    imgui->text(_L("Hold Alt while dragging to disable snapping."));
+
+    if (dirty)
+        save_snap_settings();
+
+    imgui->end();
+    ImGuiWrapper::pop_toolbar_style();
+    return true;
+}
+
+// Orca: draw alignment-snap guides for the active drag as a screen-space overlay.
+// Colors/thickness live here in one place so restyling is a one-line change.
+void GLCanvas3D::render_snap_guides()
+{
+    static const ImU32 SNAP_LINE_COLOR   = IM_COL32( 56, 178,  76, 235); // green alignment lines
+    static const ImU32 SNAP_GHOST_COLOR  = IM_COL32(160, 160, 160, 190); // gray neighbor footprints
+    static const ImU32 SNAP_BADGE_COLOR  = IM_COL32(230,  79, 128, 255); // pink spacing badges
+    static const float SNAP_LINE_WIDTH   = 2.0f;
+    static const float SNAP_GHOST_WIDTH  = 1.5f;
+
+    if (!m_mouse.dragging)
+        return;
+    if (m_snap_guides.lines.empty() && m_snap_guides.ghosts.empty() && m_snap_guides.badges.empty())
+        return;
+
+    const Camera& camera = wxGetApp().plater()->get_camera();
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    auto to_screen = [&](double x, double y) -> ImVec2 {
+        const Slic3r::Point p = CameraUtils::project(camera, Vec3d(x, y, 0.0));
+        return ImVec2((float)p.x(), (float)p.y());
+    };
+
+    for (const auto& g : m_snap_guides.ghosts) {
+        const ImVec2 c0 = to_screen(g.bbox.min.x(), g.bbox.min.y());
+        const ImVec2 c1 = to_screen(g.bbox.max.x(), g.bbox.min.y());
+        const ImVec2 c2 = to_screen(g.bbox.max.x(), g.bbox.max.y());
+        const ImVec2 c3 = to_screen(g.bbox.min.x(), g.bbox.max.y());
+        dl->AddLine(c0, c1, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
+        dl->AddLine(c1, c2, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
+        dl->AddLine(c2, c3, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
+        dl->AddLine(c3, c0, SNAP_GHOST_COLOR, SNAP_GHOST_WIDTH);
+    }
+    for (const auto& gl : m_snap_guides.lines) {
+        const ImVec2 a = (gl.axis == AlignmentSnap::Axis::X) ? to_screen(gl.coord, gl.span_lo) : to_screen(gl.span_lo, gl.coord);
+        const ImVec2 b = (gl.axis == AlignmentSnap::Axis::X) ? to_screen(gl.coord, gl.span_hi) : to_screen(gl.span_hi, gl.coord);
+        dl->AddLine(a, b, SNAP_LINE_COLOR, SNAP_LINE_WIDTH);
+    }
+    for (const auto& bd : m_snap_guides.badges) {
+        dl->AddLine(to_screen(bd.a.x(), bd.a.y()), to_screen(bd.b.x(), bd.b.y()), SNAP_BADGE_COLOR, SNAP_GHOST_WIDTH);
+        const Vec2d mid = 0.5 * (bd.a + bd.b);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.2f", bd.value_mm);
+        const ImVec2 mp = to_screen(mid.x(), mid.y());
+        dl->AddText(ImVec2(mp.x + 4.0f, mp.y - 6.0f), SNAP_BADGE_COLOR, buf);
+    }
+}
+
 bool GLCanvas3D::_render_arrange_menu(float left, float right, float bottom, float top)
 {
     ImGuiWrapper *imgui = wxGetApp().imgui();
@@ -6937,6 +7065,23 @@ bool GLCanvas3D::_init_main_toolbar()
             //_render_arrange_menu(0.5f * (left + right));
         }
     };
+    if (!m_main_toolbar.add_item(item))
+        return false;
+
+    // Orca: alignment snapping settings button (opens the snap options panel).
+    item.name = "snap_align";
+    item.icon_filename = m_is_dark ? "toolbar_snap_dark.svg" : "toolbar_snap.svg";
+    item.tooltip = _utf8(L("Alignment snapping settings"));
+    item.sprite_id++;
+    item.left.action_callback = []() {};
+    item.enabling_callback = []()->bool { return true; };
+    item.left.toggable = true;
+    item.left.render_callback = [this](float left, float right, float bottom, float top) {
+        if (m_canvas != nullptr)
+            _render_snap_menu(left, right, bottom, top);
+    };
+    item.right.toggable = false;
+    item.right.render_callback = GLToolbarItem::Default_Render_Callback;
     if (!m_main_toolbar.add_item(item))
         return false;
 
