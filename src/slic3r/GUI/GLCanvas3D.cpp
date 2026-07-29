@@ -1149,6 +1149,7 @@ void GLCanvas3D::load_snap_settings()
     m_snap_settings.center_align        = getb("center_align", true);
     m_snap_settings.contact             = getb("contact", true);
     m_snap_settings.spacing_propagation = getb("spacing_propagation", true);
+    m_snap_advanced_mode                = getb("advanced_mode", false);
 }
 
 void GLCanvas3D::save_snap_settings()
@@ -1161,6 +1162,7 @@ void GLCanvas3D::save_snap_settings()
     cfg->set("snap_align", "center_align",        m_snap_settings.center_align ? "1" : "0");
     cfg->set("snap_align", "contact",             m_snap_settings.contact ? "1" : "0");
     cfg->set("snap_align", "spacing_propagation", m_snap_settings.spacing_propagation ? "1" : "0");
+    cfg->set("snap_align", "advanced_mode",       m_snap_advanced_mode ? "1" : "0");
 }
 
 GLCanvas3D::ArrangeSettings& GLCanvas3D::get_arrange_settings()
@@ -4340,6 +4342,14 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
     const int layer_editing_object_idx = is_layers_editing_enabled() ? selected_object_idx : -1;
     const bool mouse_in_layer_editing  = layer_editing_object_idx != -1 && m_layers_editing.bar_rect_contains(*this, pos(0), pos(1));
 
+    // Orca: close the snap-options popup when a click lands outside it (scene or another tool).
+    // ImGui captures clicks on the panel; the snap button toggles itself normally, so skip both.
+    if (evt.LeftDown() && m_main_toolbar.is_item_pressed("snap_align") && !ImGui::GetIO().WantCaptureMouse) {
+        const GLToolbarItem* snap_item = m_main_toolbar.get_item("snap_align");
+        if (snap_item == nullptr || !snap_item->is_hovered())
+            m_main_toolbar.release_toggable("snap_align");
+    }
+
     if (!mouse_in_layer_editing && m_main_toolbar.on_mouse(evt, *this)) {
         if (m_main_toolbar.is_any_item_pressed())
             m_gizmos.reset_all_states();
@@ -6059,39 +6069,67 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
     };
 
     bool dirty = false;
-    dirty |= imgui->bbl_checkbox(_L("Enable snap alignment"), m_snap_settings.enabled);
+    dirty |= imgui->bbl_checkbox(_L("Enable snapping"), m_snap_settings.enabled);
     tip(_utf8(L("Master switch for bounding-box snapping while dragging objects on the plate.\nHold Alt during a drag to suppress it temporarily.")));
     ImGui::Separator();
 
-    // The sub-options only apply when snapping is enabled -> grey them out and make them
-    // inert when it isn't. (This ImGui build predates BeginDisabled, so dim via alpha and
-    // guard each commit on `en`.)
+    // Sub-options only apply when snapping is enabled -> grey them out and make them inert
+    // when it isn't. (This ImGui build predates BeginDisabled, so dim via alpha + commit-guard.)
     const bool en = m_snap_settings.enabled;
     if (!en) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 
-    float sens = (float)m_snap_settings.sensitivity_px;
-    if (imgui->slider_float(_L("Sensitivity (px)"), &sens, 2.0f, 30.0f, "%.0f") && en) {
-        m_snap_settings.sensitivity_px = sens; dirty = true;
+    auto set_all_types = [&](bool v) {
+        m_snap_settings.edge_align = m_snap_settings.center_align =
+            m_snap_settings.contact = m_snap_settings.spacing_propagation = v;
+        dirty = true;
+    };
+    const bool all_on  =  m_snap_settings.edge_align &&  m_snap_settings.center_align &&  m_snap_settings.contact &&  m_snap_settings.spacing_propagation;
+    const bool all_off = !m_snap_settings.edge_align && !m_snap_settings.center_align && !m_snap_settings.contact && !m_snap_settings.spacing_propagation;
+    const std::string preset = all_off ? _utf8(L("None")) : (all_on ? _utf8(L("Everything")) : _utf8(L("Custom")));
+
+    // Preset dropdown (both simple and advanced modes).
+    ImGui::AlignTextToFramePadding();
+    imgui->text(_L("Preset"));
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(150.0f);
+    if (ImGui::BeginCombo("##snap_preset", preset.c_str())) {
+        if (ImGui::Selectable(_utf8(L("None")).c_str(), all_off) && en)       set_all_types(false);
+        if (ImGui::Selectable(_utf8(L("Everything")).c_str(), all_on) && en)  set_all_types(true);
+        ImGui::EndCombo();
     }
-    tip(_utf8(L("How close (in screen pixels) an edge or center must get before it snaps.\nHigher = snaps from farther away.")));
-    float strength = (float)m_snap_settings.strength_px;
-    if (imgui->slider_float(_L("Strength (px)"), &strength, 0.0f, 30.0f, "%.0f") && en) {
-        m_snap_settings.strength_px = strength; dirty = true;
+    tip(_utf8(L("Quick presets. 'None' turns off every snap type; 'Everything' turns them all on.\nEditing an individual type (advanced mode) shows 'Custom'.")));
+
+    if (m_snap_advanced_mode) {
+        ImGui::Separator();
+        float sens = (float)m_snap_settings.sensitivity_px;
+        if (imgui->slider_float(_L("Sensitivity (px)"), &sens, 2.0f, 30.0f, "%.0f") && en) {
+            m_snap_settings.sensitivity_px = sens; dirty = true;
+        }
+        tip(_utf8(L("How close (in screen pixels) an edge or center must get before it snaps.\nHigher = snaps from farther away.")));
+        float strength = (float)m_snap_settings.strength_px;
+        if (imgui->slider_float(_L("Strength (px)"), &strength, 0.0f, 30.0f, "%.0f") && en) {
+            m_snap_settings.strength_px = strength; dirty = true;
+        }
+        tip(_utf8(L("Extra distance you must drag to pull out of an engaged snap (stickiness).\nHigher = harder to break away.")));
+        ImGui::Separator();
+        { bool v = m_snap_settings.edge_align;          if (imgui->bbl_checkbox(_L("Edge alignment"), v)          && en) { m_snap_settings.edge_align = v; dirty = true; } }
+        tip(_utf8(L("Snap when an edge lines up flush with a neighbor's matching edge (left/right/top/bottom).")));
+        { bool v = m_snap_settings.center_align;        if (imgui->bbl_checkbox(_L("Center alignment"), v)        && en) { m_snap_settings.center_align = v; dirty = true; } }
+        tip(_utf8(L("Snap when centers line up, so two objects share a common centerline.")));
+        { bool v = m_snap_settings.contact;             if (imgui->bbl_checkbox(_L("Contact"), v)                 && en) { m_snap_settings.contact = v; dirty = true; } }
+        tip(_utf8(L("Snap objects so their edges just touch, with no gap and no overlap.")));
+        { bool v = m_snap_settings.spacing_propagation; if (imgui->bbl_checkbox(_L("Propagate spacing (row)"), v) && en) { m_snap_settings.spacing_propagation = v; dirty = true; } }
+        tip(_utf8(L("Detect an evenly spaced, aligned row of objects and snap the dragged one to continue the same spacing.")));
     }
-    tip(_utf8(L("Extra distance you must drag to pull out of an engaged snap (stickiness).\nHigher = harder to break away.")));
-    ImGui::Separator();
-    { bool v = m_snap_settings.edge_align;          if (imgui->bbl_checkbox(_L("Edge alignment"), v)          && en) { m_snap_settings.edge_align = v; dirty = true; } }
-    tip(_utf8(L("Snap when an edge lines up flush with a neighbor's matching edge (left/right/top/bottom).")));
-    { bool v = m_snap_settings.center_align;        if (imgui->bbl_checkbox(_L("Center alignment"), v)        && en) { m_snap_settings.center_align = v; dirty = true; } }
-    tip(_utf8(L("Snap when centers line up, so two objects share a common centerline.")));
-    { bool v = m_snap_settings.contact;             if (imgui->bbl_checkbox(_L("Contact"), v)                 && en) { m_snap_settings.contact = v; dirty = true; } }
-    tip(_utf8(L("Snap objects so their edges just touch, with no gap and no overlap.")));
-    { bool v = m_snap_settings.spacing_propagation; if (imgui->bbl_checkbox(_L("Propagate spacing (row)"), v) && en) { m_snap_settings.spacing_propagation = v; dirty = true; } }
-    tip(_utf8(L("Detect an evenly spaced, aligned row of objects and snap the dragged one to continue the same spacing.")));
 
     if (!en) ImGui::PopStyleVar();
 
     ImGui::Separator();
+    // Simple <-> advanced view toggle (always available, like Inkscape's mode link).
+    if (imgui->button(m_snap_advanced_mode ? _L("Simple mode") : _L("Advanced mode"))) {
+        m_snap_advanced_mode = !m_snap_advanced_mode;
+        dirty = true;
+    }
     imgui->text(_L("Hold Alt while dragging to disable snapping."));
 
     if (dirty)

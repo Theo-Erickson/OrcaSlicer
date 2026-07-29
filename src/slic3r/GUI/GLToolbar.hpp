@@ -389,6 +389,8 @@ public:
     void select_item(const std::string& name);
 
     bool is_item_pressed(const std::string& name) const;
+    // Orca: force a pressed toggable item back to Normal (used to close popups on outside-click).
+    void release_toggable(const std::string& name);
     bool is_item_disabled(const std::string& name) const;
     bool is_item_visible(const std::string& name) const;
 

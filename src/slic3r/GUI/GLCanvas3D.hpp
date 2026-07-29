@@ -631,6 +631,7 @@ private:
 
     // Orca: alignment-snap settings (persisted to AppConfig, mirrors ArrangeSettings).
     AlignmentSnap::SnapSettings m_snap_settings;
+    bool                        m_snap_advanced_mode = false; // panel shows the full advanced view
     // Orca: alignment-snap runtime state (not serialized).
     AlignmentSnap::SnapState    m_snap_state;                 // hysteresis across drag frames
     BoundingBoxf                m_snap_mover_start;           // dragged selection XY bbox at drag start

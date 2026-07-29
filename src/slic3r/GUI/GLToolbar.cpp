@@ -432,6 +432,20 @@ bool GLToolbar::is_item_pressed(const std::string& name) const
     return false;
 }
 
+void GLToolbar::release_toggable(const std::string& name)
+{
+    for (int i = 0; i < (int)m_items.size(); ++i) {
+        if (m_items[i]->get_name() == name) {
+            if (m_items[i]->is_pressed())
+                m_items[i]->set_state(GLToolbarItem::Normal);
+            if (m_pressed_toggable_id == i)
+                m_pressed_toggable_id = -1;
+            m_layout.dirty = true;
+            return;
+        }
+    }
+}
+
 bool GLToolbar::is_item_disabled(const std::string& name) const
 {
     for (const GLToolbarItem* item : m_items)
