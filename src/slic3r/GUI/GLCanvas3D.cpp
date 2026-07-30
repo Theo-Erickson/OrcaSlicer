@@ -1150,6 +1150,16 @@ void GLCanvas3D::load_snap_settings()
     m_snap_settings.contact             = getb("contact", true);
     m_snap_settings.spacing_propagation = getb("spacing_propagation", true);
     m_snap_advanced_mode                = getb("advanced_mode", false);
+    m_snap_suppress_key                 = (int)getf("suppress_key", 0.0);
+    auto hex_to_col = [&](const char* k, float c[4]) {
+        std::string s = cfg->get("snap_align", k);
+        if (s.size() < 8) return;
+        auto h = [&](int i) { return (float)std::stoi(s.substr(i, 2), nullptr, 16) / 255.0f; };
+        c[0] = h(0); c[1] = h(2); c[2] = h(4); c[3] = h(6);
+    };
+    hex_to_col("line_color",  m_snap_color_line);
+    hex_to_col("ghost_color", m_snap_color_ghost);
+    hex_to_col("badge_color", m_snap_color_badge);
 }
 
 void GLCanvas3D::save_snap_settings()
@@ -1163,6 +1173,16 @@ void GLCanvas3D::save_snap_settings()
     cfg->set("snap_align", "contact",             m_snap_settings.contact ? "1" : "0");
     cfg->set("snap_align", "spacing_propagation", m_snap_settings.spacing_propagation ? "1" : "0");
     cfg->set("snap_align", "advanced_mode",       m_snap_advanced_mode ? "1" : "0");
+    cfg->set("snap_align", "suppress_key",        std::to_string(m_snap_suppress_key));
+    auto col_to_hex = [](const float c[4]) {
+        char buf[10];
+        snprintf(buf, sizeof(buf), "%02X%02X%02X%02X",
+                 (int)(c[0] * 255 + 0.5f), (int)(c[1] * 255 + 0.5f), (int)(c[2] * 255 + 0.5f), (int)(c[3] * 255 + 0.5f));
+        return std::string(buf);
+    };
+    cfg->set("snap_align", "line_color",  col_to_hex(m_snap_color_line));
+    cfg->set("snap_align", "ghost_color", col_to_hex(m_snap_color_ghost));
+    cfg->set("snap_align", "badge_color", col_to_hex(m_snap_color_badge));
 }
 
 GLCanvas3D::ArrangeSettings& GLCanvas3D::get_arrange_settings()
@@ -4670,8 +4690,16 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
                 TransformationType trafo_type;
                 trafo_type.set_relative();
                 Vec3d snap_delta = cur_pos - m_mouse.drag.start_position_3D;
-                // Orca: apply alignment snapping (Alt held suppresses it; feature inert when disabled).
-                if (m_snap_settings.enabled && !wxGetKeyState(WXK_ALT) && !m_snap_neighbors.empty()) {
+                // Orca: apply alignment snapping. The configurable suppress key (Alt/Ctrl/Shift/None)
+                // held down bypasses it; feature is inert when disabled.
+                bool snap_suppressed = false;
+                switch (m_snap_suppress_key) {
+                case 0:  snap_suppressed = wxGetKeyState(WXK_ALT);     break;
+                case 1:  snap_suppressed = wxGetKeyState(WXK_CONTROL); break;
+                case 2:  snap_suppressed = wxGetKeyState(WXK_SHIFT);   break;
+                default: snap_suppressed = false;                      break; // None
+                }
+                if (m_snap_settings.enabled && !snap_suppressed && !m_snap_neighbors.empty()) {
                     const double px_per_mm = wxGetApp().plater()->get_camera().get_zoom();
                     m_snap_guides = AlignmentSnap::compute_snap(
                         m_snap_mover_start, Vec2d(snap_delta.x(), snap_delta.y()),
@@ -6070,7 +6098,7 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
 
     bool dirty = false;
     dirty |= imgui->bbl_checkbox(_L("Enable snapping"), m_snap_settings.enabled);
-    tip(_utf8(L("Master switch for bounding-box snapping while dragging objects on the plate.\nHold Alt during a drag to suppress it temporarily.")));
+    tip(_utf8(L("Master switch for bounding-box snapping while dragging objects on the plate.\nHold the suppress key during a drag to bypass it temporarily.")));
     ImGui::Separator();
 
     // Sub-options only apply when snapping is enabled -> grey them out and make them inert
@@ -6078,26 +6106,41 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
     const bool en = m_snap_settings.enabled;
     if (!en) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 
-    auto set_all_types = [&](bool v) {
-        m_snap_settings.edge_align = m_snap_settings.center_align =
-            m_snap_settings.contact = m_snap_settings.spacing_propagation = v;
-        dirty = true;
+    // Preset table (both modes). Each preset is a combination of the four snap types.
+    struct SnapPreset { const char* name; bool e, c, k, s; };
+    static const SnapPreset PRESETS[] = {
+        { "None",         false, false, false, false },
+        { "Edges",        true,  false, false, false },
+        { "Centers",      false, true,  false, false },
+        { "Alignment",    true,  true,  false, false },
+        { "Contact",      false, false, true,  false },
+        { "Row building", false, true,  false, true  },
+        { "Everything",   true,  true,  true,  true  },
     };
-    const bool all_on  =  m_snap_settings.edge_align &&  m_snap_settings.center_align &&  m_snap_settings.contact &&  m_snap_settings.spacing_propagation;
-    const bool all_off = !m_snap_settings.edge_align && !m_snap_settings.center_align && !m_snap_settings.contact && !m_snap_settings.spacing_propagation;
-    const std::string preset = all_off ? _utf8(L("None")) : (all_on ? _utf8(L("Everything")) : _utf8(L("Custom")));
+    auto matches = [&](const SnapPreset& p) {
+        return m_snap_settings.edge_align == p.e && m_snap_settings.center_align == p.c
+            && m_snap_settings.contact == p.k && m_snap_settings.spacing_propagation == p.s;
+    };
+    const char* cur_preset = "Custom";
+    for (const SnapPreset& p : PRESETS) if (matches(p)) { cur_preset = p.name; break; }
 
-    // Preset dropdown (both simple and advanced modes).
     ImGui::AlignTextToFramePadding();
     imgui->text(_L("Preset"));
     ImGui::SameLine();
     ImGui::SetNextItemWidth(150.0f);
-    if (ImGui::BeginCombo("##snap_preset", preset.c_str())) {
-        if (ImGui::Selectable(_utf8(L("None")).c_str(), all_off) && en)       set_all_types(false);
-        if (ImGui::Selectable(_utf8(L("Everything")).c_str(), all_on) && en)  set_all_types(true);
+    if (ImGui::BeginCombo("##snap_preset", cur_preset)) {
+        for (const SnapPreset& p : PRESETS) {
+            if (ImGui::Selectable(p.name, matches(p)) && en) {
+                m_snap_settings.edge_align          = p.e;
+                m_snap_settings.center_align        = p.c;
+                m_snap_settings.contact             = p.k;
+                m_snap_settings.spacing_propagation = p.s;
+                dirty = true;
+            }
+        }
         ImGui::EndCombo();
     }
-    tip(_utf8(L("Quick presets. 'None' turns off every snap type; 'Everything' turns them all on.\nEditing an individual type (advanced mode) shows 'Custom'.")));
+    tip(_utf8(L("Quick presets that set which snap types are active. Editing an individual type (advanced mode) shows 'Custom'.")));
 
     if (m_snap_advanced_mode) {
         ImGui::Separator();
@@ -6120,6 +6163,30 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
         tip(_utf8(L("Snap objects so their edges just touch, with no gap and no overlap.")));
         { bool v = m_snap_settings.spacing_propagation; if (imgui->bbl_checkbox(_L("Propagate spacing (row)"), v) && en) { m_snap_settings.spacing_propagation = v; dirty = true; } }
         tip(_utf8(L("Detect an evenly spaced, aligned row of objects and snap the dragged one to continue the same spacing.")));
+
+        ImGui::Separator();
+        imgui->text(_L("Guide colors"));
+        const ImGuiColorEditFlags col_flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf;
+        if (ImGui::ColorEdit4((_utf8(L("Alignment line")) + "##snapcolL").c_str(), m_snap_color_line,  col_flags) && en) dirty = true;
+        tip(_utf8(L("Color of the alignment guide lines.")));
+        if (ImGui::ColorEdit4((_utf8(L("Ghost box")) + "##snapcolG").c_str(),      m_snap_color_ghost, col_flags) && en) dirty = true;
+        tip(_utf8(L("Color of the ghosted neighbor footprints.")));
+        if (ImGui::ColorEdit4((_utf8(L("Spacing badge")) + "##snapcolB").c_str(),   m_snap_color_badge, col_flags) && en) dirty = true;
+        tip(_utf8(L("Color of the row spacing lines and distance labels.")));
+
+        ImGui::Separator();
+        ImGui::AlignTextToFramePadding();
+        imgui->text(_L("Suppress key"));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120.0f);
+        static const char* KEY_NAMES[] = { "Alt", "Ctrl", "Shift", "None" };
+        const int cur_key = (m_snap_suppress_key >= 0 && m_snap_suppress_key < 4) ? m_snap_suppress_key : 0;
+        if (ImGui::BeginCombo("##snap_key", KEY_NAMES[cur_key])) {
+            for (int i = 0; i < 4; ++i)
+                if (ImGui::Selectable(KEY_NAMES[i], m_snap_suppress_key == i) && en) { m_snap_suppress_key = i; dirty = true; }
+            ImGui::EndCombo();
+        }
+        tip(_utf8(L("Hold this key while dragging to temporarily bypass snapping. 'None' disables the bypass.")));
     }
 
     if (!en) ImGui::PopStyleVar();
@@ -6130,7 +6197,12 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
         m_snap_advanced_mode = !m_snap_advanced_mode;
         dirty = true;
     }
-    imgui->text(_L("Hold Alt while dragging to disable snapping."));
+    static const char* KEY_LABEL[] = { "Alt", "Ctrl", "Shift", "None" };
+    const int hint_key = (m_snap_suppress_key >= 0 && m_snap_suppress_key < 4) ? m_snap_suppress_key : 0;
+    if (hint_key < 3)
+        imgui->text(wxString::Format(_L("Hold %s while dragging to disable snapping."), wxString(KEY_LABEL[hint_key])));
+    else
+        imgui->text(_L("Snapping has no suppress key."));
 
     if (dirty)
         save_snap_settings();
@@ -6144,12 +6216,13 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
 // Colors/thickness live here in one place so restyling is a one-line change.
 void GLCanvas3D::render_snap_guides()
 {
-    static const ImU32 SNAP_LINE_COLOR   = IM_COL32( 56, 178,  76, 235); // green alignment lines
-    static const ImU32 SNAP_GHOST_COLOR  = IM_COL32(160, 160, 160, 190); // gray neighbor footprints
-    static const ImU32 SNAP_BADGE_COLOR  = IM_COL32(230,  79, 128, 255); // pink spacing badges
     static const float SNAP_LINE_WIDTH   = 2.0f;
     static const float SNAP_GHOST_WIDTH  = 1.5f;
     static const float SNAP_FADE_SECONDS = 0.6f; // linger + fade-out after release
+    // User-configurable guide colors (edited in the panel, persisted to AppConfig).
+    const ImU32 SNAP_LINE_COLOR  = ImGui::ColorConvertFloat4ToU32(ImVec4(m_snap_color_line[0],  m_snap_color_line[1],  m_snap_color_line[2],  m_snap_color_line[3]));
+    const ImU32 SNAP_GHOST_COLOR = ImGui::ColorConvertFloat4ToU32(ImVec4(m_snap_color_ghost[0], m_snap_color_ghost[1], m_snap_color_ghost[2], m_snap_color_ghost[3]));
+    const ImU32 SNAP_BADGE_COLOR = ImGui::ColorConvertFloat4ToU32(ImVec4(m_snap_color_badge[0], m_snap_color_badge[1], m_snap_color_badge[2], m_snap_color_badge[3]));
 
     // Opacity: full while dragging; ramps down over SNAP_FADE_SECONDS after release.
     float alpha = 1.0f;
