@@ -1150,7 +1150,7 @@ void GLCanvas3D::load_snap_settings()
     m_snap_settings.contact             = getb("contact", true);
     m_snap_settings.spacing_propagation = getb("spacing_propagation", true);
     m_snap_advanced_mode                = getb("advanced_mode", false);
-    m_snap_suppress_key                 = (int)getf("suppress_key", 0.0);
+    m_snap_suppress_key                 = (int)getf("suppress_keycode", (double)WXK_ALT);
     auto hex_to_col = [&](const char* k, float c[4]) {
         std::string s = cfg->get("snap_align", k);
         if (s.size() < 8) return;
@@ -1173,7 +1173,7 @@ void GLCanvas3D::save_snap_settings()
     cfg->set("snap_align", "contact",             m_snap_settings.contact ? "1" : "0");
     cfg->set("snap_align", "spacing_propagation", m_snap_settings.spacing_propagation ? "1" : "0");
     cfg->set("snap_align", "advanced_mode",       m_snap_advanced_mode ? "1" : "0");
-    cfg->set("snap_align", "suppress_key",        std::to_string(m_snap_suppress_key));
+    cfg->set("snap_align", "suppress_keycode",    std::to_string(m_snap_suppress_key));
     auto col_to_hex = [](const float c[4]) {
         char buf[10];
         snprintf(buf, sizeof(buf), "%02X%02X%02X%02X",
@@ -3759,6 +3759,18 @@ public:
 
 void GLCanvas3D::on_key(wxKeyEvent& evt)
 {
+    // Orca: capture a custom snap suppress key while the panel is listening.
+    if (m_snap_listening_key && evt.GetEventType() == wxEVT_KEY_DOWN) {
+        const int kc = evt.GetKeyCode();
+        m_snap_listening_key = false;
+        if (kc != WXK_ESCAPE) {
+            m_snap_suppress_key = kc;
+            save_snap_settings();
+        }
+        m_dirty = true;
+        return;
+    }
+
     static GLCanvas3D const * thiz = nullptr;
     static TranslationProcessor translationProcessor(nullptr, nullptr);
     if (thiz != this) {
@@ -4692,13 +4704,7 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
                 Vec3d snap_delta = cur_pos - m_mouse.drag.start_position_3D;
                 // Orca: apply alignment snapping. The configurable suppress key (Alt/Ctrl/Shift/None)
                 // held down bypasses it; feature is inert when disabled.
-                bool snap_suppressed = false;
-                switch (m_snap_suppress_key) {
-                case 0:  snap_suppressed = wxGetKeyState(WXK_ALT);     break;
-                case 1:  snap_suppressed = wxGetKeyState(WXK_CONTROL); break;
-                case 2:  snap_suppressed = wxGetKeyState(WXK_SHIFT);   break;
-                default: snap_suppressed = false;                      break; // None
-                }
+                const bool snap_suppressed = m_snap_suppress_key != 0 && wxGetKeyState((wxKeyCode)m_snap_suppress_key);
                 if (m_snap_settings.enabled && !snap_suppressed && !m_snap_neighbors.empty()) {
                     const double px_per_mm = wxGetApp().plater()->get_camera().get_zoom();
                     m_snap_guides = AlignmentSnap::compute_snap(
@@ -6090,10 +6096,49 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
     imgui->begin(_L("Snap options"), ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize
                  | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
+    // Lazy-load the illustration textures (needs a live GL context — we are in the render pass).
+    if (!m_snap_tex_loaded) {
+        const std::string dir = resources_dir() + "/images/";
+        m_snap_tex_edge.load_from_svg_file(   dir + "snap_edge.svg",    false, false, false, 200);
+        m_snap_tex_center.load_from_svg_file( dir + "snap_center.svg",  false, false, false, 200);
+        m_snap_tex_contact.load_from_svg_file( dir + "snap_contact.svg", false, false, false, 200);
+        m_snap_tex_row.load_from_svg_file(    dir + "snap_row.svg",     false, false, false, 200);
+        m_snap_tex_loaded = true;
+    }
+
     // Show a hover tooltip for the widget just submitted (works even when greyed out).
     auto tip = [](const std::string& s) {
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip("%s", s.c_str());
+    };
+    // Tooltip with an illustration image below the text.
+    auto tip_img = [](const std::string& s, const GLTexture& tex) {
+        if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) return;
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(230.0f);
+        ImGui::TextUnformatted(s.c_str());
+        ImGui::PopTextWrapPos();
+        if (tex.get_id() != 0 && tex.get_width() > 0) {
+            const float w = 160.0f;
+            const float h = w * (float)tex.get_height() / (float)tex.get_width();
+            ImGui::Image((ImTextureID)(intptr_t)tex.get_id(), ImVec2(w, h));
+        }
+        ImGui::EndTooltip();
+    };
+    // Human-readable name for a wx keycode (for the suppress-key control + hint).
+    auto key_name = [](int kc) -> std::string {
+        switch (kc) {
+        case 0:           return _u8L("None");
+        case WXK_ALT:     return "Alt";
+        case WXK_CONTROL: return "Ctrl";
+        case WXK_SHIFT:   return "Shift";
+        case WXK_SPACE:   return _u8L("Space");
+        case WXK_TAB:     return "Tab";
+        case WXK_RETURN:  return "Enter";
+        default:
+            if (kc >= 33 && kc <= 126) return std::string(1, (char)kc);
+            return "Key " + std::to_string(kc);
+        }
     };
 
     bool dirty = false;
@@ -6109,28 +6154,29 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
     // Preset table (both modes). Each preset is a combination of the four snap types.
     struct SnapPreset { const char* name; bool e, c, k, s; };
     static const SnapPreset PRESETS[] = {
-        { "None",         false, false, false, false },
-        { "Edges",        true,  false, false, false },
-        { "Centers",      false, true,  false, false },
-        { "Alignment",    true,  true,  false, false },
-        { "Contact",      false, false, true,  false },
-        { "Row building", false, true,  false, true  },
-        { "Everything",   true,  true,  true,  true  },
+        { L("None"),         false, false, false, false },
+        { L("Edges"),        true,  false, false, false },
+        { L("Centers"),      false, true,  false, false },
+        { L("Alignment"),    true,  true,  false, false },
+        { L("Contact"),      false, false, true,  false },
+        { L("Row building"), false, true,  false, true  },
+        { L("Everything"),   true,  true,  true,  true  },
     };
     auto matches = [&](const SnapPreset& p) {
         return m_snap_settings.edge_align == p.e && m_snap_settings.center_align == p.c
             && m_snap_settings.contact == p.k && m_snap_settings.spacing_propagation == p.s;
     };
-    const char* cur_preset = "Custom";
+    const char* cur_preset = L("Custom");
     for (const SnapPreset& p : PRESETS) if (matches(p)) { cur_preset = p.name; break; }
 
     ImGui::AlignTextToFramePadding();
     imgui->text(_L("Preset"));
     ImGui::SameLine();
     ImGui::SetNextItemWidth(150.0f);
-    if (ImGui::BeginCombo("##snap_preset", cur_preset)) {
+    if (ImGui::BeginCombo("##snap_preset", _u8L(cur_preset).c_str())) {
         for (const SnapPreset& p : PRESETS) {
-            if (ImGui::Selectable(p.name, matches(p)) && en) {
+            const std::string label = _u8L(p.name) + "##" + p.name; // translated text, stable id
+            if (ImGui::Selectable(label.c_str(), matches(p)) && en) {
                 m_snap_settings.edge_align          = p.e;
                 m_snap_settings.center_align        = p.c;
                 m_snap_settings.contact             = p.k;
@@ -6156,13 +6202,13 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
         tip(_utf8(L("Extra distance you must drag to pull out of an engaged snap (stickiness).\nHigher = harder to break away.")));
         ImGui::Separator();
         { bool v = m_snap_settings.edge_align;          if (imgui->bbl_checkbox(_L("Edge alignment"), v)          && en) { m_snap_settings.edge_align = v; dirty = true; } }
-        tip(_utf8(L("Snap when an edge lines up flush with a neighbor's matching edge (left/right/top/bottom).")));
+        tip_img(_utf8(L("Snap when an edge lines up flush with a neighbor's matching edge (left/right/top/bottom).")), m_snap_tex_edge);
         { bool v = m_snap_settings.center_align;        if (imgui->bbl_checkbox(_L("Center alignment"), v)        && en) { m_snap_settings.center_align = v; dirty = true; } }
-        tip(_utf8(L("Snap when centers line up, so two objects share a common centerline.")));
+        tip_img(_utf8(L("Snap when centers line up, so two objects share a common centerline.")), m_snap_tex_center);
         { bool v = m_snap_settings.contact;             if (imgui->bbl_checkbox(_L("Contact"), v)                 && en) { m_snap_settings.contact = v; dirty = true; } }
-        tip(_utf8(L("Snap objects so their edges just touch, with no gap and no overlap.")));
+        tip_img(_utf8(L("Snap objects so their edges just touch, with no gap and no overlap.")), m_snap_tex_contact);
         { bool v = m_snap_settings.spacing_propagation; if (imgui->bbl_checkbox(_L("Propagate spacing (row)"), v) && en) { m_snap_settings.spacing_propagation = v; dirty = true; } }
-        tip(_utf8(L("Detect an evenly spaced, aligned row of objects and snap the dragged one to continue the same spacing.")));
+        tip_img(_utf8(L("Detect an evenly spaced, aligned row of objects and snap the dragged one to continue the same spacing.")), m_snap_tex_row);
 
         ImGui::Separator();
         imgui->text(_L("Guide colors"));
@@ -6178,15 +6224,14 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
         ImGui::AlignTextToFramePadding();
         imgui->text(_L("Suppress key"));
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(120.0f);
-        static const char* KEY_NAMES[] = { "Alt", "Ctrl", "Shift", "None" };
-        const int cur_key = (m_snap_suppress_key >= 0 && m_snap_suppress_key < 4) ? m_snap_suppress_key : 0;
-        if (ImGui::BeginCombo("##snap_key", KEY_NAMES[cur_key])) {
-            for (int i = 0; i < 4; ++i)
-                if (ImGui::Selectable(KEY_NAMES[i], m_snap_suppress_key == i) && en) { m_snap_suppress_key = i; dirty = true; }
-            ImGui::EndCombo();
+        const std::string key_btn = (m_snap_listening_key ? _u8L("Press a key... (Esc cancels)") : key_name(m_snap_suppress_key)) + "##snapsetkey";
+        if (ImGui::Button(key_btn.c_str()) && en)
+            m_snap_listening_key = !m_snap_listening_key;
+        tip(_utf8(L("Click, then press any key to bind it. Hold that key while dragging to bypass snapping.")));
+        ImGui::SameLine();
+        if (ImGui::Button((_u8L("None") + "##snapnonekey").c_str()) && en) {
+            m_snap_suppress_key = 0; m_snap_listening_key = false; dirty = true;
         }
-        tip(_utf8(L("Hold this key while dragging to temporarily bypass snapping. 'None' disables the bypass.")));
     }
 
     if (!en) ImGui::PopStyleVar();
@@ -6197,10 +6242,8 @@ bool GLCanvas3D::_render_snap_menu(float left, float right, float bottom, float 
         m_snap_advanced_mode = !m_snap_advanced_mode;
         dirty = true;
     }
-    static const char* KEY_LABEL[] = { "Alt", "Ctrl", "Shift", "None" };
-    const int hint_key = (m_snap_suppress_key >= 0 && m_snap_suppress_key < 4) ? m_snap_suppress_key : 0;
-    if (hint_key < 3)
-        imgui->text(wxString::Format(_L("Hold %s while dragging to disable snapping."), wxString(KEY_LABEL[hint_key])));
+    if (m_snap_suppress_key != 0)
+        imgui->text(wxString::Format(_L("Hold %s while dragging to disable snapping."), wxString::FromUTF8(key_name(m_snap_suppress_key).c_str())));
     else
         imgui->text(_L("Snapping has no suppress key."));
 

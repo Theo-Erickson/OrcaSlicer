@@ -21,6 +21,7 @@
 #include "slic3r/GUI/3DBed.hpp"
 #include "libslic3r/Slicing.hpp"
 #include "libslic3r/AlignmentSnap.hpp"
+#include "slic3r/GUI/GLTexture.hpp"
 
 #include <float.h>
 
@@ -632,11 +633,15 @@ private:
     // Orca: alignment-snap settings (persisted to AppConfig, mirrors ArrangeSettings).
     AlignmentSnap::SnapSettings m_snap_settings;
     bool                        m_snap_advanced_mode = false; // panel shows the full advanced view
-    int                         m_snap_suppress_key  = 0;     // 0=Alt, 1=Ctrl, 2=Shift, 3=None
+    int                         m_snap_suppress_key  = WXK_ALT; // wx keycode to bypass snapping; 0 = none
+    bool                        m_snap_listening_key = false;   // panel is waiting to capture a key
     // Guide colors (RGBA 0..1), user-editable + persisted. Defaults: green / gray / pink.
     float                       m_snap_color_line[4]  = { 0.220f, 0.698f, 0.298f, 0.922f };
     float                       m_snap_color_ghost[4] = { 0.627f, 0.627f, 0.627f, 0.745f };
     float                       m_snap_color_badge[4] = { 0.902f, 0.310f, 0.502f, 1.000f };
+    // Illustration textures shown in the panel's hover tooltips (lazy-loaded once).
+    GLTexture                   m_snap_tex_edge, m_snap_tex_center, m_snap_tex_contact, m_snap_tex_row;
+    bool                        m_snap_tex_loaded = false;
     // Orca: alignment-snap runtime state (not serialized).
     AlignmentSnap::SnapState    m_snap_state;                 // hysteresis across drag frames
     BoundingBoxf                m_snap_mover_start;           // dragged selection XY bbox at drag start
