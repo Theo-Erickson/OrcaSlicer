@@ -2145,6 +2145,50 @@ void GLCanvas3D::render(bool only_init)
     // draw overlays
     _render_overlays();
 
+    // Transform-clipboard eyedropper: a hint that follows the cursor while picking,
+    // naming the hovered donor and whether it is a valid pick.
+    if (m_transform_picking) {
+        ImGuiWrapper &imgui = *wxGetApp().imgui();
+        const int hidx = get_first_hover_volume_idx();
+        std::string line, hint;
+        int validity = 0;
+        if (hidx >= 0 && hidx < (int) m_volumes.volumes.size()) {
+            const GLVolume *v  = m_volumes.volumes[hidx];
+            GizmoObjectManipulation &om = m_gizmos.get_object_manipulation();
+            validity = om.eyedropper_validity(v);
+            if (validity == 1) {
+                std::string name;
+                const int oi = v->object_idx();
+                if (m_model != nullptr && oi >= 0 && oi < (int) m_model->objects.size())
+                    name = m_model->objects[oi]->name;
+                line = _u8L("Copy transform from") + ": " + (name.empty() ? _u8L("object") : name);
+                // In apply mode the level auto-matches the target, so only the
+                // target-less "Copy from" mode needs the Alt-for-part hint.
+                if (om.is_eyedropper_copy_only())
+                    hint = _u8L("Alt-click for the part under the cursor");
+            } else {
+                // Show the specific reason it can't be picked.
+                line = om.eyedropper_reason(v);
+                if (line.empty()) line = _u8L("Can't pick this object");
+            }
+        } else
+            line = _u8L("Hover an object to pick its transform");
+
+        const Size  cnv = get_canvas_size();
+        const float mx  = std::min((float) m_mouse.position.x() + 18.0f, (float) cnv.get_width() - 10.0f);
+        const float my  = std::min((float) m_mouse.position.y() + 18.0f, (float) cnv.get_height() - 10.0f);
+        ImGui::SetNextWindowPos(ImVec2(mx, my), ImGuiCond_Always);
+        imgui.begin(std::string("##tc_eyedrop_hint"), ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing);
+        if (validity == 2)
+            ImGui::TextColored(ImVec4(0.85f, 0.33f, 0.24f, 1.0f), "%s", line.c_str());
+        else
+            imgui.text(line);
+        if (!hint.empty())
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.62f, 1.0f), "%s", hint.c_str());
+        imgui.end();
+    }
+
     const int current_fps = m_render_stats.get_fps_and_reset_if_needed();
     if (_is_fps_overlay_enabled())
         _render_fps_overlay(current_fps);
@@ -3691,6 +3735,12 @@ void GLCanvas3D::on_key(wxKeyEvent& evt)
 
     const int keyCode = evt.GetKeyCode();
 
+    // Transform-clipboard eyedropper: Escape cancels picking mode.
+    if (m_transform_picking && evt.GetEventType() == wxEVT_KEY_DOWN && keyCode == WXK_ESCAPE) {
+        set_transform_picking(false);
+        return;
+    }
+
     auto imgui = wxGetApp().imgui();
     if (imgui->update_key_data(evt))
         render();
@@ -4280,6 +4330,43 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
         }
         m_dirty = true;
     };
+
+    // Transform-clipboard eyedropper: while active, the 3D scene is a donor
+    // picker. Intercept here, before the gizmos and normal selection, so a click
+    // copies the hovered object's transform onto the current selection instead of
+    // selecting it. The ImGui panel and toolbars were already handled above, so
+    // the eyedropper toggle and the rest of the panel still work.
+    if (m_transform_picking) {
+        m_mouse.position = pos.cast<double>();
+        if (evt.Moving() || evt.Dragging()) {
+            m_dirty = true; // refresh hover highlight via _picking_pass on the next frame
+            return;
+        }
+        if (evt.RightDown() || evt.RightUp() || evt.Leaving()) {
+            set_transform_picking(false);
+            m_mouse.set_start_position_3D_as_invalid();
+            return;
+        }
+        if (evt.LeftUp()) {
+            const int idx = get_first_hover_volume_idx();
+            if (idx >= 0 && idx < (int) m_volumes.volumes.size()) {
+                GLVolume *donor = m_volumes.volumes[idx];
+                // Only commit on a valid donor; ignore invalid picks so the user
+                // can keep hovering for a valid one. Plain click copies the whole
+                // object; Alt-click copies the part under the cursor.
+                if (m_gizmos.get_object_manipulation().eyedropper_validity(donor) == 1) {
+                    m_gizmos.get_object_manipulation().eyedropper_commit(donor, evt.AltDown());
+                    set_transform_picking(false);
+                }
+            }
+            mouse_up_cleanup();
+            m_mouse.set_start_position_3D_as_invalid();
+            return;
+        }
+        // Swallow every other scene event (left down, dclick, ...) so no drag or
+        // selection starts while picking.
+        return;
+    }
 
     if (!mouse_in_layer_editing && m_gizmos.on_mouse(evt)) {
         if (m_gizmos.is_running()) {
@@ -5568,10 +5655,38 @@ void GLCanvas3D::set_cursor(ECursorType type)
         {
         case Standard: { m_canvas->SetCursor(*wxSTANDARD_CURSOR); break; }
         case Cross: { m_canvas->SetCursor(*wxCROSS_CURSOR); break; }
+        case Pipette: {
+            // Build a pipette cursor from the SVG once; hotspot at the dropper tip.
+            static wxCursor s_pipette;
+            if (!s_pipette.IsOk()) {
+                wxImage img = create_scaled_bitmap("transform_pick_cursor", nullptr, 24).ConvertToImage();
+                if (img.IsOk()) {
+                    img.SetOption(wxIMAGE_OPTION_CUR_HOTSPOT_X, img.GetWidth() * 5 / 24);
+                    img.SetOption(wxIMAGE_OPTION_CUR_HOTSPOT_Y, img.GetHeight() * 19 / 24);
+                    s_pipette = wxCursor(img);
+                }
+            }
+            m_canvas->SetCursor(s_pipette.IsOk() ? s_pipette : *wxCROSS_CURSOR);
+            break;
+        }
         }
 
         m_cursor_type = type;
     }
+}
+
+void GLCanvas3D::set_transform_picking(bool on)
+{
+    if (m_transform_picking == on)
+        return;
+    m_transform_picking = on;
+    if (!on)
+        // Clear any eyedropper highlight left on the volumes.
+        for (GLVolume *v : m_volumes.volumes)
+            v->eyedropper_state = 0;
+    set_cursor(on ? Pipette : Standard);
+    m_dirty = true;
+    request_extra_frame();
 }
 
 void GLCanvas3D::mouse_up_cleanup()
@@ -7320,6 +7435,18 @@ void GLCanvas3D::_picking_pass()
         m_gizmos.set_hover_id(-1);
 
     _update_volumes_hover_state();
+
+    // Transform-clipboard eyedropper: tag the hovered donor valid/invalid so
+    // set_render_color can tint it. Clear all first, then mark the hovered one.
+    if (m_transform_picking) {
+        for (GLVolume *v : m_volumes.volumes)
+            v->eyedropper_state = 0;
+        const int hidx = get_first_hover_volume_idx();
+        if (hidx >= 0 && hidx < (int) m_volumes.volumes.size()) {
+            GLVolume *v = m_volumes.volumes[hidx];
+            v->eyedropper_state = m_gizmos.get_object_manipulation().eyedropper_validity(v);
+        }
+    }
 
 #if ENABLE_RAYCAST_PICKING_DEBUG
     ImGuiWrapper& imgui = *wxGetApp().imgui();

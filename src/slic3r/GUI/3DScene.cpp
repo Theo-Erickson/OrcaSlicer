@@ -331,6 +331,13 @@ void GLVolume::set_render_color()
         else {
             set_render_color(base_color);
         }
+
+        // Transform-clipboard eyedropper: tint the hovered donor while picking,
+        // green when it is a valid pick, red when it is not.
+        if (eyedropper_state == 1)
+            set_render_color(ColorRGBA(0.00f, 0.68f, 0.26f, render_color.a()));
+        else if (eyedropper_state == 2)
+            set_render_color(ColorRGBA(0.85f, 0.33f, 0.24f, render_color.a()));
     }
 
     if (force_transparent) {

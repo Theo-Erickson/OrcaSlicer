@@ -225,6 +225,10 @@ public:
     // Is mouse or rectangle selection over this object to select/deselect it ?
     EHoverState         	hover;
 
+    // Transform-clipboard eyedropper highlight while picking a donor:
+    // 0 = none, 1 = valid (green), 2 = invalid (red). Driven by GLCanvas3D.
+    int                     eyedropper_state { 0 };
+
     GUI::GLModel            model;
     // raycaster used for picking
     std::unique_ptr<GUI::MeshRaycaster> mesh_raycaster;

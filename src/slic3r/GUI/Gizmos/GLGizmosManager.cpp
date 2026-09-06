@@ -320,7 +320,18 @@ bool GLGizmosManager::init_icon_textures()
         icon_list.insert(std::make_pair((int) IC_CANVAS_ZOOM_DARK_HOVER, texture_id));
     else
         return false;
-    
+
+    // Transform clipboard row buttons: reuse the existing menu copy/paste glyphs.
+    if (IMTexture::load_from_svg_file(Slic3r::resources_dir() + "/images/menu_copy.svg", 16, 16, texture_id))
+        icon_list.insert(std::make_pair((int) IC_TOOLBAR_COPY, texture_id));
+    else
+        return false;
+
+    if (IMTexture::load_from_svg_file(Slic3r::resources_dir() + "/images/menu_paste.svg", 16, 16, texture_id))
+        icon_list.insert(std::make_pair((int) IC_TOOLBAR_PASTE, texture_id));
+    else
+        return false;
+
     return true;
 }
 

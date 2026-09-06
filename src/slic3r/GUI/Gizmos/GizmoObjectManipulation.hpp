@@ -2,6 +2,10 @@
 #define slic3r_GizmoObjectManipulation_hpp_
 
 #include <memory>
+#include <optional>
+#include <array>
+#include <string>
+#include <initializer_list>
 
 #include "libslic3r/Point.hpp"
 #include "libslic3r/Geometry.hpp"
@@ -12,6 +16,11 @@
 //#include "slic3r/GUI/GLCanvas3D.hpp"
 
 namespace Slic3r {
+
+// GLVolume lives in the Slic3r namespace (not Slic3r::GUI); forward-declare it
+// here so a GUI-namespace declaration does not shadow it.
+class GLVolume;
+
 namespace GUI {
 
 class Selection;
@@ -57,6 +66,63 @@ public:
     };
 
     Cache m_cache;
+
+    // Session clipboard for transferring a transform between objects.
+    // One optional slot per manipulation row: a row copy fills exactly one slot,
+    // the master copy fills all of them. This is what lets a user hold rotation
+    // from object A and scale from object B at the same time. Every slot is stored
+    // in world space at copy time; conversion to the panel's current coordinate
+    // space happens at paste, not at copy.
+    struct TransformClipboard
+    {
+        std::optional<Vec3d>       position;        // mm, world
+        std::optional<Vec3d>       rotation;        // radians, world
+        std::optional<Vec3d>       scale_factors;   // unitless, mirror encoded as sign
+        std::optional<Vec3d>       size;            // mm, only meaningful for same-mesh pastes
+        std::optional<Vec3d>       mirror;          // kept explicit for readout clarity
+
+        // Raw source matrix, stored only to validate the decomposition. After
+        // building a paste from the slots above, rebuild a matrix and compare:
+        // divergence beyond epsilon means the source had shear.
+        std::optional<Transform3d> source_matrix;
+
+        // Per-component, per-axis paste filter driven by the inline value chips
+        // (index order X, Y, Z). Independent per row, so a user can, e.g., disable
+        // rotation entirely while still pasting position. Applies to paste and the
+        // eyedropper apply.
+        std::array<bool, 3>        axis_position { true, true, true };
+        std::array<bool, 3>        axis_rotation { true, true, true };
+        std::array<bool, 3>        axis_scale    { true, true, true };
+        std::array<bool, 3>        axis_size     { true, true, true };
+        std::array<bool, 3>        axis_mirror   { true, true, true };
+
+        std::array<bool, 3>& axes_for(const std::string &slot) {
+            if (slot == "rotation") return axis_rotation;
+            if (slot == "scale")    return axis_scale;
+            if (slot == "size")     return axis_size;
+            if (slot == "mirror")   return axis_mirror;
+            return axis_position;
+        }
+        const std::array<bool, 3>& axes_for(const std::string &slot) const {
+            if (slot == "rotation") return axis_rotation;
+            if (slot == "scale")    return axis_scale;
+            if (slot == "size")     return axis_size;
+            if (slot == "mirror")   return axis_mirror;
+            return axis_position;
+        }
+
+        // What the held data came from, shown in the readout header.
+        std::string                source_label;
+
+        bool empty() const { return !position && !rotation && !scale_factors && !size && !mirror; }
+    };
+    TransformClipboard m_transform_clipboard;
+    // "Don't ask again this session" flags for the paste warning dialogs.
+    bool            m_tc_skip_shear_warning { false };
+    bool            m_tc_skip_uniform_warning { false };
+    // Eyedropper mode: when true the next pick only loads the clipboard from the
+    // donor (copy from); when false it also applies it to the selection.
+    bool            m_tc_eyedropper_copy_only { false };
 
     bool            m_imperial_units { false };
     bool            m_use_object_cs{false};
@@ -138,6 +204,28 @@ public:
     void do_render_move_window(ImGuiWrapper *imgui_wrapper, std::string window_name, float x, float y, float bottom_limit);
     void do_render_rotate_window(ImGuiWrapper *imgui_wrapper, std::string window_name, float x, float y, float bottom_limit);
     void do_render_scale_input_window(ImGuiWrapper* imgui_wrapper, std::string window_name, float x, float y, float bottom_limit);
+    // Transform clipboard UI, rendered inline at the bottom of each manipulation
+    // gizmo window. surfaced_slots are the rows shown above the collapsed panel
+    // for the active tool (e.g. {"position"} for Move, {"scale","size"} for Scale).
+    void do_render_clipboard_window(ImGuiWrapper *imgui_wrapper, std::initializer_list<const char *> surfaced_slots);
+    // Eyedropper: copy the donor's transform into the clipboard and (in apply
+    // mode) paste it onto the selection. The donor level auto-matches the paste
+    // target's kind (whole object vs part); in copy-from mode there is no target,
+    // so it defaults to the whole object and alt_pick_part copies the part under
+    // the cursor. Called by GLCanvas3D when a donor is clicked.
+    void eyedropper_commit(const GLVolume *donor, bool alt_pick_part);
+    // Validity of a hovered donor for the current picking mode/selection:
+    // 0 = none, 1 = valid (green), 2 = invalid (red). Drives the scene highlight
+    // and gates the commit.
+    int eyedropper_validity(const GLVolume *donor) const;
+    // Human-readable reason a donor can't be picked (empty when it can). Shown in
+    // the hover readout so the red state is self-explanatory.
+    std::string eyedropper_reason(const GLVolume *donor) const;
+    // True while the "Copy from" (load-clipboard-only) pick mode is armed.
+    bool is_eyedropper_copy_only() const { return m_tc_eyedropper_copy_only; }
+    // Eyedropper commit from an object-list item resolved to model indices (the
+    // tree picking surface). is_part selects part vs instance level.
+    void eyedropper_commit_from(int obj_idx, int inst_idx, int vol_idx, bool is_part);
     float max_unit_size(int number, Vec3d &vec1, Vec3d &vec2,std::string str);
     bool reset_button(ImGuiWrapper *imgui_wrapper, bool enabled);
     bool reset_zero_button(ImGuiWrapper *imgui_wrapper, bool enabled);
@@ -162,6 +250,22 @@ private:
     void change_scale_value(int axis, double value);
     void change_size_value(int axis, double value);
     void do_scale(int axis, const Vec3d &scale) const;
+
+    // Transform clipboard helpers.
+    // Returns the world-space transformation of the current single selection,
+    // or std::nullopt when the selection is not a single instance/volume.
+    std::optional<Geometry::Transformation> get_selection_world_transformation() const;
+    // slot is one of: "position", "rotation", "scale", "size", "mirror", "all".
+    void clipboard_copy(const std::string &slot);
+    void clipboard_paste(const std::string &slot);
+    bool clipboard_slot_filled(const std::string &slot) const;
+    // Fill every clipboard slot (position/rotation/scale/mirror + source matrix)
+    // from a world-space transform, tagging the readout with the given label.
+    void fill_clipboard_from_world(const Geometry::Transformation &world, const std::string &label);
+    // Readout label for a source: the model object's name (or the part's name for
+    // a part), falling back to the generic kind when unnamed.
+    std::string source_label_for(int obj_idx, int vol_idx, bool from_part) const;
+
     void reset_position_value();
     void reset_rotation_value(bool reset_relative);
     void reset_scale_value();

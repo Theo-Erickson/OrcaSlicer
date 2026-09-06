@@ -179,6 +179,9 @@ public:
         IC_CANVAS_ZOOM_HOVER,
         IC_CANVAS_ZOOM_DARK,
         IC_CANVAS_ZOOM_DARK_HOVER,
+        // Transform clipboard row buttons (copy/paste a transform between objects).
+        IC_TOOLBAR_COPY,
+        IC_TOOLBAR_PASTE,
     };
 
     explicit GLGizmosManager(GLCanvas3D& parent);

@@ -17,6 +17,7 @@
 #include "GLCanvas3D.hpp"
 #include "Selection.hpp"
 #include "PartPlate.hpp"
+#include "Gizmos/GizmoObjectManipulation.hpp"
 #include "format.hpp"
 #include "NotificationManager.hpp"
 #include "MsgDialog.hpp"
@@ -307,6 +308,34 @@ ObjectList::ObjectList(wxWindow* parent) :
         event.Skip();
     });
 #endif //__WXMSW__
+
+    // Transform-clipboard eyedropper: while picking, a left-click in the tree
+    // picks that item as the donor (copying its transform) instead of changing
+    // the selection. Consuming the event keeps the current selection (the paste
+    // target) intact.
+    GetMainWindow()->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& event) {
+        GLCanvas3D *canvas = wxGetApp().plater()->get_view3D_canvas3D();
+        if (canvas == nullptr || !canvas->is_transform_picking()) {
+            event.Skip();
+            return;
+        }
+        wxDataViewItem    item;
+        wxDataViewColumn *col = nullptr;
+        this->HitTest(this->get_mouse_position_in_control(), item, col);
+        if (item) {
+            int obj_idx = -1, vol_idx = -1;
+            get_selected_item_indexes(obj_idx, vol_idx, item);
+            const ItemType type = m_objects_model->GetItemType(item);
+            if (obj_idx >= 0) {
+                const bool is_part  = (type & itVolume) != 0;
+                const int  inst_idx = (type & itInstance) ? m_objects_model->GetInstanceIdByItem(item) : 0;
+                if (GizmoObjectManipulation *om = wxGetApp().obj_manipul())
+                    om->eyedropper_commit_from(obj_idx, inst_idx, is_part ? vol_idx : -1, is_part);
+                canvas->set_transform_picking(false);
+            }
+        }
+        // Consume: do not Skip, so the tree selection does not change.
+    });
 
     Bind(wxEVT_DATAVIEW_ITEM_CONTEXT_MENU,  &ObjectList::OnContextMenu,     this);
 

@@ -483,7 +483,8 @@ public:
     enum ECursorType : unsigned char
     {
         Standard,
-        Cross
+        Cross,
+        Pipette
     };
 
     struct ArrangeSettings
@@ -579,6 +580,9 @@ private:
     bool m_enable_render { true };
     bool m_apply_zoom_to_volumes_filter;
     bool m_picking_enabled;
+    // Transform-clipboard eyedropper: while true, a scene click picks a donor
+    // object to copy its transform from, instead of selecting.
+    bool m_transform_picking { false };
     bool m_moving_enabled;
     bool m_dynamic_background_enabled;
     bool m_multisample_allowed;
@@ -1088,6 +1092,10 @@ public:
     int get_move_volume_id() const { return m_mouse.drag.move_volume_idx; }
     int get_first_hover_volume_idx() const { return m_hover_volume_idxs.empty() ? -1 : m_hover_volume_idxs.front(); }
     void set_selected_extruder(int extruder) { m_selected_extruder = extruder;}
+
+    // Transform-clipboard eyedropper mode.
+    bool is_transform_picking() const { return m_transform_picking; }
+    void set_transform_picking(bool on);
 
     class WipeTowerInfo {
     protected:

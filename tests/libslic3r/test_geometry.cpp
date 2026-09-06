@@ -747,3 +747,48 @@ TEST_CASE("Convex polygon intersection test prusa polygons", "[Geometry][Rotcali
         REQUIRE(res == ref);
     }
 }
+
+// The transform clipboard (copy/paste of a transform between objects) copies the
+// decomposed world components of a source and reconstructs the transform on the
+// target. These tests pin the decomposition convention it depends on, in
+// particular the mirror-plus-rotation sign ambiguity called out in the design:
+// decomposing a negative-determinant matrix must round-trip back to the same
+// matrix, and non-uniform scale plus mirror must not be mistaken for shear.
+TEST_CASE("Transformation decomposition round-trips for a mirrored, rotated, scaled matrix", "[Geometry][Transformation]")
+{
+    using namespace Slic3r::Geometry;
+
+    const Vec3d offset(10.0, 20.0, 30.0);
+    const Vec3d rotation(0.10, -0.25, 0.60); // radians
+    const Vec3d scale(1.5, 2.0, 0.5);        // magnitudes
+    const Vec3d mirror(-1.0, 1.0, 1.0);      // mirror on X -> negative determinant
+
+    const Transform3d M = assemble_transform(offset, rotation, scale, mirror);
+
+    // Decompose the raw matrix the way copy does, then reassemble the way paste
+    // does. The reconstruction must match the original within epsilon.
+    const Transformation d(M);
+    const Transform3d rebuilt = assemble_transform(d.get_offset(), d.get_rotation(), d.get_scaling_factor(), d.get_mirror());
+
+    const double err = (rebuilt.matrix() - M.matrix()).cwiseAbs().maxCoeff();
+    INFO("reconstruction error = " << err);
+    CHECK(err < 1e-9);
+
+    // Offset comes back exactly; scale comes back as positive magnitudes with the
+    // flip carried by mirror (whichever slot the sign lands in, magnitudes match).
+    CHECK((d.get_offset() - offset).cwiseAbs().maxCoeff() < 1e-9);
+    const Vec3d decoded_scale = d.get_scaling_factor().cwiseAbs();
+    CHECK((decoded_scale - scale).cwiseAbs().maxCoeff() < 1e-9);
+
+    // A rotation + non-uniform scale + mirror is not shear.
+    CHECK_FALSE(d.has_skew());
+}
+
+TEST_CASE("Transformation detects genuine shear", "[Geometry][Transformation]")
+{
+    using namespace Slic3r::Geometry;
+
+    Transform3d sheared = Transform3d::Identity();
+    sheared(0, 1) = 0.35; // XY shear: a genuinely non-separable matrix
+    CHECK(Transformation(sheared).has_skew());
+}
